@@ -30,35 +30,56 @@ function err(msg, status = 400) {
   return json({ error: msg }, status)
 }
 
-// ── JWT verification (Clerk RS256) ──────────────────────────────────────────
-async function verifyJWT(token, pemPublicKey) {
+// ── JWT verification (Clerk RS256 with JWKS) ────────────────────────────────
+const CLERK_JWKS_URL = 'https://modern-tomcat-23.clerk.accounts.dev/.well-known/jwks.json'
+
+// Convert base64url to base64
+function base64urlToBase64(str) {
+  return str.replace(/-/g, '+').replace(/_/g, '/')
+}
+
+// Convert JWK to CryptoKey
+async function jwkToCryptoKey(jwk) {
+  const keyData = {
+    kty: jwk.kty,
+    n: jwk.n,
+    e: jwk.e,
+    alg: jwk.alg,
+    ext: true,
+  }
+  return await crypto.subtle.importKey(
+    'jwk',
+    keyData,
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+    false,
+    ['verify']
+  )
+}
+
+async function verifyJWT(token) {
   try {
     const [headerB64, payloadB64, sigB64] = token.split('.')
-    const header = JSON.parse(atob(headerB64))
+    const header = JSON.parse(atob(base64urlToBase64(headerB64)))
     if (header.alg !== 'RS256') throw new Error('Wrong algorithm')
 
-    const keyData = pemPublicKey
-      .replace(/-----BEGIN PUBLIC KEY-----/, '')
-      .replace(/-----END PUBLIC KEY-----/, '')
-      .replace(/\s/g, '')
-    const binaryKey = Uint8Array.from(atob(keyData), c => c.charCodeAt(0))
+    // Fetch JWKS (TODO: add caching via KV for production)
+    const jwksResp = await fetch(CLERK_JWKS_URL)
+    const jwks = await jwksResp.json()
+    const jwk = jwks.keys.find(k => k.kid === header.kid)
+    if (!jwk) throw new Error('Key not found')
 
-    const cryptoKey = await crypto.subtle.importKey(
-      'spki', binaryKey.buffer,
-      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-      false, ['verify']
-    )
+    const cryptoKey = await jwkToCryptoKey(jwk)
 
     const data = new TextEncoder().encode(`${headerB64}.${payloadB64}`)
     const sig = Uint8Array.from(
-      atob(sigB64.replace(/-/g, '+').replace(/_/g, '/')),
+      atob(base64urlToBase64(sigB64)),
       c => c.charCodeAt(0)
     )
 
     const valid = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', cryptoKey, sig, data)
     if (!valid) throw new Error('Invalid signature')
 
-    const payload = JSON.parse(atob(payloadB64))
+    const payload = JSON.parse(atob(base64urlToBase64(payloadB64)))
     if (payload.exp < Date.now() / 1000) throw new Error('Token expired')
     return payload
   } catch (e) {
@@ -70,7 +91,7 @@ async function requireAuth(req, env) {
   const auth = req.headers.get('Authorization')
   if (!auth?.startsWith('Bearer ')) return null
   const token = auth.slice(7)
-  return await verifyJWT(token, env.CLERK_PEM_PUBLIC_KEY)
+  return await verifyJWT(token)
 }
 
 // ── Rate limiting via KV ─────────────────────────────────────────────────────
