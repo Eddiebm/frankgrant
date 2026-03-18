@@ -1384,7 +1384,7 @@ async function handleCitations(req, env, userId) {
 // ── Voice Mode Routes ─────────────────────────────────────────────────────────
 
 const VOICE_INTENT_PROMPT = `Classify this voice message into exactly one intent. Return only the intent word and optional section name separated by colon. Nothing else.
-Intents: STATUS, READ_SECTION, EDIT_SECTION, GENERATE, COMPLIANCE, PRELIM_DATA, STUDY_SECTION, NAVIGATION, QUESTION
+Intents: STATUS, READ_SECTION, EDIT_SECTION, GENERATE, COMPLIANCE, PRELIM_DATA, STUDY_SECTION, PD_REVIEW, ADVISORY_COUNCIL, NAVIGATION, QUESTION
 Examples:
 'read me the aims page' → READ_SECTION:aims
 'how many pages do I have left' → STATUS
@@ -1394,6 +1394,10 @@ Examples:
 'what are my compliance issues' → COMPLIANCE
 'what is my preliminary data score' → PRELIM_DATA
 'go to the innovation section' → NAVIGATION:innovation
+'what did the program director say' → PD_REVIEW
+'what does the PD think' → PD_REVIEW
+'what is the council recommendation' → ADVISORY_COUNCIL
+'what did the advisory council decide' → ADVISORY_COUNCIL
 'what is the budget cap for STTR Phase I' → QUESTION
 Message: `
 
@@ -1429,7 +1433,7 @@ async function handleVoiceChat(req, env, userId) {
   let project = null, setup = {}, sections = {}
   if (project_id) {
     project = await env.DB.prepare(
-      'SELECT title, mechanism, setup, sections, foa_number, prelim_data_score, compliance_results, study_section_results FROM projects WHERE id = ? AND user_id = ?'
+      'SELECT title, mechanism, setup, sections, foa_number, prelim_data_score, compliance_results, study_section_results, pd_review_results, advisory_council_results FROM projects WHERE id = ? AND user_id = ?'
     ).bind(project_id, userId).first()
     if (project) {
       try { setup = JSON.parse(project.setup || '{}') } catch {}
@@ -1462,6 +1466,16 @@ async function handleVoiceChat(req, env, userId) {
     try { additionalCtx = `\nCOMPLIANCE RESULTS:\n${JSON.stringify(JSON.parse(project.compliance_results), null, 2).slice(0, 1000)}` } catch {}
   } else if (intent === 'STUDY_SECTION' && project?.study_section_results) {
     try { additionalCtx = `\nSTUDY SECTION RESULTS:\n${JSON.stringify(JSON.parse(project.study_section_results).summary, null, 2).slice(0, 800)}` } catch {}
+  } else if (intent === 'PD_REVIEW' && project?.pd_review_results) {
+    try {
+      const pd = JSON.parse(project.pd_review_results)
+      additionalCtx = `\nPROGRAM DIRECTOR REVIEW:\nFundability: ${pd.fundability}\nOverall Assessment: ${(pd.overall_assessment || '').slice(0, 400)}\nKey Concerns: ${(pd.concerns || []).slice(0, 3).join('; ')}`
+    } catch {}
+  } else if (intent === 'ADVISORY_COUNCIL' && project?.advisory_council_results) {
+    try {
+      const ac = JSON.parse(project.advisory_council_results)
+      additionalCtx = `\nADVISORY COUNCIL RECOMMENDATION:\nDecision: ${ac.decision}\nPriority: ${ac.priority}\nRationale: ${(ac.rationale || '').slice(0, 400)}\nFinal Statement: ${(ac.final_statement || '').slice(0, 300)}`
+    } catch {}
   }
 
   // Keep last 6 exchanges
@@ -1675,6 +1689,139 @@ ${grantText.slice(0, 7000)}`
   } catch {}
 
   return json(results)
+}
+
+// ── PD Review ─────────────────────────────────────────────────────────────────
+const PD_REVIEW_SYSTEM = `You are a senior NIH Program Director with 30 years across NCI, NIGMS, and NHLBI. You have managed portfolios worth $200M+ and attended 500+ study sections. You know what gets funded and what doesn't.
+
+YOUR ROLE: You provide candid, actionable feedback on fundability. You are not a cheerleader. You are not a destroyer. You tell the truth with specific guidance.
+
+REVIEW DIMENSIONS:
+1. Mission Fit: Does this align with NIH/IC priorities and current funding initiatives?
+2. Mechanism Match: Is this the right funding mechanism for the science maturity and team?
+3. Portfolio Balance: Is NIH already funding 50 similar projects? Is there a gap this fills?
+4. Budget Realism: Does the budget match the scope?
+5. PI Fundability: Based on track record described, is this PI competitive?
+6. Payline Strategy: Specific changes to move from 35th percentile to 10th percentile
+
+Return ONLY valid JSON matching this exact structure: {"fundability":"fund_now|revise_and_resubmit|do_not_fund","overall_assessment":"string","strengths":["string"],"concerns":["string"],"recommended_actions":["string"],"payline_estimate":"string","priority_score_estimate":"string","final_recommendation":"string"}`
+
+async function handlePDReview(req, env, userId, projectId) {
+  const project = await env.DB.prepare(
+    'SELECT title, mechanism, setup, sections FROM projects WHERE id = ? AND user_id = ?'
+  ).bind(projectId, userId).first()
+  if (!project) return err('Project not found', 404)
+
+  let setup = {}, sections = {}
+  try { setup = JSON.parse(project.setup || '{}') } catch {}
+  try { sections = JSON.parse(project.sections || '{}') } catch {}
+
+  const mech = project.mechanism || 'STTR-I'
+  const isSBIR = mech.includes('SBIR') || mech.includes('STTR')
+  const institute = setup.institute || 'NIH'
+
+  const userMsg = `Review this ${mech} grant application for ${institute}.
+Title: ${project.title || setup.disease || 'Untitled'}
+PI: ${setup.pi || 'Not specified'}
+Specific Aims: ${(sections.aims || 'Not generated').slice(0, 800)}
+Significance summary: ${(sections.sig || 'Not generated').slice(0, 500)}
+Innovation summary: ${(sections.innov || 'Not generated').slice(0, 400)}
+Approach summary: ${(sections.approach || 'Not generated').slice(0, 600)}${isSBIR ? `\nCommercialization summary: ${(sections.commercial || 'Not generated').slice(0, 400)}` : ''}
+
+Write a Program Director review memo. Return ONLY valid JSON.`
+
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1500, system: PD_REVIEW_SYSTEM, messages: [{ role: 'user', content: userMsg }] }),
+  })
+  const r = await resp.json()
+  const text = r.content?.[0]?.text || ''
+
+  let result = null
+  const jm = text.match(/\{[\s\S]*\}/)
+  if (jm) { try { result = JSON.parse(jm[0]) } catch {} }
+  if (!result) result = { fundability: 'revise_and_resubmit', overall_assessment: text, strengths: [], concerns: [], recommended_actions: [], payline_estimate: 'Unable to estimate', priority_score_estimate: 'Unable to estimate', final_recommendation: 'See assessment above.' }
+
+  const inputTokens = r.usage?.input_tokens || 0
+  const outputTokens = r.usage?.output_tokens || 0
+  const pricing = PRICING['claude-sonnet-4-20250514']
+  const cost = (inputTokens / 1e6) * pricing.input + (outputTokens / 1e6) * pricing.output
+  await env.DB.prepare('INSERT INTO usage_log (id, user_id, action, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(crypto.randomUUID(), userId, 'pd_review', 'claude-sonnet-4-20250514', inputTokens, outputTokens, 0, 0, Math.floor(Date.now() / 1000)).run()
+  await trackUserActivity(userId, '', env, true, inputTokens + outputTokens, cost)
+
+  try {
+    await env.DB.prepare('UPDATE projects SET pd_review_results = ? WHERE id = ? AND user_id = ?')
+      .bind(JSON.stringify(result), projectId, userId).run()
+  } catch {}
+
+  return json(result)
+}
+
+// ── Advisory Council ──────────────────────────────────────────────────────────
+const ADVISORY_COUNCIL_SYSTEM = `You are the NIH Advisory Council reviewing applications that have been scored by study section.
+
+COUNCIL ROLE: Second-level review focusing on program relevance, portfolio balance, special considerations, payline context, and exceptions.
+
+DECISION OPTIONS: fund, fund_with_conditions, defer, do_not_fund
+
+Return ONLY valid JSON matching this exact structure: {"decision":"fund|fund_with_conditions|defer|do_not_fund","priority":"high|medium|low","rationale":"string (2 paragraphs)","conditions":["string array, empty if no conditions"],"portfolio_fit":"string (1 sentence)","budget_recommendation":"string","final_statement":"string (1 paragraph formal council statement)"}`
+
+async function handleAdvisoryCouncil(req, env, userId, projectId) {
+  const project = await env.DB.prepare(
+    'SELECT title, mechanism, setup, study_section_results, pd_review_results FROM projects WHERE id = ? AND user_id = ?'
+  ).bind(projectId, userId).first()
+  if (!project) return err('Project not found', 404)
+
+  let setup = {}, ssResults = null, pdResults = null
+  try { setup = JSON.parse(project.setup || '{}') } catch {}
+  try { ssResults = JSON.parse(project.study_section_results || 'null') } catch {}
+  try { pdResults = JSON.parse(project.pd_review_results || 'null') } catch {}
+
+  const mech = project.mechanism || 'STTR-I'
+  const institute = setup.institute || 'NIH'
+  const budgetCaps = { 'STTR-I': '$400K', 'STTR-II': '$2M', 'SBIR-I': '$400K', 'SBIR-II': '$2M', 'R01': '$500K/yr', 'R21': '$275K total' }
+  const budgetCap = budgetCaps[mech] || 'Standard NIH limits'
+
+  const userMsg = `Make a funding recommendation for this ${mech} application at ${institute}.
+Title: ${project.title || setup.disease || 'Untitled'}
+PI: ${setup.pi || 'Not specified'} at ${setup.partner || setup.institution || 'institution not specified'}
+${ssResults ? `Study Section impact score: ${ssResults.summary?.impact_score || 'N/A'}\nStudy Section summary: ${(ssResults.summary?.synthesis || '').slice(0, 400)}` : 'Study Section: Not yet reviewed'}
+${pdResults ? `Program Director assessment: ${pdResults.fundability}\nPD concerns: ${(pdResults.concerns || []).join('; ')}` : 'Program Director: Not yet reviewed'}
+Mechanism budget: ${budgetCap}
+
+Make an Advisory Council funding recommendation. Return ONLY valid JSON.`
+
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1000, system: ADVISORY_COUNCIL_SYSTEM, messages: [{ role: 'user', content: userMsg }] }),
+  })
+  const r = await resp.json()
+  const text = r.content?.[0]?.text || ''
+
+  let result = null
+  const jm = text.match(/\{[\s\S]*\}/)
+  if (jm) { try { result = JSON.parse(jm[0]) } catch {} }
+  if (!result) result = { decision: 'defer', priority: 'medium', rationale: text, conditions: [], portfolio_fit: 'Unable to assess', budget_recommendation: 'Review required', final_statement: 'Council defers pending additional review.' }
+
+  result._inputs = { used_study_section: !!ssResults, study_section_score: ssResults?.summary?.impact_score || null, used_pd_review: !!pdResults, pd_fundability: pdResults?.fundability || null }
+
+  const inputTokens = r.usage?.input_tokens || 0
+  const outputTokens = r.usage?.output_tokens || 0
+  const pricing = PRICING['claude-sonnet-4-20250514']
+  const cost = (inputTokens / 1e6) * pricing.input + (outputTokens / 1e6) * pricing.output
+  await env.DB.prepare('INSERT INTO usage_log (id, user_id, action, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(crypto.randomUUID(), userId, 'advisory_council', 'claude-sonnet-4-20250514', inputTokens, outputTokens, 0, 0, Math.floor(Date.now() / 1000)).run()
+  await trackUserActivity(userId, '', env, true, inputTokens + outputTokens, cost)
+
+  try {
+    await env.DB.prepare('UPDATE projects SET advisory_council_results = ? WHERE id = ? AND user_id = ?')
+      .bind(JSON.stringify(result), projectId, userId).run()
+  } catch {}
+
+  return json(result)
 }
 
 // ── Polish Section ────────────────────────────────────────────────────────────
@@ -1927,6 +2074,22 @@ export default {
       const studySectionMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/study-section$/)
       if (studySectionMatch && req.method === 'POST') {
         const response = await handleStudySection(req, env, userId, studySectionMatch[1])
+        await logError(path, 200, null, Date.now() - startTime, userId, env)
+        return response
+      }
+
+      // PD Review
+      const pdReviewMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/pd-review$/)
+      if (pdReviewMatch && req.method === 'POST') {
+        const response = await handlePDReview(req, env, userId, pdReviewMatch[1])
+        await logError(path, 200, null, Date.now() - startTime, userId, env)
+        return response
+      }
+
+      // Advisory Council
+      const advisoryCouncilMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/advisory-council$/)
+      if (advisoryCouncilMatch && req.method === 'POST') {
+        const response = await handleAdvisoryCouncil(req, env, userId, advisoryCouncilMatch[1])
         await logError(path, 200, null, Date.now() - startTime, userId, env)
         return response
       }

@@ -191,3 +191,7 @@ CREATE INDEX IF NOT EXISTS idx_prelim_project ON preliminary_data(project_id);
 -- Run individually:
 ALTER TABLE users_meta ADD COLUMN voice_enabled INTEGER DEFAULT 1;
 ALTER TABLE users_meta ADD COLUMN voice_tier TEXT DEFAULT null;
+
+-- ─── PD REVIEW & ADVISORY COUNCIL (v4.5.0) ───────────────────────────────────
+-- ALTER TABLE projects ADD COLUMN pd_review_results TEXT;
+-- ALTER TABLE projects ADD COLUMN advisory_council_results TEXT;

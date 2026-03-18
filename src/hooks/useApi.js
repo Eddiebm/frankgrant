@@ -78,6 +78,12 @@ export function useApi() {
   // Study Section
   async function runStudySection(projectId) { return request('POST', `/projects/${projectId}/study-section`, {}) }
 
+  // PD Review
+  async function runPDReview(projectId) { return request('POST', `/projects/${projectId}/pd-review`, {}) }
+
+  // Advisory Council
+  async function runAdvisoryCouncil(projectId) { return request('POST', `/projects/${projectId}/advisory-council`, {}) }
+
   // Polish
   async function polishSection(projectId, sectionId, sectionText, sectionLabel) {
     return request('POST', `/projects/${projectId}/polish`, { section_id: sectionId, section_text: sectionText, section_label: sectionLabel })
@@ -87,6 +93,6 @@ export function useApi() {
     callAI, listProjects, createProject, getProject, updateProject, deleteProject, getUsage,
     parseFOA, searchGrants, analyzeGrant, saveReference, getCompliance, getToken,
     uploadPrelim, listPrelim, deletePrelim, analyzePrelim, generatePrelimNarrative, getCitations,
-    runStudySection, polishSection,
+    runStudySection, runPDReview, runAdvisoryCouncil, polishSection,
   }
 }

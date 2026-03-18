@@ -70,6 +70,14 @@ export default function GrantEditor({ project, onSave, onBack }) {
   const [polishModal, setPolishModal] = useState(null) // null | { secId, original, polished }
   const [polishing, setPolishing] = useState({})
 
+  // PD Review
+  const [pdReviewModal, setPdReviewModal] = useState(null) // null | 'loading' | 'results'
+  const [pdReviewResults, setPdReviewResults] = useState(project.pd_review_results || null)
+
+  // Advisory Council
+  const [councilModal, setCouncilModal] = useState(null) // null | 'loading' | 'results'
+  const [councilResults, setCouncilResults] = useState(project.advisory_council_results || null)
+
   // Voice Mode
   const [showVoiceMode, setShowVoiceMode] = useState(false)
 
@@ -385,6 +393,32 @@ export default function GrantEditor({ project, onSave, onBack }) {
     }
   }
 
+  // ── PD Review ────────────────────────────────────────────────────────────────
+  async function handleRunPDReview() {
+    setPdReviewModal('loading')
+    try {
+      const results = await api.runPDReview(project.id)
+      setPdReviewResults(results)
+      setPdReviewModal('results')
+    } catch (e) {
+      setPdReviewModal(null)
+      alert('PD Review failed: ' + e.message)
+    }
+  }
+
+  // ── Advisory Council ──────────────────────────────────────────────────────────
+  async function handleRunAdvisoryCouncil() {
+    setCouncilModal('loading')
+    try {
+      const results = await api.runAdvisoryCouncil(project.id)
+      setCouncilResults(results)
+      setCouncilModal('results')
+    } catch (e) {
+      setCouncilModal(null)
+      alert('Advisory Council review failed: ' + e.message)
+    }
+  }
+
   // ── Polish ───────────────────────────────────────────────────────────────────
   async function handlePolish(secId) {
     const text = sections[secId]
@@ -462,6 +496,20 @@ export default function GrantEditor({ project, onSave, onBack }) {
             title="Simulate NIH study section review"
           >
             🔬 {studySectionResults ? 'Review' : 'Study Section'}
+          </button>
+          <button
+            onClick={() => pdReviewResults ? setPdReviewModal('results') : handleRunPDReview()}
+            style={{ ...ghostBtn, fontSize: 12 }}
+            title="Get Program Director fundability assessment"
+          >
+            📋 {pdReviewResults ? 'PD Review' : 'PD Review'}
+          </button>
+          <button
+            onClick={() => councilResults ? setCouncilModal('results') : handleRunAdvisoryCouncil()}
+            style={{ ...ghostBtn, fontSize: 12 }}
+            title="Get Advisory Council funding recommendation"
+          >
+            🏛️ Council
           </button>
           <button
             onClick={() => setShowVoiceMode(true)}
@@ -734,6 +782,34 @@ export default function GrantEditor({ project, onSave, onBack }) {
           polished={polishModal.polished}
           onAccept={handleAcceptPolish}
           onDiscard={() => setPolishModal(null)}
+        />
+      )}
+
+      {/* PD Review Loading */}
+      {pdReviewModal === 'loading' && (
+        <PDReviewLoadingModal />
+      )}
+
+      {/* PD Review Results */}
+      {pdReviewModal === 'results' && pdReviewResults && (
+        <PDReviewResultsModal
+          results={pdReviewResults}
+          onClose={() => setPdReviewModal(null)}
+          onRerun={handleRunPDReview}
+        />
+      )}
+
+      {/* Advisory Council Loading */}
+      {councilModal === 'loading' && (
+        <CouncilLoadingModal />
+      )}
+
+      {/* Advisory Council Results */}
+      {councilModal === 'results' && councilResults && (
+        <AdvisoryCouncilModal
+          results={councilResults}
+          onClose={() => setCouncilModal(null)}
+          onRerun={handleRunAdvisoryCouncil}
         />
       )}
 
@@ -1055,6 +1131,238 @@ function CitationsPanel({ citations, onInsert, onRefresh }) {
           </div>
         </div>
       ))}
+    </div>
+  )
+}
+
+// ── PD Review Loading Modal ───────────────────────────────────────────────────
+function PDReviewLoadingModal() {
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+      <div style={{ background: '#fff', borderRadius: 12, padding: '2rem', width: 400, boxShadow: '0 20px 60px rgba(0,0,0,0.2)', textAlign: 'center' }}>
+        <div style={{ fontSize: 32, marginBottom: 12 }}>📋</div>
+        <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 6 }}>Program Director Reviewing</div>
+        <div style={{ fontSize: 13, color: '#888', marginBottom: 24 }}>30-year NIH veteran assessing your application…</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {['Reading aims and significance', 'Assessing mechanism fit and portfolio balance', 'Writing fundability memo'].map((s, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#f8f8f8', borderRadius: 8, fontSize: 13 }}>
+              <span style={{ width: 18, height: 18, borderRadius: '50%', border: '2px solid #ddd', borderTopColor: '#111', display: 'inline-block', animation: 'spin 1s linear infinite' }} />
+              {s}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── PD Review Results Modal ───────────────────────────────────────────────────
+function PDReviewResultsModal({ results, onClose, onRerun }) {
+  const fundColors = { fund_now: { bg: '#f0fdf4', border: '#86efac', text: '#166534', label: '✅ Fund Now' }, revise_and_resubmit: { bg: '#fffbeb', border: '#fcd34d', text: '#92400e', label: '🔄 Revise & Resubmit' }, do_not_fund: { bg: '#fef2f2', border: '#fca5a5', text: '#991b1b', label: '❌ Do Not Fund' } }
+  const fc = fundColors[results.fundability] || fundColors.revise_and_resubmit
+
+  function copyMemo() {
+    const text = `PROGRAM DIRECTOR REVIEW\n\nFundability: ${results.fundability?.replace(/_/g, ' ').toUpperCase()}\n\nOverall Assessment:\n${results.overall_assessment}\n\nStrengths:\n${(results.strengths || []).map(s => '• ' + s).join('\n')}\n\nConcerns:\n${(results.concerns || []).map(c => '• ' + c).join('\n')}\n\nRecommended Actions:\n${(results.recommended_actions || []).map(a => '• ' + a).join('\n')}\n\nPayline Estimate: ${results.payline_estimate}\nPriority Score Estimate: ${results.priority_score_estimate}\n\nFinal Recommendation:\n${results.final_recommendation}`
+    navigator.clipboard.writeText(text).catch(() => {})
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
+      <div style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 640, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+        <div style={{ padding: '1.5rem', borderBottom: '0.5px solid #e5e5e5', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 16 }}>📋 Program Director Review</div>
+            <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>30-year NIH veteran assessment</div>
+          </div>
+          <button onClick={onClose} style={{ ...ghostBtn, padding: '4px 10px', fontSize: 13 }}>✕</button>
+        </div>
+        <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          {/* Fundability badge */}
+          <div style={{ padding: '16px 20px', background: fc.bg, border: `1.5px solid ${fc.border}`, borderRadius: 10, textAlign: 'center' }}>
+            <div style={{ fontSize: 22, fontWeight: 700, color: fc.text }}>{fc.label}</div>
+            <div style={{ fontSize: 12, color: fc.text, marginTop: 4, opacity: 0.8 }}>Program Director Recommendation</div>
+          </div>
+
+          {/* Overall assessment */}
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Overall Assessment</div>
+            <div style={{ fontSize: 13, lineHeight: 1.6, color: '#333', whiteSpace: 'pre-wrap' }}>{results.overall_assessment}</div>
+          </div>
+
+          {/* Strengths */}
+          {(results.strengths || []).length > 0 && (
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Strengths</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {results.strengths.map((s, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 8, padding: '8px 12px', background: '#f0fdf4', borderRadius: 8, fontSize: 13 }}>
+                    <span style={{ color: '#16a34a', flexShrink: 0 }}>✓</span>
+                    <span>{s}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Concerns */}
+          {(results.concerns || []).length > 0 && (
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Concerns</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {results.concerns.map((c, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 8, padding: '8px 12px', background: '#fef2f2', borderRadius: 8, fontSize: 13 }}>
+                    <span style={{ color: '#dc2626', flexShrink: 0 }}>!</span>
+                    <span>{c}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Recommended actions */}
+          {(results.recommended_actions || []).length > 0 && (
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Recommended Actions</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {results.recommended_actions.map((a, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 8, padding: '8px 12px', background: '#fffbeb', borderRadius: 8, fontSize: 13 }}>
+                    <span style={{ color: '#d97706', flexShrink: 0 }}>→</span>
+                    <span>{a}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Estimates */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div style={{ padding: '12px 16px', background: '#f8f8f8', borderRadius: 8 }}>
+              <div style={{ fontSize: 11, color: '#888', marginBottom: 4, fontWeight: 500 }}>PAYLINE ESTIMATE</div>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>{results.payline_estimate}</div>
+            </div>
+            <div style={{ padding: '12px 16px', background: '#f8f8f8', borderRadius: 8 }}>
+              <div style={{ fontSize: 11, color: '#888', marginBottom: 4, fontWeight: 500 }}>PRIORITY SCORE</div>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>{results.priority_score_estimate}</div>
+            </div>
+          </div>
+
+          {/* Final recommendation */}
+          <div style={{ padding: '16px 20px', background: '#f8f8f8', borderRadius: 10, borderLeft: '3px solid #111' }}>
+            <div style={{ fontSize: 11, color: '#888', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em' }}>Final Recommendation</div>
+            <div style={{ fontSize: 13, lineHeight: 1.6 }}>{results.final_recommendation}</div>
+          </div>
+        </div>
+        <div style={{ padding: '1rem 1.5rem', borderTop: '0.5px solid #e5e5e5', display: 'flex', gap: 8 }}>
+          <button onClick={copyMemo} style={ghostBtn}>Copy memo</button>
+          <button onClick={onRerun} style={ghostBtn}>Re-run</button>
+          <button onClick={onClose} style={{ ...ghostBtn, marginLeft: 'auto' }}>Close</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Advisory Council Loading Modal ────────────────────────────────────────────
+function CouncilLoadingModal() {
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+      <div style={{ background: '#fff', borderRadius: 12, padding: '2rem', width: 400, boxShadow: '0 20px 60px rgba(0,0,0,0.2)', textAlign: 'center' }}>
+        <div style={{ fontSize: 32, marginBottom: 12 }}>🏛️</div>
+        <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 6 }}>Advisory Council Deliberating</div>
+        <div style={{ fontSize: 13, color: '#888' }}>Council reviewing study section results and program priorities…</div>
+      </div>
+    </div>
+  )
+}
+
+// ── Advisory Council Results Modal ────────────────────────────────────────────
+function AdvisoryCouncilModal({ results, onClose, onRerun }) {
+  const decisionColors = {
+    fund: { bg: '#f0fdf4', border: '#86efac', text: '#166534', label: '✅ Fund' },
+    fund_with_conditions: { bg: '#fffbeb', border: '#fcd34d', text: '#92400e', label: '🔄 Fund with Conditions' },
+    defer: { bg: '#eff6ff', border: '#93c5fd', text: '#1e40af', label: '⏸ Defer to Next Cycle' },
+    do_not_fund: { bg: '#fef2f2', border: '#fca5a5', text: '#991b1b', label: '❌ Do Not Fund' },
+  }
+  const priorityColors = { high: '#059669', medium: '#d97706', low: '#6b7280' }
+  const dc = decisionColors[results.decision] || decisionColors.defer
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
+      <div style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 600, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+        <div style={{ padding: '1.5rem', borderBottom: '0.5px solid #e5e5e5', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 16 }}>🏛️ Advisory Council Recommendation</div>
+            <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>Second-level NIH funding review</div>
+          </div>
+          <button onClick={onClose} style={{ ...ghostBtn, padding: '4px 10px', fontSize: 13 }}>✕</button>
+        </div>
+        <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          {/* Decision + priority badges */}
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, padding: '16px 20px', background: dc.bg, border: `1.5px solid ${dc.border}`, borderRadius: 10, textAlign: 'center' }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: dc.text }}>{dc.label}</div>
+            </div>
+            <div style={{ padding: '16px 20px', background: '#f8f8f8', borderRadius: 10, textAlign: 'center', minWidth: 120 }}>
+              <div style={{ fontSize: 11, color: '#888', marginBottom: 4, fontWeight: 600 }}>PRIORITY</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: priorityColors[results.priority] || '#111' }}>{(results.priority || 'medium').toUpperCase()}</div>
+            </div>
+          </div>
+
+          {/* Rationale */}
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Rationale</div>
+            <div style={{ fontSize: 13, lineHeight: 1.6, color: '#333', whiteSpace: 'pre-wrap' }}>{results.rationale}</div>
+          </div>
+
+          {/* Conditions */}
+          {(results.conditions || []).length > 0 && (
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Conditions</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {results.conditions.map((c, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 8, padding: '8px 12px', background: '#fffbeb', borderRadius: 8, fontSize: 13 }}>
+                    <span style={{ color: '#d97706', flexShrink: 0 }}>◆</span>
+                    <span>{c}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Portfolio fit + budget */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div style={{ padding: '12px 16px', background: '#f8f8f8', borderRadius: 8 }}>
+              <div style={{ fontSize: 11, color: '#888', marginBottom: 4, fontWeight: 500 }}>PORTFOLIO FIT</div>
+              <div style={{ fontSize: 13 }}>{results.portfolio_fit}</div>
+            </div>
+            <div style={{ padding: '12px 16px', background: '#f8f8f8', borderRadius: 8 }}>
+              <div style={{ fontSize: 11, color: '#888', marginBottom: 4, fontWeight: 500 }}>BUDGET RECOMMENDATION</div>
+              <div style={{ fontSize: 13 }}>{results.budget_recommendation}</div>
+            </div>
+          </div>
+
+          {/* Formal council statement */}
+          <div style={{ padding: '16px 20px', background: '#f8f8f8', borderRadius: 10, borderLeft: '3px solid #111' }}>
+            <div style={{ fontSize: 11, color: '#888', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em' }}>Formal Council Statement</div>
+            <div style={{ fontSize: 13, lineHeight: 1.6, fontStyle: 'italic' }}>{results.final_statement}</div>
+          </div>
+
+          {/* Inputs used */}
+          {results._inputs && (
+            <div style={{ fontSize: 11, color: '#888', borderTop: '0.5px solid #e5e5e5', paddingTop: 12 }}>
+              Based on:{' '}
+              {results._inputs.used_study_section && `Study Section score ${results._inputs.study_section_score}`}
+              {results._inputs.used_study_section && results._inputs.used_pd_review && ' · '}
+              {results._inputs.used_pd_review && `Program Director: ${results._inputs.pd_fundability?.replace(/_/g, ' ')}`}
+              {!results._inputs.used_study_section && !results._inputs.used_pd_review && 'Grant text only (no study section or PD review on file)'}
+            </div>
+          )}
+        </div>
+        <div style={{ padding: '1rem 1.5rem', borderTop: '0.5px solid #e5e5e5', display: 'flex', gap: 8 }}>
+          <button onClick={onRerun} style={ghostBtn}>Re-run</button>
+          <button onClick={onClose} style={{ ...ghostBtn, marginLeft: 'auto' }}>Close</button>
+        </div>
+      </div>
     </div>
   )
 }

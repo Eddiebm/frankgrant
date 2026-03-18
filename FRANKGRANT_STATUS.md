@@ -1,7 +1,7 @@
 # FrankGrant Status Document
 
 **Last Updated:** 2026-03-18
-**Version:** 4.4.0
+**Version:** 4.5.0
 **Status:** Production (Internal COARE Tool)
 
 ---
@@ -11,7 +11,7 @@
 | Resource | URL/ID | Status |
 |----------|--------|--------|
 | **Frontend (Pages)** | https://frankgrant.pages.dev | ✅ Live |
-| **Latest Preview** | https://1f2f5581.frankgrant.pages.dev | ✅ Live |
+| **Latest Preview** | https://b99e685c.frankgrant.pages.dev | ✅ Live |
 | **API Worker** | https://frankgrant-worker.eddie-781pagesdev.workers.dev | ✅ Live |
 | **D1 Database** | frankgrant-db | ✅ Live |
 | **D1 Database ID** | 728339df-7875-4fb7-a58b-196cd8099e22 | — |
@@ -74,6 +74,28 @@
 - ✅ **Diff modal** - Side-by-side Original vs Polished in Georgia serif
 - ✅ **Accept / Discard** - Accept overwrites section and saves; Discard cancels
 - ✅ **Sonnet powered** - Removes hedges, converts to active voice, strengthens hooks
+
+### **PD Review (v4.5.0)**
+- ✅ **"📋 PD Review" toolbar button** - Shows existing results or triggers fresh 30-year veteran assessment
+- ✅ **Fundability badge** - Fund Now (green) / Revise & Resubmit (amber) / Do Not Fund (red)
+- ✅ **Full memo modal** - Overall assessment, strengths (green), concerns (red), recommended actions (amber)
+- ✅ **Estimates** - Payline estimate + priority score estimate side by side
+- ✅ **Final recommendation** - Highlighted quote block
+- ✅ **Copy memo** - Full text copy for pasting elsewhere
+- ✅ **Persisted** - `pd_review_results` column, re-run or view instantly
+- ✅ **Worker route** - `POST /api/projects/:id/pd-review`, Sonnet, max_tokens 1500
+
+### **Advisory Council (v4.5.0)**
+- ✅ **"🏛️ Council" toolbar button** - Full second-level review modal
+- ✅ **Decision badge** - Fund / Fund with Conditions / Defer / Do Not Fund
+- ✅ **Priority indicator** - High / Medium / Low
+- ✅ **Conditions list** - Specific requirements if fund_with_conditions
+- ✅ **Portfolio fit + budget recommendation** - Side-by-side summary
+- ✅ **Formal council statement** - Styled italics quote block
+- ✅ **Inputs used footer** - Shows if study section score and PD review informed the decision
+- ✅ **Persisted** - `advisory_council_results` column
+- ✅ **Worker route** - `POST /api/projects/:id/advisory-council`, Sonnet, max_tokens 1000
+- ✅ **Voice Mode integration** - "What did the program director say" → loads PD context; "What did the advisory council decide" → loads council context
 
 ### **Voice Mode (v4.4.0)**
 - ✅ **Full-screen overlay** - Dark modal with teal/purple/amber status indicators
