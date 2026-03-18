@@ -1,7 +1,7 @@
 # FrankGrant Status Document
 
 **Last Updated:** 2026-03-18
-**Version:** 2.1.0
+**Version:** 3.0.0
 **Status:** Production (Internal COARE Tool)
 
 ---
@@ -11,7 +11,7 @@
 | Resource | URL/ID | Status |
 |----------|--------|--------|
 | **Frontend (Pages)** | https://frankgrant.pages.dev | ✅ Live |
-| **Latest Preview** | https://6bfd8857.frankgrant.pages.dev | ✅ Live |
+| **Latest Preview** | https://f0a6bb17.frankgrant.pages.dev | ✅ Live |
 | **API Worker** | https://frankgrant-worker.eddie-781pagesdev.workers.dev | ✅ Live |
 | **D1 Database** | frankgrant-db | ✅ Live |
 | **D1 Database ID** | 728339df-7875-4fb7-a58b-196cd8099e22 | — |
@@ -65,10 +65,23 @@
 - ✅ **Usage Dashboard** - Monthly cost breakdown by model
 - ✅ **Error Boundary** - Graceful error handling with reload button
 - ✅ **Auto-save** - Projects save on blur with save state indicator
+- ✅ **Feedback System** - Floating button on all pages for bug reports, feature requests, general feedback
 
 ### **Export**
 - ✅ **Copy to Clipboard** - Individual sections or full grant
 - ✅ **Download .txt** - Full grant text export
+
+### **Admin Command Station (v3.0.0)**
+- ✅ **Platform Health Panel** - Error rate, API latency, Claude errors, D1 row counts, rate limit hits, recent errors, deployment history
+- ✅ **User Management Panel** - User registry with email domain, plan tier, activity tracking, suspension controls, per-user drawer with full history
+- ✅ **Revenue Operations Panel** - MRR waterfall (new/expansion/contraction/churn), tier breakdown (individual/lab/institution), all MRR events log
+- ✅ **AI Cost Monitoring Panel** - Today/month spend, cost by feature, cost by model, top 20 users by cost
+- ✅ **Grant Intelligence Panel** - Mechanism popularity, total projects, projects with sections
+- ✅ **Product Health Panel** - Feature usage stats (total/7d/30d/unique users)
+- ✅ **Security & Compliance Panel** - Failed auth attempts, suspended users list, admin actions log, unusual activity detection (>50 calls/day)
+- ✅ **Feedback Management Panel** - All feedback with type badges, resolved status, admin notes, mark resolved button
+- ✅ **Tab Navigation** - 9-tab interface with Overview summary panel
+- ✅ **Admin Gating** - Command Station only accessible to eddieb@coareholdings.com
 
 ---
 
@@ -172,6 +185,114 @@ CREATE TABLE IF NOT EXISTS usage_log (
 );
 ```
 
+#### **error_log**
+```sql
+CREATE TABLE IF NOT EXISTS error_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  endpoint TEXT,
+  status_code INTEGER,
+  error_message TEXT,
+  response_time_ms INTEGER,
+  user_id TEXT,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch())
+);
+```
+
+#### **rate_limit_log**
+```sql
+CREATE TABLE IF NOT EXISTS rate_limit_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT,
+  endpoint TEXT,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch())
+);
+```
+
+#### **deployments_log**
+```sql
+CREATE TABLE IF NOT EXISTS deployments_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  started_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  worker_version TEXT,
+  environment TEXT
+);
+```
+
+#### **users_meta**
+```sql
+CREATE TABLE IF NOT EXISTS users_meta (
+  id TEXT PRIMARY KEY,
+  email TEXT,
+  email_domain TEXT,
+  first_seen INTEGER NOT NULL DEFAULT (unixepoch()),
+  last_active INTEGER NOT NULL DEFAULT (unixepoch()),
+  plan_tier TEXT DEFAULT 'free',
+  total_grants INTEGER DEFAULT 0,
+  total_generations INTEGER DEFAULT 0,
+  total_tokens_used INTEGER DEFAULT 0,
+  estimated_cost_usd REAL DEFAULT 0,
+  suspended INTEGER DEFAULT 0,
+  notes TEXT
+);
+```
+
+#### **mrr_events**
+```sql
+CREATE TABLE IF NOT EXISTS mrr_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_type TEXT,
+  user_id TEXT,
+  plan_from TEXT,
+  plan_to TEXT,
+  mrr_delta REAL,
+  recorded_at INTEGER NOT NULL DEFAULT (unixepoch())
+);
+```
+
+#### **batch_jobs**
+```sql
+CREATE TABLE IF NOT EXISTS batch_jobs (
+  id TEXT PRIMARY KEY,
+  status TEXT,
+  submitted_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  completed_at INTEGER,
+  input_tokens INTEGER,
+  output_tokens INTEGER,
+  model TEXT,
+  user_id TEXT,
+  project_id TEXT
+);
+```
+
+#### **admin_actions**
+```sql
+CREATE TABLE IF NOT EXISTS admin_actions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  action_type TEXT,
+  entity TEXT,
+  entity_id TEXT,
+  old_value TEXT,
+  new_value TEXT,
+  admin_user_id TEXT,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch())
+);
+```
+
+#### **feedback_log**
+```sql
+CREATE TABLE IF NOT EXISTS feedback_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT,
+  email_domain TEXT,
+  feedback_type TEXT,
+  message TEXT,
+  page TEXT,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  resolved INTEGER DEFAULT 0,
+  admin_notes TEXT
+);
+```
+
 #### **Indexes**
 ```sql
 CREATE INDEX IF NOT EXISTS idx_projects_user ON projects(user_id);
@@ -207,6 +328,25 @@ All routes except `OPTIONS` require Bearer token in `Authorization` header.
   - Returns all-time totals
   - Includes cache token statistics
 
+### **Health & Feedback**
+- **GET** `/api/health` - Public health check (no auth)
+- **POST** `/api/feedback` - Submit feedback (auth required)
+
+### **Admin Command Station Routes (Admin Only)**
+- **GET** `/api/command/health` - Platform health metrics
+- **GET** `/api/command/users` - User management data
+- **PATCH** `/api/command/users/:id` - Update user (suspend, tier, notes)
+- **GET** `/api/command/revenue` - Revenue metrics
+- **GET** `/api/command/mrr-events` - MRR events log
+- **POST** `/api/command/mrr-events` - Create MRR event
+- **GET** `/api/command/ai-costs` - AI cost analytics
+- **GET** `/api/command/grants` - Grant intelligence metrics
+- **GET** `/api/command/product` - Product health metrics
+- **GET** `/api/command/security` - Security audit log
+- **GET** `/api/command/feedback` - All feedback
+- **PATCH** `/api/command/feedback/:id` - Update feedback
+- **POST** `/api/command/feedback/cluster` - Cluster feature requests with AI
+
 ### **CORS**
 - **OPTIONS** `*` - CORS preflight (204 response)
 
@@ -239,6 +379,7 @@ compatibility_flags = ["nodejs_compat"]
 
 [vars]
 ENVIRONMENT = "production"
+WORKER_VERSION = "3.0.0"
 
 [[d1_databases]]
 binding = "DB"
@@ -382,10 +523,11 @@ npm run dev
 
 ### **Backend (Cloudflare Workers)**
 - **Runtime:** Cloudflare Workers (V8 isolates)
-- **Database:** D1 (SQLite)
+- **Database:** D1 (SQLite) - 11 tables
 - **Cache:** KV (rate limiting)
 - **AI:** Anthropic Claude via proxy
 - **Auth:** JWKS-based JWT verification
+- **Admin Access:** Email-based gating (eddieb@coareholdings.com)
 
 ### **Data Flow**
 ```
@@ -400,26 +542,36 @@ User → Clerk Auth → React App → Worker API → Anthropic API
 
 ## 🐛 Known Issues
 
-1. **Bundle Size:** 789 KB (should be code-split for faster load)
+1. **Bundle Size:** 813 KB (increased from 789 KB with Command Station - should be code-split)
 2. **Mobile Layout:** Not fully responsive below 600px
 3. **Study Section UI:** Personas created but not wired to UI
 4. **DOCX Export:** Package installed but not implemented
 5. **Compliance Checker:** Logic ready but no UI component
+6. **Deployment Logging:** deployments_log table exists but not auto-populated on Worker startup
+7. **Batch API Integration:** batch_jobs table exists but Batch API routes not implemented
 
 ---
 
-## 📝 Recent Changes (v2.1.0 - 2026-03-18)
+## 📝 Recent Changes (v3.0.0 - 2026-03-18)
 
-### **Added**
-- Token efficiency optimizations (60-70% cost reduction)
-- Model tiering (Haiku vs Sonnet)
-- Prompt caching with 90% discount on reads
-- Grant compression (1,500-word summaries)
-- Progressive section summaries (200 words each)
-- Enhanced usage tracking (model, cache tokens)
-- Per-tier monthly budget enforcement
-- UsageMeter component in Dashboard
-- Local computation functions (no AI for simple operations)
+### **Added (v3.0.0)**
+- Complete Admin Command Station with 8 monitoring panels
+- Platform Health: error rate, latency, Claude errors, deployment logs
+- User Management: user registry, suspension, tier controls
+- Revenue Operations: MRR waterfall, tier breakdown
+- AI Cost Monitoring: cost by feature/model/user
+- Grant Intelligence: mechanism popularity, analytics
+- Product Health: feature usage, drop-off analysis
+- Security: failed auth, admin actions, unusual activity
+- Feedback Management: user feedback with AI clustering
+- 8 new D1 tables for monitoring and analytics
+- Request logging middleware with response time tracking
+- users_meta auto-upsert on every authenticated request
+- Suspended user checking
+- Rate limit logging
+- FeedbackButton floating component on all pages
+- Public health check endpoint
+- Admin-only access gating (eddieb@coareholdings.com)
 
 ### **Fixed**
 - Setup field persistence (was being lost on page refresh)
@@ -435,20 +587,25 @@ User → Clerk Auth → React App → Worker API → Anthropic API
 
 ---
 
-## 🎯 Next Milestone: v2.2.0
+## 🎯 Next Milestone: v3.1.0
 
-**Target:** Wire AI personas to UI
+**Target:** Resilience & Recovery + AI Persona Wiring
 
 **Tasks:**
-1. Add "Polish" button to each section (uses Professor persona)
-2. Add "PD Review" button (uses Program Director persona)
-3. Add "Study Section" button (runs 3-reviewer simulation)
-4. Add "Advisory Council" button (runs Council review)
-5. Add Compliance Checker UI component
-6. Add DOCX export functionality
+1. Implement graceful degradation when Claude API is down (503 with retry)
+2. Add R2 backup system (daily automated backups)
+3. Add restore from backup route
+4. Add maintenance mode toggle
+5. Implement gradual rollout strategy for deployments
+6. Add IP-based rate limiting
+7. Add prompt injection sanitization
+8. Create RUNBOOK.md with incident response procedures
+9. Wire AI personas to UI: Polish, PD Review, Study Section, Advisory Council buttons
+10. Add Compliance Checker UI component
+11. Add DOCX export functionality
 
-**Estimated Time:** 8-12 hours
-**Expected Impact:** Makes v2 personas accessible to users
+**Estimated Time:** 12-16 hours
+**Expected Impact:** Production-grade reliability + full AI persona access
 
 ---
 
