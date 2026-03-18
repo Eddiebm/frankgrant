@@ -1,6 +1,7 @@
 import { SignedIn, SignedOut, SignIn } from '@clerk/clerk-react'
 import Dashboard from './components/Dashboard'
 import ErrorBoundary from './components/ErrorBoundary'
+import FeedbackButton from './components/FeedbackButton'
 
 export default function App() {
   return (
@@ -24,6 +25,7 @@ export default function App() {
       </SignedOut>
       <SignedIn>
         <Dashboard />
+        <FeedbackButton />
       </SignedIn>
     </ErrorBoundary>
   )

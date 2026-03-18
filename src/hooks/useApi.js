@@ -37,5 +37,5 @@ export function useApi() {
   // Usage with detailed monthly tracking
   async function getUsage() { return request('GET', '/usage') }
 
-  return { callAI, listProjects, createProject, getProject, updateProject, deleteProject, getUsage }
+  return { callAI, listProjects, createProject, getProject, updateProject, deleteProject, getUsage, getToken }
 }

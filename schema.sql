@@ -45,3 +45,98 @@ CREATE TABLE IF NOT EXISTS usage_log (
 CREATE INDEX IF NOT EXISTS idx_projects_user ON projects(user_id);
 CREATE INDEX IF NOT EXISTS idx_usage_user ON usage_log(user_id);
 CREATE INDEX IF NOT EXISTS idx_usage_created ON usage_log(created_at);
+
+-- ─── ADMIN MONITORING TABLES ───────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS error_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  endpoint TEXT,
+  status_code INTEGER,
+  error_message TEXT,
+  response_time_ms INTEGER,
+  user_id TEXT,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
+CREATE TABLE IF NOT EXISTS rate_limit_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT,
+  endpoint TEXT,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
+CREATE TABLE IF NOT EXISTS deployments_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  started_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  worker_version TEXT,
+  environment TEXT
+);
+
+CREATE TABLE IF NOT EXISTS users_meta (
+  id TEXT PRIMARY KEY,
+  email TEXT,
+  email_domain TEXT,
+  first_seen INTEGER NOT NULL DEFAULT (unixepoch()),
+  last_active INTEGER NOT NULL DEFAULT (unixepoch()),
+  plan_tier TEXT DEFAULT 'free',
+  total_grants INTEGER DEFAULT 0,
+  total_generations INTEGER DEFAULT 0,
+  total_tokens_used INTEGER DEFAULT 0,
+  estimated_cost_usd REAL DEFAULT 0,
+  suspended INTEGER DEFAULT 0,
+  notes TEXT
+);
+
+CREATE TABLE IF NOT EXISTS mrr_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_type TEXT,
+  user_id TEXT,
+  plan_from TEXT,
+  plan_to TEXT,
+  mrr_delta REAL,
+  recorded_at INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
+CREATE TABLE IF NOT EXISTS batch_jobs (
+  id TEXT PRIMARY KEY,
+  status TEXT,
+  submitted_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  completed_at INTEGER,
+  input_tokens INTEGER,
+  output_tokens INTEGER,
+  model TEXT,
+  user_id TEXT,
+  project_id TEXT
+);
+
+CREATE TABLE IF NOT EXISTS admin_actions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  action_type TEXT,
+  entity TEXT,
+  entity_id TEXT,
+  old_value TEXT,
+  new_value TEXT,
+  admin_user_id TEXT,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
+CREATE TABLE IF NOT EXISTS feedback_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT,
+  email_domain TEXT,
+  feedback_type TEXT,
+  message TEXT,
+  page TEXT,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  resolved INTEGER DEFAULT 0,
+  admin_notes TEXT
+);
+
+-- ─── ADMIN MONITORING INDEXES ──────────────────────────────────────────────
+
+CREATE INDEX IF NOT EXISTS idx_error_log_created ON error_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_error_log_status ON error_log(status_code);
+CREATE INDEX IF NOT EXISTS idx_users_meta_last_active ON users_meta(last_active);
+CREATE INDEX IF NOT EXISTS idx_users_meta_plan ON users_meta(plan_tier);
+CREATE INDEX IF NOT EXISTS idx_feedback_resolved ON feedback_log(resolved);
+CREATE INDEX IF NOT EXISTS idx_feedback_type ON feedback_log(feedback_type);

@@ -6,13 +6,14 @@ import Scorer from './Scorer'
 import GrantWizard from './GrantWizard'
 import BiosketchGenerator from './BiosketchGenerator'
 import UsageMeter from './UsageMeter'
+import CommandStation from './CommandStation'
 
 export default function Dashboard() {
   const { user } = useUser()
   const api = useApi()
   const [projects, setProjects] = useState([])
   const [activeProject, setActiveProject] = useState(null)
-  const [activeView, setActiveView] = useState('projects') // 'projects', 'editor', 'scorer', 'wizard', 'biosketch'
+  const [activeView, setActiveView] = useState('projects') // 'projects', 'editor', 'scorer', 'wizard', 'biosketch', 'command'
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
 
@@ -111,6 +112,10 @@ export default function Dashboard() {
     return <BiosketchGenerator onBack={() => setActiveView('projects')} />
   }
 
+  if (activeView === 'command') {
+    return <CommandStation onBack={() => setActiveView('projects')} />
+  }
+
   return (
     <div style={{ maxWidth: 800, margin: '0 auto', padding: '2rem 1.5rem' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2rem' }}>
@@ -129,6 +134,11 @@ export default function Dashboard() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
         <h2 style={{ fontSize: 15, fontWeight: 500 }}>Your grants</h2>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {user?.emailAddresses?.[0]?.emailAddress === 'eddieb@coareholdings.com' && (
+            <button onClick={() => setActiveView('command')} style={{ ...btnStyle, background: '#dc2626' }}>
+              ⚡ Command Station
+            </button>
+          )}
           <button onClick={() => setActiveView('wizard')} style={btnStyle}>
             ✨ Grant Wizard
           </button>
