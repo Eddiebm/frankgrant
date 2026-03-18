@@ -14,8 +14,12 @@ CREATE TABLE IF NOT EXISTS projects (
   user_id     TEXT NOT NULL,
   title       TEXT NOT NULL DEFAULT 'Untitled grant',
   mechanism   TEXT NOT NULL DEFAULT 'STTR-I',
+  setup       TEXT NOT NULL DEFAULT '{}',
   sections    TEXT NOT NULL DEFAULT '{}',
   scores      TEXT NOT NULL DEFAULT '{}',
+  is_resubmission INTEGER NOT NULL DEFAULT 0,
+  introduction TEXT,
+  study_section TEXT,
   updated_at  INTEGER NOT NULL DEFAULT (unixepoch()),
   created_at  INTEGER NOT NULL DEFAULT (unixepoch()),
   FOREIGN KEY (user_id) REFERENCES users(id)

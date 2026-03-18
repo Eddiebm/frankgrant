@@ -4,7 +4,7 @@ import {
   MECHANISMS, SECTIONS, WORDS_PER_PAGE,
   countWords, wordsToPages, getDescriptor, getLimitsText
 } from '../lib/nih.js'
-import { WRITE_SYSTEM, SCORE_SYSTEM, writeSectionPrompt } from '../lib/prompts.js'
+import { PROFESSOR_SYSTEM, professorWritePrompt, polishPrompt, PROGRAM_DIRECTOR_SYSTEM, REVIEWER_1_SYSTEM, REVIEWER_2_SYSTEM, REVIEWER_3_SYSTEM, STUDY_SECTION_SUMMARY_SYSTEM, ADVISORY_COUNCIL_SYSTEM } from '../lib/personas.js'
 
 const MODEL = 'claude-sonnet-4-20250514'
 
@@ -57,9 +57,9 @@ export default function GrantEditor({ project, onSave, onBack }) {
     setGenerating(g => ({ ...g, [secId]: true }))
     try {
       const result = await api.callAI({
-        model: MODEL, max_tokens: 1000,
-        system: WRITE_SYSTEM,
-        messages: [{ role: 'user', content: writeSectionPrompt(secId, getProject(), mech) }],
+        model: MODEL, max_tokens: 1500,
+        system: PROFESSOR_SYSTEM,
+        messages: [{ role: 'user', content: professorWritePrompt(secId, getProject(), mech) }],
       }, `write_${secId}`)
       const text = result.content.map(b => b.text || '').join('')
       const updated = updateSection(secId, text)

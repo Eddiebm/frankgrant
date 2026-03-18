@@ -1,9 +1,10 @@
-import { SignedIn, SignedOut, SignIn, useAuth } from '@clerk/clerk-react'
+import { SignedIn, SignedOut, SignIn } from '@clerk/clerk-react'
 import Dashboard from './components/Dashboard'
+import ErrorBoundary from './components/ErrorBoundary'
 
 export default function App() {
   return (
-    <>
+    <ErrorBoundary>
       <SignedOut>
         <div style={{
           minHeight: '100vh',
@@ -24,6 +25,6 @@ export default function App() {
       <SignedIn>
         <Dashboard />
       </SignedIn>
-    </>
+    </ErrorBoundary>
   )
 }

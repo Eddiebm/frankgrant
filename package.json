@@ -14,7 +14,9 @@
     "db:init:remote": "wrangler d1 execute frankgrant-db --remote --file=schema.sql"
   },
   "dependencies": {
+    "@clerk/backend": "^3.2.1",
     "@clerk/clerk-react": "^5.0.0",
+    "docx": "^9.6.1",
     "mammoth": "^1.12.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0"

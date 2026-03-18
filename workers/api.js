@@ -169,13 +169,17 @@ async function handleCreateProject(req, env, userId) {
   const id = crypto.randomUUID()
   const now = Math.floor(Date.now() / 1000)
   await env.DB.prepare(
-    'INSERT INTO projects (id, user_id, title, mechanism, sections, scores, updated_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    'INSERT INTO projects (id, user_id, title, mechanism, setup, sections, scores, is_resubmission, introduction, study_section, updated_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
   ).bind(
     id, userId,
     body.title || 'Untitled grant',
     body.mechanism || 'STTR-I',
+    JSON.stringify(body.setup || {}),
     JSON.stringify(body.sections || {}),
     JSON.stringify(body.scores || {}),
+    body.is_resubmission ? 1 : 0,
+    body.introduction || null,
+    body.study_section || null,
     now, now
   ).run()
   return json({ id, title: body.title, mechanism: body.mechanism, created_at: now }, 201)
@@ -186,8 +190,10 @@ async function handleGetProject(req, env, userId, projectId) {
     'SELECT * FROM projects WHERE id = ? AND user_id = ?'
   ).bind(projectId, userId).first()
   if (!row) return err('Project not found', 404)
+  row.setup = JSON.parse(row.setup || '{}')
   row.sections = JSON.parse(row.sections || '{}')
   row.scores = JSON.parse(row.scores || '{}')
+  row.is_resubmission = row.is_resubmission === 1
   return json(row)
 }
 
@@ -195,12 +201,16 @@ async function handleUpdateProject(req, env, userId, projectId) {
   const body = await req.json()
   const now = Math.floor(Date.now() / 1000)
   const result = await env.DB.prepare(
-    'UPDATE projects SET title = ?, mechanism = ?, sections = ?, scores = ?, updated_at = ? WHERE id = ? AND user_id = ?'
+    'UPDATE projects SET title = ?, mechanism = ?, setup = ?, sections = ?, scores = ?, is_resubmission = ?, introduction = ?, study_section = ?, updated_at = ? WHERE id = ? AND user_id = ?'
   ).bind(
     body.title || 'Untitled grant',
     body.mechanism || 'STTR-I',
+    JSON.stringify(body.setup || {}),
     JSON.stringify(body.sections || {}),
     JSON.stringify(body.scores || {}),
+    body.is_resubmission ? 1 : 0,
+    body.introduction || null,
+    body.study_section || null,
     now, projectId, userId
   ).run()
   if (result.changes === 0) return err('Project not found', 404)

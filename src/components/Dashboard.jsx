@@ -3,13 +3,15 @@ import { useUser, UserButton } from '@clerk/clerk-react'
 import { useApi } from '../hooks/useApi'
 import GrantEditor from './GrantEditor'
 import Scorer from './Scorer'
+import GrantWizard from './GrantWizard'
+import BiosketchGenerator from './BiosketchGenerator'
 
 export default function Dashboard() {
   const { user } = useUser()
   const api = useApi()
   const [projects, setProjects] = useState([])
   const [activeProject, setActiveProject] = useState(null)
-  const [activeView, setActiveView] = useState('projects') // 'projects', 'editor', 'scorer'
+  const [activeView, setActiveView] = useState('projects') // 'projects', 'editor', 'scorer', 'wizard', 'biosketch'
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
 
@@ -68,6 +70,19 @@ export default function Dashboard() {
     if (activeProject?.id === id) setActiveProject(null)
   }
 
+  async function handleWizardComplete(projectData) {
+    // Create project from wizard
+    try {
+      const proj = await api.createProject(projectData)
+      const full = await api.getProject(proj.id)
+      setProjects(prev => [proj, ...prev])
+      setActiveProject(full)
+      setActiveView('editor')
+    } catch (e) {
+      alert('Error creating project: ' + e.message)
+    }
+  }
+
   if (activeView === 'editor' && activeProject) {
     return (
       <GrantEditor
@@ -80,6 +95,19 @@ export default function Dashboard() {
 
   if (activeView === 'scorer') {
     return <Scorer onBack={() => setActiveView('projects')} />
+  }
+
+  if (activeView === 'wizard') {
+    return (
+      <GrantWizard
+        onComplete={handleWizardComplete}
+        onCancel={() => setActiveView('projects')}
+      />
+    )
+  }
+
+  if (activeView === 'biosketch') {
+    return <BiosketchGenerator onBack={() => setActiveView('projects')} />
   }
 
   return (
@@ -97,9 +125,15 @@ export default function Dashboard() {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
         <h2 style={{ fontSize: 15, fontWeight: 500 }}>Your grants</h2>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button onClick={() => setActiveView('wizard')} style={btnStyle}>
+            ✨ Grant Wizard
+          </button>
           <button onClick={() => setActiveView('scorer')} style={btnStyle}>
             📊 Score Document
+          </button>
+          <button onClick={() => setActiveView('biosketch')} style={btnStyle}>
+            👤 Biosketch
           </button>
           <button onClick={newProject} disabled={creating} style={btnStyle}>
             {creating ? 'Creating...' : '+ New grant'}
