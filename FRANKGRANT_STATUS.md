@@ -1,7 +1,7 @@
 # FrankGrant Status Document
 
 **Last Updated:** 2026-03-18
-**Version:** 4.5.0
+**Version:** 4.6.0
 **Status:** Production (Internal COARE Tool)
 
 ---
@@ -11,7 +11,7 @@
 | Resource | URL/ID | Status |
 |----------|--------|--------|
 | **Frontend (Pages)** | https://frankgrant.pages.dev | ✅ Live |
-| **Latest Preview** | https://b99e685c.frankgrant.pages.dev | ✅ Live |
+| **Latest Preview** | https://38eea23f.frankgrant.pages.dev | ✅ Live |
 | **API Worker** | https://frankgrant-worker.eddie-781pagesdev.workers.dev | ✅ Live |
 | **D1 Database** | frankgrant-db | ✅ Live |
 | **D1 Database ID** | 728339df-7875-4fb7-a58b-196cd8099e22 | — |
@@ -97,6 +97,43 @@
 - ✅ **Worker route** - `POST /api/projects/:id/advisory-council`, Sonnet, max_tokens 1000
 - ✅ **Voice Mode integration** - "What did the program director say" → loads PD context; "What did the advisory council decide" → loads council context
 
+### **Missing Required Grant Sections (v4.6.0)**
+- ✅ **Introduction (Resubmission)** — shown only when `is_resubmission` is true; 1-page with asterisk-marked changes
+- ✅ **Human Subjects** — all 10 NIH required elements; toggled in setup
+- ✅ **Vertebrate Animals** — NIH five-point section; toggled in setup
+- ✅ **Authentication of Key Biological Resources** — always shown
+- ✅ **Resource Sharing Plan** — shown only for R01/R21 mechanisms
+- ✅ **Select Agent Research** — toggled in setup
+- ✅ **Cover Letter to SRO** — always shown
+- ✅ **Project Timeline** — always shown
+- ✅ **Conditional visibility** — `showWhen` and `showForMechanisms` properties on SECTIONS drive filtering
+- ✅ **Setup toggles** — Human Subjects, Vertebrate Animals, Select Agents checkboxes in Project Setup tab
+- ✅ **Section generation prompts** — all 8 sections added to `professorWritePrompt()` in personas.js
+- ✅ **Max token caps** — all new section write actions added to MAX_TOKENS_BY_FEATURE in worker
+
+### **Letters Generator (v4.6.0)**
+- ✅ **12 letter types** — Collaboration, Support, MOU, PI Commitment, Mentor (K99), Consultant, Data Sharing, IRB Approval, Patient Advocacy, Industry Partner, Key Personnel, Subcontract Intent
+- ✅ **Dashboard "📝 Letters" button** — top-level navigation view
+- ✅ **Project selector** — choose which project context to use for generation
+- ✅ **Letter type grid** — visual card grid, click to select
+- ✅ **Dynamic form fields** — each letter type has required/optional fields
+- ✅ **Preview panel** — side-by-side form + generated letter in Georgia serif
+- ✅ **Copy / Download** — clipboard copy or .txt download
+- ✅ **Haiku-powered** — fast, cost-efficient (formulaic content)
+- ✅ **Worker route** — `POST /api/letters/generate`, logs usage as `generate_letter`
+
+### **Resubmission Mode (v4.6.0)**
+- ✅ **Resubmission toggle** in Project Setup — enables A1 mode, shows Prior Application Number + Prior Review Date fields
+- ✅ **Conditional sections** — Introduction (Resubmission) appears in writer when is_resubmission is true
+- ✅ **"🔄 Resubmission" tab** — appears in Grant Editor tab row when is_resubmission is on
+- ✅ **Reviewer comments import** — paste full Summary Statement text, saved to `reviewer_comments` D1 column
+- ✅ **Sonnet analysis** — structured JSON: impact score, reviewer scores, major concerns, minor concerns, strengths, recommended changes by section
+- ✅ **Analysis display** — impact score badge, reviewer score grid, major concerns cards with affected sections, minor concerns list, strengths list, recommended changes by section
+- ✅ **Generate Introduction button** — 275-word A1 Introduction stored to `introduction` column, shown in Section Writer
+- ✅ **"🔄 Revise for A1" button** — per-section in writer tab when resubmission mode + analysis available
+- ✅ **D1 migrations** — `prior_application_number`, `prior_review_date`, `reviewer_comments`, `resubmission_analysis` columns added
+- ✅ **Worker routes** — import-comments, analyze, generate-introduction, revise-section endpoints
+
 ### **Voice Mode (v4.4.0)**
 - ✅ **Full-screen overlay** - Dark modal with teal/purple/amber status indicators
 - ✅ **Web Speech API** - Browser-native speech recognition (Chrome/Edge/Safari)
@@ -171,32 +208,11 @@
 
 ### **High Priority**
 - ⏳ **GrantWizard Prelim Upload Step** - Optional prelim upload between 'review' and 'generating' steps (deferred from v4.2.0)
-- ⏳ **Polish Button** - Rewrite sections with Professor persona (persona exists, UI button needed)
-- ⏳ **PD Review Button** - Get Program Director feedback (persona exists, UI button needed)
-- ⏳ **Study Section Button** - Full 3-reviewer panel simulation (personas exist, UI integration needed)
-- ⏳ **Advisory Council Button** - Council funding recommendation (persona exists, UI button needed)
-- ✅ **Compliance Checker** - Inline per-section AI compliance check with severity levels (v4.1.0)
-- ⏳ **DOCX Export** - Properly formatted with Georgia 11pt, 0.5" margins
 - ⏳ **PDF Preview** - In-browser rendering with NIH formatting
+- ⏳ **DOCX Export — Resubmission** - Export Introduction section as first page (before Specific Aims) when is_resubmission is true
 
 ### **Medium Priority**
-- ⏳ **Resubmission Mode** - Introduction section, track changes, reviewer response import
 - ⏳ **Multi-Reviewer Independence** - 3 separate API calls for genuine independence
-- ⏳ **Additional Sections**:
-  - Human Subjects
-  - Vertebrate Animals
-  - Cover Letter to SRO
-- ⏳ **Letters Generator** - 12 letter types:
-  - Collaborator support letters
-  - Consultant letters
-  - Subaward/subcontract letters
-  - STTR research institution partner letter
-  - IRB/IACUC approval letters
-  - Key personnel commitment letters
-  - Resource sharing agreements
-  - Commercial partner letters
-  - Cover letter to Scientific Review Officer
-  - Resubmission introduction
 
 ### **Lower Priority**
 - ⏳ **FOA/NOFO Analyzer** - Parse funding opportunities, analyze fit

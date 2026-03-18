@@ -89,10 +89,30 @@ export function useApi() {
     return request('POST', `/projects/${projectId}/polish`, { section_id: sectionId, section_text: sectionText, section_label: sectionLabel })
   }
 
+  // Letters Generator
+  async function generateLetter(letter_type, project_id, letter_fields) {
+    return request('POST', '/letters/generate', { letter_type, project_id, letter_fields })
+  }
+
+  // Resubmission
+  async function importReviewerComments(projectId, text) {
+    return request('POST', `/projects/${projectId}/resubmission/import-comments`, { reviewer_comments: text })
+  }
+  async function analyzeResubmission(projectId) {
+    return request('POST', `/projects/${projectId}/resubmission/analyze`, {})
+  }
+  async function generateResubmissionIntro(projectId) {
+    return request('POST', `/projects/${projectId}/resubmission/generate-introduction`, {})
+  }
+  async function reviseForResubmission(projectId, sectionId, sectionText, sectionLabel) {
+    return request('POST', `/projects/${projectId}/resubmission/revise-section`, { section_id: sectionId, section_text: sectionText, section_label: sectionLabel })
+  }
+
   return {
     callAI, listProjects, createProject, getProject, updateProject, deleteProject, getUsage,
     parseFOA, searchGrants, analyzeGrant, saveReference, getCompliance, getToken,
     uploadPrelim, listPrelim, deletePrelim, analyzePrelim, generatePrelimNarrative, getCitations,
     runStudySection, runPDReview, runAdvisoryCouncil, polishSection,
+    generateLetter, importReviewerComments, analyzeResubmission, generateResubmissionIntro, reviseForResubmission,
   }
 }

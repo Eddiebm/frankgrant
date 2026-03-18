@@ -601,6 +601,156 @@ EXAMPLE:
 "Heart disease is the leading cause of death in the United States. This research will develop a new method to detect heart attacks earlier, allowing doctors to begin life-saving treatment sooner. The technology could help save thousands of lives each year."
 
 STYLE: Plain language. Avoid jargon. Think: explaining to your neighbor why your research matters.`,
+
+    intro: `Write a 1-page Introduction section for an NIH grant resubmission (A1) application.
+
+HARD LIMIT: ~275 words maximum. This is a strict NIH page limit.
+
+PROJECT CONTEXT:
+Title: ${p.title || 'Not specified'}
+Mechanism: ${mechKey}
+PI: ${p.pi || 'Not specified'}
+Disease: ${p.disease || 'Not specified'}
+Prior Application: ${p.prior_application_number || 'Not specified'}
+
+REQUIREMENTS:
+1. Open with a professional acknowledgment of the prior review
+2. Summarize the 3-4 major reviewer concerns grouped by theme
+3. Describe specific changes made to address each concern — be precise
+4. Use asterisks around revised text to indicate changed portions: *revised text*
+5. Maintain a responsive, professional tone — never defensive
+6. Close with a forward-looking statement affirming the strengthened application
+
+Return only the Introduction text, ready to insert into the application.`,
+
+    human_subjects: `Write a complete Human Subjects section for this NIH ${m.label} application.
+
+PROJECT CONTEXT:
+Title: ${p.title || 'Not specified'}
+Disease: ${p.disease || 'Not specified'}
+PI: ${p.pi || 'Not specified'}
+Study design: ${p.biology || 'Not specified'}
+
+REQUIRED NIH ELEMENTS (address all that apply):
+1. Involvement of Human Subjects and Rationale — describe what human subjects will be involved and why
+2. Sources of Materials — if using existing data/biospecimens only, state this clearly
+3. Potential Risks — describe risks (physical, psychological, social, legal, financial) and risk mitigation
+4. Benefits — describe direct benefits to subjects; distinguish from benefits to society
+5. Importance of Knowledge — why is this knowledge worth the risks?
+6. Inclusion of Women and Minorities — required NIH language: state that women and members of minority groups will be included; if not, provide strong justification
+7. Inclusion of Children — state whether children are included; if excluded, provide justification
+8. Recruitment and Informed Consent — describe recruitment procedures and consent process
+9. Protection of Privacy and Confidentiality — how will subject data be protected?
+10. Data Safety Monitoring Plan — if applicable, describe the DSMP
+
+Write a complete, compliant Human Subjects section. Active voice. Specific and detailed.`,
+
+    vert_animals: `Write a Vertebrate Animals section for this NIH ${m.label} application.
+
+PROJECT CONTEXT:
+Title: ${p.title || 'Not specified'}
+Disease: ${p.disease || 'Not specified'}
+Study approach: ${p.biology || 'Not specified'}
+
+REQUIRED NIH FIVE POINTS (address all five in order):
+1. Description of Procedures — describe all procedures involving animals
+2. Justification for Use of Animals — why must animals be used? Why this species? Why this number? (justify with power analysis or published precedent)
+3. Minimization of Pain and Distress — what anesthesia, analgesics, monitoring will be used? What are the humane endpoints?
+4. Method of Euthanasia — state the specific method and why it is appropriate (reference AVMA Guidelines)
+5. IACUC Approval — state approval status; if pending, note that approval will be obtained before initiation
+
+Write a complete, compliant Vertebrate Animals section. Specific animal numbers, species, strains.`,
+
+    auth_resources: `Write an Authentication of Key Biological Resources section for this NIH ${m.label} application.
+
+PROJECT CONTEXT:
+Disease: ${p.disease || 'Not specified'}
+Key biology: ${p.biology || 'Not specified'}
+
+INSTRUCTIONS:
+Write a brief but complete section addressing authentication plans for each relevant resource type. Address those that apply to this project:
+
+1. Cell Lines — STR profiling, mycoplasma testing frequency, source (ATCC or other repository), passage number monitoring
+2. Antibodies — validation method (western blot, IHC, knockout cell validation), supplier, catalog number
+3. Animals/Animal Models — genetic validation method (genotyping, sequencing), vendor, background strain
+4. Patient-derived specimens — IRB approval, collection and storage standards
+5. Key reagents — purity standards, supplier lot testing
+
+Keep this section concise (approximately 300-400 words). Focus on specifics: method names, frequencies, responsible parties.`,
+
+    resource_sharing: `Write a Resource Sharing Plan for this NIH ${m.label} application.
+
+PROJECT CONTEXT:
+Title: ${p.title || 'Not specified'}
+PI: ${p.pi || 'Not specified'}
+Disease: ${p.disease || 'Not specified'}
+
+REQUIRED COMPONENTS (address those applicable):
+1. Data Sharing — reference the attached Data Management and Sharing Plan; describe final datasets to be shared, timeline, and repository (e.g., dbGaP, NCBI GEO, Zenodo, institutional repository)
+2. Model Organism Sharing — if genetically modified mice or other organisms are generated, describe how they will be made available (Jackson Labs, MMRRC, direct sharing upon request)
+3. Genomic Data Sharing — if the project generates large-scale genomic data (GWAS, sequencing), reference NIH Genomic Data Sharing policy compliance
+4. Software/Code Sharing — if novel software is developed, describe open-source release plans (GitHub, Zenodo, journal supplementary materials)
+5. Other Unique Resources — any unique materials, assays, or tools generated that could benefit the field
+
+Approximately 400-500 words. Specific and actionable — reviewers look for concrete commitments.`,
+
+    select_agents: `Write a Select Agent Research section for this NIH ${m.label} application.
+
+PROJECT CONTEXT:
+Title: ${p.title || 'Not specified'}
+Disease: ${p.disease || 'Not specified'}
+
+REQUIRED ELEMENTS:
+1. Identification of Select Agents or Toxins — name each select agent or toxin (per the HHS/USDA select agent lists); state the specific tier
+2. Registration Status — state that the institution is registered with CDC/USDA Select Agent Program; provide registration number if available
+3. Biosafety Procedures and Containment — describe the biosafety level (BSL-2, BSL-3, ABSL-2, ABSL-3) required; describe containment equipment and facility
+4. Personnel Training and Access Controls — describe required biosafety training, personnel reliability assessment, and access authorization procedures
+5. Emergency Response — briefly describe emergency response and incident reporting protocols
+
+Keep concise (~300-400 words). This section demonstrates regulatory compliance.`,
+
+    cover_letter: `Write a professional Cover Letter to the Scientific Review Officer (SRO) for this NIH ${m.label} application.
+
+PROJECT CONTEXT:
+Title: ${p.title || 'Not specified'}
+PI: ${p.pi || 'Not specified'}
+Mechanism: ${mechKey}
+Institute: ${p.institute || p.pa || 'NIH'}
+FOA: ${p.pa || 'Not specified'}
+
+FORMAT: Professional business letter. Brief and direct.
+
+CONTENT:
+1. Opening: Formal statement of submission (application title, PI, mechanism, FOA number)
+2. Requested study section (if applicable): "We respectfully request review by [Study Section Name]" or state that we defer to SRO's assignment
+3. Special review considerations: Note any matters the SRO should be aware of (particularly complex applications, special expertise needed, prior related applications)
+4. Conflicts of interest: List any reviewers who should be excluded due to conflicts (if none, state "We have no conflicts of interest to declare")
+5. Closing: PI contact information
+
+TARGET: 200-300 words. Professional, courteous, concise.`,
+
+    project_timeline: `Write a Project Timeline narrative for this NIH ${m.label} application.
+
+PROJECT CONTEXT:
+Title: ${p.title || 'Not specified'}
+Disease: ${p.disease || 'Not specified'}
+Specific Aims: ${p.aims || 'Not specified'}
+Budget period: ${p.budget || (mechKey.includes('I') && !mechKey.includes('II') ? '2 years' : '3-4 years')}
+
+INSTRUCTIONS:
+Write a narrative timeline (not a table or Gantt chart — text only) that follows this structure:
+
+For each Aim, write one paragraph stating:
+- Start month
+- Key milestones at months 3, 6, 9, 12 (and beyond for multi-year projects)
+- Go/no-go decision points with clear criteria
+- Completion month and deliverable
+
+End with a brief paragraph on overall project management, stating that milestones are achievable within the project period and that contingency plans exist for potential delays.
+
+Use concrete milestone language: "By Month 6, we will have established [X]..." "The go/no-go decision at Month 12 will be based on [X threshold]..."
+
+TARGET: ~400-500 words. Specific and realistic.`,
   }
 
   return prompts[secId] || `Write the ${secId} section for this ${m.label} application. Title: ${p.title || 'Not specified'}`

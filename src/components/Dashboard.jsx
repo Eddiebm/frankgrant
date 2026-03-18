@@ -7,13 +7,14 @@ import GrantWizard from './GrantWizard'
 import BiosketchGenerator from './BiosketchGenerator'
 import UsageMeter from './UsageMeter'
 import CommandStation from './CommandStation'
+import LettersGenerator from './LettersGenerator'
 
 export default function Dashboard() {
   const { user } = useUser()
   const api = useApi()
   const [projects, setProjects] = useState([])
   const [activeProject, setActiveProject] = useState(null)
-  const [activeView, setActiveView] = useState('projects') // 'projects', 'editor', 'scorer', 'wizard', 'biosketch', 'command'
+  const [activeView, setActiveView] = useState('projects') // 'projects', 'editor', 'scorer', 'wizard', 'biosketch', 'command', 'letters'
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
 
@@ -116,6 +117,20 @@ export default function Dashboard() {
     return <CommandStation onBack={() => setActiveView('projects')} />
   }
 
+  if (activeView === 'letters') {
+    return (
+      <div>
+        <div style={{ padding: '12px 32px', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button onClick={() => setActiveView('projects')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', fontSize: 14 }}>
+            ← Back
+          </button>
+          <span style={{ fontSize: 14, fontWeight: 600 }}>Letters Generator</span>
+        </div>
+        <LettersGenerator projects={projects} />
+      </div>
+    )
+  }
+
   return (
     <div style={{ maxWidth: 800, margin: '0 auto', padding: '2rem 1.5rem' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2rem' }}>
@@ -147,6 +162,9 @@ export default function Dashboard() {
           </button>
           <button onClick={() => setActiveView('biosketch')} style={btnStyle}>
             👤 Biosketch
+          </button>
+          <button onClick={() => setActiveView('letters')} style={btnStyle}>
+            📝 Letters
           </button>
           <button onClick={newProject} disabled={creating} style={btnStyle}>
             {creating ? 'Creating...' : '+ New grant'}

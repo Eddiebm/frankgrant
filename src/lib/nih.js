@@ -209,15 +209,24 @@ export const MECHANISMS = {
 }
 
 export const SECTIONS = [
-  { id: 'summary',       label: 'Project Summary',         pageLimit: null, partOfStrategy: false, lineLimit: 30 },
-  { id: 'narrative',     label: 'Project Narrative',       pageLimit: null, partOfStrategy: false, sentenceLimit: 3 },
-  { id: 'aims',          label: 'Specific Aims',           pageLimit: 'aims', partOfStrategy: false },
-  { id: 'sig',           label: 'Significance',            pageLimit: 'strategy', partOfStrategy: true },
-  { id: 'innov',         label: 'Innovation',              pageLimit: 'strategy', partOfStrategy: true },
-  { id: 'approach',      label: 'Approach',                pageLimit: 'strategy', partOfStrategy: true },
-  { id: 'data_mgmt',     label: 'Data Management Plan',    pageLimit: 'dataManagement', partOfStrategy: false },
-  { id: 'facilities',    label: 'Facilities',              pageLimit: null, partOfStrategy: false },
-  { id: 'commercial',    label: 'Commercialization',       pageLimit: 'commercial', partOfStrategy: false },
+  { id: 'summary',          label: 'Project Summary',         pageLimit: null, partOfStrategy: false, lineLimit: 30 },
+  { id: 'narrative',        label: 'Project Narrative',       pageLimit: null, partOfStrategy: false, sentenceLimit: 3 },
+  { id: 'aims',             label: 'Specific Aims',           pageLimit: 'aims', partOfStrategy: false },
+  { id: 'sig',              label: 'Significance',            pageLimit: 'strategy', partOfStrategy: true },
+  { id: 'innov',            label: 'Innovation',              pageLimit: 'strategy', partOfStrategy: true },
+  { id: 'approach',         label: 'Approach',                pageLimit: 'strategy', partOfStrategy: true },
+  { id: 'data_mgmt',        label: 'Data Management Plan',    pageLimit: 'dataManagement', partOfStrategy: false },
+  { id: 'facilities',       label: 'Facilities',              pageLimit: null, partOfStrategy: false },
+  { id: 'commercial',       label: 'Commercialization',       pageLimit: 'commercial', partOfStrategy: false },
+  // Additional required sections (v4.6.0)
+  { id: 'intro',            label: 'Introduction (Resubmission)', pageLimit: null, partOfStrategy: false, showWhen: 'is_resubmission' },
+  { id: 'human_subjects',   label: 'Human Subjects',          pageLimit: null, partOfStrategy: false, showWhen: 'human_subjects_involved' },
+  { id: 'vert_animals',     label: 'Vertebrate Animals',      pageLimit: null, partOfStrategy: false, showWhen: 'vert_animals_involved' },
+  { id: 'auth_resources',   label: 'Authentication of Key Biological Resources', pageLimit: null, partOfStrategy: false },
+  { id: 'resource_sharing', label: 'Resource Sharing Plan',   pageLimit: null, partOfStrategy: false, showForMechanisms: ['R01', 'R21'] },
+  { id: 'select_agents',    label: 'Select Agent Research',   pageLimit: null, partOfStrategy: false, showWhen: 'select_agents_involved' },
+  { id: 'cover_letter',     label: 'Cover Letter to SRO',     pageLimit: null, partOfStrategy: false },
+  { id: 'project_timeline', label: 'Project Timeline',        pageLimit: null, partOfStrategy: false },
 ]
 
 export const NIH_FONTS = ['Arial', 'Helvetica', 'Palatino Linotype', 'Georgia']

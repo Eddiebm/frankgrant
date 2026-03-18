@@ -168,6 +168,18 @@ const MAX_TOKENS_BY_FEATURE = {
   'write_data_mgmt': 1000,
   'write_facilities': 800,
   'write_commercial': 1500,
+  'write_intro': 700,
+  'write_human_subjects': 1500,
+  'write_vert_animals': 1000,
+  'write_auth_resources': 500,
+  'write_resource_sharing': 600,
+  'write_select_agents': 500,
+  'write_cover_letter': 400,
+  'write_project_timeline': 600,
+  'generate_letter': 800,
+  'resubmission_analyze': 2000,
+  'resubmission_intro': 700,
+  'resubmission_revise': 2500,
   'reviewer_critique': 1000,
   'summary_statement': 1500,
   'advisory_council': 800,
@@ -1871,6 +1883,293 @@ PRESERVE scientific facts, structure, and word count (±10%). Return ONLY the po
   return json({ polished, section_id })
 }
 
+// ── Letters Generator ─────────────────────────────────────────────────────────
+const LETTER_TEMPLATES = {
+  collaborator_support: { name: 'Collaborator Support Letter', maxTokens: 700 },
+  consultant: { name: 'Consultant Letter', maxTokens: 600 },
+  subaward_institution: { name: 'Subaward Institution Letter', maxTokens: 800 },
+  sttr_partner: { name: 'STTR Research Institution Partner Letter', maxTokens: 900 },
+  irb_approval: { name: 'IRB Approval Letter', maxTokens: 700 },
+  iacuc_approval: { name: 'IACUC Approval Letter', maxTokens: 700 },
+  key_personnel: { name: 'Key Personnel Commitment Letter', maxTokens: 500 },
+  resource_sharing: { name: 'Resource Sharing Agreement', maxTokens: 700 },
+  commercial_partner: { name: 'Commercial Partner Letter', maxTokens: 700 },
+  cover_letter_sro: { name: 'Cover Letter to SRO', maxTokens: 500 },
+  resubmission_intro: { name: 'Resubmission Introduction', maxTokens: 700 },
+  budget_justification: { name: 'Budget Justification Narrative', maxTokens: 1500 },
+}
+
+function buildLetterPrompt(letter_type, fields, project) {
+  const f = fields || {}
+  const p = project || {}
+  const title = f.project_title || p.title || 'Not specified'
+  const pi = f.pi_name || p.pi || 'Not specified'
+
+  const prompts = {
+    collaborator_support: `Write a professional letter of support from ${f.collaborator_name || 'Collaborator'} at ${f.collaborator_institution || 'their institution'} supporting the grant application by ${pi} titled "${title}".
+
+The letter should: open with a statement of enthusiastic support, describe the collaborator's expertise (${f.collaborator_title || 'researcher'}) and how it complements the PI's work, detail specific contributions they will make to the project (${f.specific_contributions || 'as described in the application'}), state their role in the project (${f.collaborator_role_in_project || 'collaborator'}), commit to the collaboration for the project period, and close with a strong endorsement of the scientific merit. Professional business letter format. 300-400 words.`,
+
+    consultant: `Write a consulting agreement letter from ${f.consultant_name || 'Consultant'} (${f.consultant_title || ''}, ${f.consultant_institution || ''}) confirming their role as a paid consultant on "${title}" (PI: ${pi}).
+
+Cover: the consultant's relevant expertise (${f.consultant_expertise || 'as described'}), specific consulting role (${f.consulting_role || 'scientific consultant'}), estimated commitment of ${f.estimated_days || 'X'} days per year at ${f.compensation_rate || 'negotiated rate'}, confirmation of availability for the project period. 250-350 words.`,
+
+    subaward_institution: `Write a letter from ${f.subaward_institution || 'Subaward Institution'} confirming their participation as a subaward institution on "${title}" (Prime PI: ${f.prime_pi_name || pi}).
+
+Cover: institutional commitment to the research, ${f.subaward_pi_name || 'subaward PI'}'s qualifications and role (${f.subaward_role || 'subaward PI'}), specific aims they will lead (${f.subaward_aims || 'as described in the application'}), budget commitment of ${f.subaward_budget || 'the agreed amount'}, institutional resources available, confirmation that institutional approvals will be obtained. 350-450 words.`,
+
+    sttr_partner: `Write a formal letter from ${f.research_institution || 'Research Institution'} confirming their role as the research institution partner on this STTR application for "${title}" (PI: ${pi}, Small Business: ${f.small_business_name || 'the applicant company'}).
+
+CRITICAL: This letter must explicitly state that ${f.work_percentage || '40'}% of the research will be performed at ${f.research_institution || 'the research institution'} as required by STTR regulations. Cover: institutional commitment, ${f.institution_pi_name || 'institution PI'}'s qualifications (${f.institution_pi_title || 'PI'}), facilities and resources contributed (${f.facilities_contributed || 'institutional facilities'}), IP agreement status, confirmation of STTR eligibility. Must include language about the IP agreement between the small business and research institution. 400-500 words.`,
+
+    irb_approval: `Write an IRB approval letter for "${f.study_title || title}" at ${f.institution || 'the institution'} (PI: ${f.pi_name || pi}).
+
+Include: IRB protocol number ${f.irb_number || 'PENDING'}, approval date ${f.approval_date || 'pending'} and expiration ${f.expiration_date || 'pending'}, risk determination (${f.risk_level || 'Minimal Risk'}), approved procedures summary (${f.approved_procedures || 'as described in the protocol'}), any conditions or stipulations, continuing review requirements. ${!f.approval_date ? 'Note: If IRB is pending, generate a letter stating that approval is pending and will be obtained before human subjects research begins.' : ''} Official institutional letter format. 300-400 words.`,
+
+    iacuc_approval: `Write an IACUC protocol approval letter for animal research at ${f.institution || 'the institution'} (PI: ${f.pi_name || pi}).
+
+Include: protocol number ${f.iacuc_number || 'PENDING'}, approval date ${f.approval_date || 'pending'} and expiration ${f.expiration_date || 'pending'}, approved species (${f.species || 'mice'}) and number of animals (${f.number_of_animals || 'as specified'}), approved procedures (${f.approved_procedures || 'as described in the protocol'}), any conditions, confirmation of compliance with Animal Welfare Act and PHS Policy. Official format. 300-400 words.`,
+
+    key_personnel: `Write a letter from ${f.personnel_name || 'Key Personnel'} (${f.personnel_title || ''}, ${f.personnel_institution || ''}) confirming their commitment to "${title}" at ${f.percent_effort || 'X'}% effort.
+
+Cover: their qualifications relevant to the project, specific role and responsibilities (${f.role_on_project || 'as described in the application'}), confirmation of availability for the full project period, institutional support for their participation. 200-300 words.`,
+
+    resource_sharing: `Write a resource sharing agreement letter confirming that ${f.providing_institution || 'the providing institution'} will share ${f.resource_description || 'the described resource'} (type: ${f.resource_type || 'biological resource'}) with ${f.receiving_institution || 'the receiving institution'} for use in "${title}" (PI: ${f.pi_name || pi}).
+
+Cover: description of the resource to be shared, sharing terms and conditions (${f.sharing_terms || 'upon request'}), any costs or fees, timeline, publication rights, acknowledgment requirements. 300-400 words.`,
+
+    commercial_partner: `Write a letter of support from ${f.company_name || 'Commercial Partner'} as a commercial partner for "${title}" (PI: ${f.pi_name || pi}).
+
+Cover: the company's interest in the technology and market opportunity, their role in commercialization (${f.company_role || 'commercial partner'}), specific contributions (${f.commercial_contribution || 'resources and expertise'}), licensing or partnership interest (${f.licensing_interest || 'licensing discussions ongoing'}), market validation they bring. Contact: ${f.company_contact || 'company contact'}. 300-400 words.`,
+
+    cover_letter_sro: `Write a professional cover letter to the Scientific Review Officer for the submission of "${title}" by ${f.pi_name || pi} at ${f.institution || 'the institution'}. FOA/Mechanism: ${f.foa_number || 'as specified'} (${f.mechanism || 'NIH grant'}).
+
+Include: formal submission statement, requested study section if specified (${f.study_section_requested || 'defer to SRO assignment'}), any special review considerations (${f.special_considerations || 'none'}), any conflicts of interest to note (${f.conflicts_of_interest || 'none'}), PI contact information. 200-300 words.`,
+
+    resubmission_intro: `Write a 1-page Introduction for a resubmission application (A1) for "${title}" (PI: ${f.pi_name || pi}).
+
+Prior application number: ${f.prior_application_number || 'Not specified'}. Prior review date: ${f.prior_review_date || 'Not specified'}.
+
+Major changes summary: ${f.major_changes_summary || 'To be described.'}
+
+This introduction must: acknowledge the prior review professionally, summarize the major changes made in response to reviewer concerns (be specific), use language that is responsive and not defensive, end with a statement that the application has been substantially strengthened. Exactly 1 page (~450-500 words). This is a formal NIH document section.`,
+
+    budget_justification: `Write a complete Budget Justification Narrative for "${title}" (PI: ${f.pi_name || pi}).
+
+BUDGET DETAILS:
+Personnel: ${f.personnel || 'PI and key personnel as described'}
+Equipment (>$5,000): ${f.equipment || 'as specified in the budget'}
+Supplies: ${f.supplies || 'laboratory supplies, reagents, and materials'}
+Travel: ${f.travel || 'professional conferences'}
+Other direct costs: ${f.other_costs || 'as specified'}
+Indirect (F&A) rate: ${f.indirect_rate || 'negotiated institutional rate'}
+
+For each budget category, justify why the resources are needed and how costs were calculated. Personnel: justify each person's role and percent effort. Equipment: justify need and cost. Supplies: justify by category. Travel: justify conferences and attendees. Other Direct Costs: justify each line item. Indirect Costs: state the negotiated rate and base. Professional narrative format. 600-800 words.`,
+  }
+
+  return prompts[letter_type] || `Write a professional NIH-related ${letter_type} letter for the application "${title}" by ${pi}. 300-400 words.`
+}
+
+async function handleGenerateLetter(req, env, userId) {
+  const body = await req.json()
+  const { letter_type, project_id, letter_fields } = body
+  if (!letter_type) return err('letter_type required')
+
+  let project = null
+  if (project_id) {
+    try {
+      const row = await env.DB.prepare('SELECT title, mechanism, setup FROM projects WHERE id = ? AND user_id = ?').bind(project_id, userId).first()
+      if (row) {
+        let setup = {}
+        try { setup = JSON.parse(row.setup || '{}') } catch {}
+        project = { title: row.title, mechanism: row.mechanism, pi: setup.pi, partner: setup.partner, institute: setup.institute }
+      }
+    } catch {}
+  }
+
+  const template = LETTER_TEMPLATES[letter_type]
+  const maxTok = template?.maxTokens || 800
+  const prompt = buildLetterPrompt(letter_type, letter_fields, project)
+
+  const LETTER_SYSTEM = `You are an expert NIH grant writer specializing in formal correspondence. Write professional, formal letters that follow standard NIH grant application conventions. Use proper business letter format with date, salutation, body paragraphs, and closing. Make letters specific and substantive — avoid generic filler.`
+
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: maxTok, system: LETTER_SYSTEM, messages: [{ role: 'user', content: prompt }] }),
+  })
+  const result = await resp.json()
+  const letter_content = result.content?.[0]?.text || ''
+  const word_count = letter_content.trim().split(/\s+/).filter(Boolean).length
+
+  const inputTokens = result.usage?.input_tokens || 0
+  const outputTokens = result.usage?.output_tokens || 0
+  const pricing = PRICING['claude-haiku-4-5-20251001']
+  const cost = (inputTokens / 1e6) * pricing.input + (outputTokens / 1e6) * pricing.output
+  await env.DB.prepare('INSERT INTO usage_log (id, user_id, action, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(crypto.randomUUID(), userId, 'generate_letter', 'claude-haiku-4-5-20251001', inputTokens, outputTokens, 0, 0, Math.floor(Date.now() / 1000)).run()
+  await trackUserActivity(userId, '', env, true, inputTokens + outputTokens, cost)
+
+  return json({ letter_content, letter_type, word_count, template_name: template?.name || letter_type })
+}
+
+// ── Resubmission Routes ───────────────────────────────────────────────────────
+async function handleResubmissionImportComments(req, env, userId, projectId) {
+  const project = await env.DB.prepare('SELECT id FROM projects WHERE id = ? AND user_id = ?').bind(projectId, userId).first()
+  if (!project) return err('Project not found', 404)
+
+  const body = await req.json()
+  const { text } = body
+  if (!text || text.trim().length < 50) return err('Summary statement text required (minimum 50 characters)')
+
+  try {
+    await env.DB.prepare('UPDATE projects SET reviewer_comments = ? WHERE id = ? AND user_id = ?')
+      .bind(text.slice(0, 50000), projectId, userId).run()
+  } catch {
+    await env.DB.prepare('ALTER TABLE projects ADD COLUMN reviewer_comments TEXT').run().catch(() => {})
+    await env.DB.prepare('UPDATE projects SET reviewer_comments = ? WHERE id = ? AND user_id = ?')
+      .bind(text.slice(0, 50000), projectId, userId).run()
+  }
+  return json({ ok: true, length: text.length })
+}
+
+async function handleResubmissionAnalyze(req, env, userId, projectId) {
+  const project = await env.DB.prepare('SELECT reviewer_comments, title, mechanism FROM projects WHERE id = ? AND user_id = ?').bind(projectId, userId).first()
+  if (!project) return err('Project not found', 404)
+  if (!project.reviewer_comments) return err('No reviewer comments imported yet')
+
+  const ANALYZE_SYSTEM = `You are an expert NIH grant consultant analyzing a prior summary statement to help a researcher prepare a resubmission. Extract and organize all reviewer concerns. Return ONLY valid JSON.`
+  const userMsg = `Analyze this NIH summary statement for a ${project.mechanism || 'NIH'} application titled "${project.title || 'Unknown'}". Extract all reviewer concerns and strengths. Return ONLY valid JSON:
+{"overall_impact_score":number,"reviewer_scores":[{"reviewer":"Reviewer 1","significance":number,"investigators":number,"innovation":number,"approach":number,"environment":number}],"major_concerns":[{"concern":"string","reviewer":"string","severity":"critical|major|minor","suggested_response":"string"}],"minor_concerns":[{"concern":"string","reviewer":"string"}],"strengths_to_preserve":["string"],"recommended_changes":[{"section":"string","change":"string","priority":"high|medium|low"}],"introduction_outline":"string"}
+
+SUMMARY STATEMENT:
+${project.reviewer_comments.slice(0, 8000)}`
+
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 2000, system: ANALYZE_SYSTEM, messages: [{ role: 'user', content: userMsg }] }),
+  })
+  const result = await resp.json()
+  const text = result.content?.[0]?.text || ''
+  let analysis = null
+  const jm = text.match(/\{[\s\S]*\}/)
+  if (jm) { try { analysis = JSON.parse(jm[0]) } catch {} }
+  if (!analysis) analysis = { overall_impact_score: null, major_concerns: [], minor_concerns: [], strengths_to_preserve: [], recommended_changes: [], introduction_outline: text }
+
+  try {
+    await env.DB.prepare('UPDATE projects SET resubmission_analysis = ? WHERE id = ? AND user_id = ?')
+      .bind(JSON.stringify(analysis), projectId, userId).run()
+  } catch {}
+
+  const inputTokens = result.usage?.input_tokens || 0
+  const outputTokens = result.usage?.output_tokens || 0
+  const pricing = PRICING['claude-sonnet-4-20250514']
+  const cost = (inputTokens / 1e6) * pricing.input + (outputTokens / 1e6) * pricing.output
+  await env.DB.prepare('INSERT INTO usage_log (id, user_id, action, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(crypto.randomUUID(), userId, 'resubmission_analyze', 'claude-sonnet-4-20250514', inputTokens, outputTokens, 0, 0, Math.floor(Date.now() / 1000)).run()
+  await trackUserActivity(userId, '', env, true, inputTokens + outputTokens, cost)
+
+  return json(analysis)
+}
+
+async function handleResubmissionGenerateIntro(req, env, userId, projectId) {
+  const project = await env.DB.prepare('SELECT reviewer_comments, resubmission_analysis, title, mechanism, setup FROM projects WHERE id = ? AND user_id = ?').bind(projectId, userId).first()
+  if (!project) return err('Project not found', 404)
+  if (!project.reviewer_comments) return err('Import reviewer comments first')
+
+  let analysis = null, setup = {}
+  try { analysis = JSON.parse(project.resubmission_analysis || 'null') } catch {}
+  try { setup = JSON.parse(project.setup || '{}') } catch {}
+
+  const majorConcerns = analysis?.major_concerns?.map(c => `- ${c.concern} (${c.reviewer}, ${c.severity}): ${c.suggested_response}`).join('\n') || 'See reviewer comments'
+  const recommendedChanges = analysis?.recommended_changes?.map(c => `- ${c.section}: ${c.change} [${c.priority}]`).join('\n') || ''
+
+  const prompt = `Write a 1-page Introduction for an NIH grant resubmission application (A1) for "${project.title || 'this application'}" (${project.mechanism || 'NIH'}) by ${setup.pi || 'the PI'}.
+
+REVIEWER CONCERNS TO ADDRESS:
+${majorConcerns}
+
+RECOMMENDED CHANGES:
+${recommendedChanges}
+
+REQUIREMENTS:
+1. Open with a professional acknowledgment of the prior review and brief thanks
+2. Summarize the 3-4 major changes made in response to reviewer concerns — be specific
+3. Mark changed text with asterisks: *revised content*
+4. Tone: responsive and appreciative, never defensive
+5. Close with a forward-looking statement affirming how changes strengthen the application
+
+HARD LIMIT: 450-500 words maximum. This is a strict NIH page limit.
+Return only the Introduction text.`
+
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 700, system: 'You are an expert NIH grant writer specializing in resubmission applications.', messages: [{ role: 'user', content: prompt }] }),
+  })
+  const result = await resp.json()
+  const intro_text = result.content?.[0]?.text || ''
+
+  try {
+    await env.DB.prepare('UPDATE projects SET introduction = ? WHERE id = ? AND user_id = ?')
+      .bind(intro_text, projectId, userId).run()
+  } catch {}
+
+  const inputTokens = result.usage?.input_tokens || 0
+  const outputTokens = result.usage?.output_tokens || 0
+  const pricing = PRICING['claude-sonnet-4-20250514']
+  const cost = (inputTokens / 1e6) * pricing.input + (outputTokens / 1e6) * pricing.output
+  await env.DB.prepare('INSERT INTO usage_log (id, user_id, action, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(crypto.randomUUID(), userId, 'resubmission_intro', 'claude-sonnet-4-20250514', inputTokens, outputTokens, 0, 0, Math.floor(Date.now() / 1000)).run()
+  await trackUserActivity(userId, '', env, true, inputTokens + outputTokens, cost)
+
+  return json({ intro_text, word_count: intro_text.trim().split(/\s+/).filter(Boolean).length })
+}
+
+async function handleResubmissionReviseSection(req, env, userId, projectId) {
+  const project = await env.DB.prepare('SELECT id, resubmission_analysis FROM projects WHERE id = ? AND user_id = ?').bind(projectId, userId).first()
+  if (!project) return err('Project not found', 404)
+
+  const body = await req.json()
+  const { section_id, section_text, section_label } = body
+  if (!section_text) return err('section_text required')
+
+  let analysis = null
+  try { analysis = JSON.parse(project.resubmission_analysis || 'null') } catch {}
+  const sectionConcerns = (analysis?.recommended_changes || [])
+    .filter(c => c.section?.toLowerCase().includes(section_id?.toLowerCase() || '') || section_id?.includes(c.section?.toLowerCase() || ''))
+    .map(c => `- ${c.change} [${c.priority}]`).join('\n') || 'General reviewer concerns — see imported summary statement'
+
+  const prompt = `Revise this NIH grant section (${section_label || section_id}) to address the following reviewer concerns from a prior submission. Maintain scientific content and structure but strengthen weak areas identified by reviewers.
+
+REVIEWER CONCERNS FOR THIS SECTION:
+${sectionConcerns}
+
+CURRENT SECTION:
+${section_text}
+
+Return only the revised text. Make improvements visible and specific. Maintain word count within ±15%.`
+
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 2500, messages: [{ role: 'user', content: prompt }] }),
+  })
+  const result = await resp.json()
+  const revised = result.content?.[0]?.text || ''
+
+  const inputTokens = result.usage?.input_tokens || 0
+  const outputTokens = result.usage?.output_tokens || 0
+  const pricing = PRICING['claude-sonnet-4-20250514']
+  const cost = (inputTokens / 1e6) * pricing.input + (outputTokens / 1e6) * pricing.output
+  await env.DB.prepare('INSERT INTO usage_log (id, user_id, action, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(crypto.randomUUID(), userId, 'resubmission_revise', 'claude-sonnet-4-20250514', inputTokens, outputTokens, 0, 0, Math.floor(Date.now() / 1000)).run()
+  await trackUserActivity(userId, '', env, true, inputTokens + outputTokens, cost)
+
+  return json({ revised, section_id })
+}
+
 // ── Main fetch handler ────────────────────────────────────────────────────────
 export default {
   async fetch(req, env, ctx) {
@@ -2098,6 +2397,42 @@ export default {
       const polishMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/polish$/)
       if (polishMatch && req.method === 'POST') {
         const response = await handlePolish(req, env, userId, polishMatch[1])
+        await logError(path, 200, null, Date.now() - startTime, userId, env)
+        return response
+      }
+
+      // Letters Generator
+      if (path === '/api/letters/generate' && req.method === 'POST') {
+        const response = await handleGenerateLetter(req, env, userId)
+        await logError(path, 200, null, Date.now() - startTime, userId, env)
+        return response
+      }
+
+      // Resubmission
+      const resubImportMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/resubmission\/import-comments$/)
+      if (resubImportMatch && req.method === 'POST') {
+        const response = await handleResubmissionImportComments(req, env, userId, resubImportMatch[1])
+        await logError(path, 200, null, Date.now() - startTime, userId, env)
+        return response
+      }
+
+      const resubAnalyzeMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/resubmission\/analyze$/)
+      if (resubAnalyzeMatch && req.method === 'POST') {
+        const response = await handleResubmissionAnalyze(req, env, userId, resubAnalyzeMatch[1])
+        await logError(path, 200, null, Date.now() - startTime, userId, env)
+        return response
+      }
+
+      const resubIntroMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/resubmission\/generate-introduction$/)
+      if (resubIntroMatch && req.method === 'POST') {
+        const response = await handleResubmissionGenerateIntro(req, env, userId, resubIntroMatch[1])
+        await logError(path, 200, null, Date.now() - startTime, userId, env)
+        return response
+      }
+
+      const resubReviseMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/resubmission\/revise-section$/)
+      if (resubReviseMatch && req.method === 'POST') {
+        const response = await handleResubmissionReviseSection(req, env, userId, resubReviseMatch[1])
         await logError(path, 200, null, Date.now() - startTime, userId, env)
         return response
       }

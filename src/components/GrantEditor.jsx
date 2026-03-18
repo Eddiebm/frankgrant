@@ -20,6 +20,8 @@ export default function GrantEditor({ project, onSave, onBack }) {
   const [mech, setMech] = useState(project.mechanism || 'STTR-I')
   const [setup, setSetup] = useState({
     pi: '', partner: '', disease: '', biology: '', aims: '', pa: '', budget: '', commercial: '', institute: '',
+    human_subjects_involved: false, vert_animals_involved: false, select_agents_involved: false,
+    is_resubmission: false, prior_application_number: '', prior_review_date: '',
     ...project.setup,
   })
   const [sections, setSections] = useState(project.sections || {})
@@ -81,10 +83,27 @@ export default function GrantEditor({ project, onSave, onBack }) {
   // Voice Mode
   const [showVoiceMode, setShowVoiceMode] = useState(false)
 
+  // Resubmission
+  const [resubComments, setResubComments] = useState(project.reviewer_comments || '')
+  const [resubAnalysis, setResubAnalysis] = useState(project.resubmission_analysis ? (() => { try { return JSON.parse(project.resubmission_analysis) } catch { return null } })() : null)
+  const [resubAnalyzing, setResubAnalyzing] = useState(false)
+  const [resubGeneratingIntro, setResubGeneratingIntro] = useState(false)
+  const [resubRevising, setResubRevising] = useState({})
+
   const pollTimers = useRef({})
 
   const m = MECHANISMS[mech] || MECHANISMS['STTR-I']
-  const visibleSecs = SECTIONS.filter(s => s.id !== 'commercial' || m.needsCommercial)
+  const visibleSecs = SECTIONS.filter(s => {
+    if (s.id === 'commercial' && !m.needsCommercial) return false
+    if (s.showForMechanisms && !s.showForMechanisms.includes(mech)) return false
+    if (s.showWhen) {
+      if (s.showWhen === 'is_resubmission' && !setup.is_resubmission) return false
+      if (s.showWhen === 'human_subjects_involved' && !setup.human_subjects_involved) return false
+      if (s.showWhen === 'vert_animals_involved' && !setup.vert_animals_involved) return false
+      if (s.showWhen === 'select_agents_involved' && !setup.select_agents_involved) return false
+    }
+    return true
+  })
 
   function getProject() {
     return {
@@ -441,6 +460,56 @@ export default function GrantEditor({ project, onSave, onBack }) {
     setPolishModal(null)
   }
 
+  // ── Resubmission ─────────────────────────────────────────────────────────────
+  async function handleImportReviewerComments() {
+    if (!resubComments.trim()) return
+    try {
+      await api.importReviewerComments(project.id, resubComments)
+    } catch (e) {
+      alert('Import failed: ' + e.message)
+    }
+  }
+
+  async function handleAnalyzeResubmission() {
+    if (!resubComments.trim()) { alert('Paste reviewer comments first'); return }
+    await handleImportReviewerComments()
+    setResubAnalyzing(true)
+    try {
+      const result = await api.analyzeResubmission(project.id)
+      setResubAnalysis(result)
+    } catch (e) {
+      alert('Analysis failed: ' + e.message)
+    }
+    setResubAnalyzing(false)
+  }
+
+  async function handleGenerateResubIntro() {
+    setResubGeneratingIntro(true)
+    try {
+      const result = await api.generateResubmissionIntro(project.id)
+      const updated = updateSection('intro', result.introduction)
+      await save(updated, scores)
+    } catch (e) {
+      alert('Introduction generation failed: ' + e.message)
+    }
+    setResubGeneratingIntro(false)
+  }
+
+  async function handleReviseSection(secId) {
+    const text = sections[secId]
+    if (!text) return
+    const sec = SECTIONS.find(s => s.id === secId)
+    setResubRevising(r => ({ ...r, [secId]: true }))
+    try {
+      const result = await api.reviseForResubmission(project.id, secId, text, sec?.label || secId)
+      const updated = updateSection(secId, result.revised_section)
+      await save(updated, scores)
+    } catch (e) {
+      alert('Revision failed: ' + e.message)
+    }
+    setResubRevising(r => ({ ...r, [secId]: false }))
+  }
+
   return (
     <div style={{ maxWidth: (showGrantDrawer || showPrelimDrawer) ? 'none' : 900, margin: '0 auto', padding: '1.5rem', display: 'flex', gap: 0 }}>
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -522,9 +591,9 @@ export default function GrantEditor({ project, onSave, onBack }) {
 
         {/* Top tabs */}
         <div style={tabRow}>
-          {['setup', 'writer', 'full'].map(t => (
+          {['setup', 'writer', 'full', ...(setup.is_resubmission ? ['resubmission'] : [])].map(t => (
             <button key={t} onClick={() => setActiveTab(t)} style={tabBtn(activeTab === t)}>
-              {t === 'setup' ? 'Project setup' : t === 'writer' ? 'Section writer' : 'Full grant'}
+              {t === 'setup' ? 'Project setup' : t === 'writer' ? 'Section writer' : t === 'full' ? 'Full grant' : '🔄 Resubmission'}
             </button>
           ))}
         </div>
@@ -593,6 +662,51 @@ export default function GrantEditor({ project, onSave, onBack }) {
               <Field label="Budget period"><input style={inputStyle} value={setup.budget} onChange={e => setSetup(s => ({ ...s, budget: e.target.value }))} placeholder="e.g. 2 years, $400K" /></Field>
               <Field label="Commercialization path (STTR/SBIR)" col="1/-1"><textarea style={{ ...inputStyle, minHeight: 72, resize: 'vertical' }} value={setup.commercial} onChange={e => setSetup(s => ({ ...s, commercial: e.target.value }))} placeholder="Market, IP, regulatory, Phase II milestones..." /></Field>
             </div>
+            {/* Required sections toggles */}
+            <div style={{ marginTop: 16, padding: '12px 16px', background: '#f8f8f8', border: '0.5px solid #e5e5e5', borderRadius: 8 }}>
+              <div style={{ ...secLabel, marginBottom: 10 }}>Required Sections (toggle to show/hide)</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                {[
+                  { key: 'human_subjects_involved', label: '👥 Human Subjects' },
+                  { key: 'vert_animals_involved', label: '🐭 Vertebrate Animals' },
+                  { key: 'select_agents_involved', label: '⚠️ Select Agents' },
+                ].map(({ key, label: lbl }) => (
+                  <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
+                    <input
+                      type="checkbox"
+                      checked={!!setup[key]}
+                      onChange={e => setSetup(s => ({ ...s, [key]: e.target.checked }))}
+                    />
+                    {lbl}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Resubmission toggle */}
+            <div style={{ marginTop: 12, padding: '12px 16px', background: setup.is_resubmission ? '#eff6ff' : '#f8f8f8', border: `0.5px solid ${setup.is_resubmission ? '#93c5fd' : '#e5e5e5'}`, borderRadius: 8 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
+                <input
+                  type="checkbox"
+                  checked={!!setup.is_resubmission}
+                  onChange={e => setSetup(s => ({ ...s, is_resubmission: e.target.checked }))}
+                />
+                🔄 Resubmission (A1)
+              </label>
+              {setup.is_resubmission && (
+                <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <div>
+                    <div style={secLabel}>Prior Application Number</div>
+                    <input style={inputStyle} value={setup.prior_application_number || ''} onChange={e => setSetup(s => ({ ...s, prior_application_number: e.target.value }))} placeholder="e.g. 1 R43 CA999999-01" />
+                  </div>
+                  <div>
+                    <div style={secLabel}>Prior Review Date</div>
+                    <input style={inputStyle} type="date" value={setup.prior_review_date || ''} onChange={e => setSetup(s => ({ ...s, prior_review_date: e.target.value }))} />
+                  </div>
+                </div>
+              )}
+            </div>
+
             <button style={{ ...ghostBtn, marginTop: '1rem' }} onClick={() => { save(); setActiveTab('writer') }}>Save & go to writer →</button>
           </div>
         )}
@@ -661,7 +775,7 @@ export default function GrantEditor({ project, onSave, onBack }) {
                 {/* Citations + Polish */}
                 {sections[sec.id] && (
                   <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <div style={{ display: 'flex', gap: 6 }}>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       <button
                         onClick={() => citationSection === sec.id ? setCitationSection(null) : handleFindCitations(sec.id)}
                         disabled={citationLoading[sec.id]}
@@ -677,6 +791,16 @@ export default function GrantEditor({ project, onSave, onBack }) {
                       >
                         {polishing[sec.id] ? '⟳ Polishing…' : '✨ Polish'}
                       </button>
+                      {setup.is_resubmission && resubAnalysis && (
+                        <button
+                          onClick={() => handleReviseSection(sec.id)}
+                          disabled={resubRevising[sec.id]}
+                          style={{ ...ghostBtn, fontSize: 11, padding: '4px 10px', borderColor: '#2563eb', color: '#2563eb' }}
+                          title="Revise this section based on reviewer feedback"
+                        >
+                          {resubRevising[sec.id] ? '⟳ Revising…' : '🔄 Revise for A1'}
+                        </button>
+                      )}
                     </div>
                     {citationSection === sec.id && citationResults[sec.id] && (
                       <CitationsPanel
@@ -717,6 +841,151 @@ export default function GrantEditor({ project, onSave, onBack }) {
                 {exportingDocx ? 'Exporting…' : '📄 Export DOCX'}
               </button>
             </div>
+          </div>
+        )}
+
+        {/* RESUBMISSION TAB */}
+        {activeTab === 'resubmission' && (
+          <div>
+            <div style={{ marginBottom: 20 }}>
+              <h3 style={{ fontSize: 15, fontWeight: 700, margin: '0 0 4px' }}>Resubmission (A1) Workbench</h3>
+              <p style={{ fontSize: 13, color: '#6b7280', margin: 0 }}>Import reviewer comments, analyze feedback, generate the Introduction section, and revise sections.</p>
+            </div>
+
+            {/* Prior application info */}
+            {setup.prior_application_number && (
+              <div style={{ marginBottom: 16, padding: '10px 14px', background: '#eff6ff', borderRadius: 6, fontSize: 13, color: '#1d4ed8' }}>
+                Prior application: <strong>{setup.prior_application_number}</strong>
+                {setup.prior_review_date && <> · Review date: {setup.prior_review_date}</>}
+              </div>
+            )}
+
+            {/* Reviewer comments */}
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ ...secLabel, marginBottom: 6 }}>Paste Reviewer Comments (from Summary Statement)</div>
+              <textarea
+                style={{ ...inputStyle, width: '100%', minHeight: 200, resize: 'vertical', fontFamily: 'monospace', fontSize: 12 }}
+                value={resubComments}
+                onChange={e => setResubComments(e.target.value)}
+                placeholder="Paste the full reviewer comments / Summary Statement text here..."
+              />
+              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                <button
+                  style={{ ...ghostBtn, background: resubAnalyzing ? '#9ca3af' : '#2563eb', color: '#fff', border: 'none' }}
+                  onClick={handleAnalyzeResubmission}
+                  disabled={resubAnalyzing || !resubComments.trim()}
+                >
+                  {resubAnalyzing ? '⟳ Analyzing...' : '🔍 Analyze Reviewer Feedback'}
+                </button>
+              </div>
+            </div>
+
+            {/* Analysis results */}
+            {resubAnalysis && (
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>Analysis Results</div>
+
+                {/* Score */}
+                {resubAnalysis.impact_score && (
+                  <div style={{ marginBottom: 16, padding: '12px 16px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, display: 'flex', gap: 20, alignItems: 'center' }}>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: 32, fontWeight: 700, color: '#1d4ed8' }}>{resubAnalysis.impact_score}</div>
+                      <div style={{ fontSize: 11, color: '#6b7280' }}>Impact Score</div>
+                    </div>
+                    {resubAnalysis.reviewer_scores && (
+                      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                        {Object.entries(resubAnalysis.reviewer_scores).map(([k, v]) => (
+                          <div key={k} style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: 18, fontWeight: 600 }}>{v}</div>
+                            <div style={{ fontSize: 10, color: '#6b7280', textTransform: 'capitalize' }}>{k}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Major concerns */}
+                {resubAnalysis.major_concerns?.length > 0 && (
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8, color: '#dc2626' }}>Major Concerns</div>
+                    {resubAnalysis.major_concerns.map((c, i) => (
+                      <div key={i} style={{ marginBottom: 8, padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 3 }}>{c.concern}</div>
+                        {c.suggestion && <div style={{ fontSize: 11, color: '#7f1d1d' }}>{c.suggestion}</div>}
+                        {c.affected_sections?.length > 0 && (
+                          <div style={{ marginTop: 4, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                            {c.affected_sections.map(s => <span key={s} style={{ fontSize: 10, background: '#fee2e2', padding: '1px 6px', borderRadius: 10 }}>{s}</span>)}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Minor concerns */}
+                {resubAnalysis.minor_concerns?.length > 0 && (
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8, color: '#d97706' }}>Minor Concerns</div>
+                    <ul style={{ margin: 0, paddingLeft: 20, fontSize: 12, color: '#92400e' }}>
+                      {resubAnalysis.minor_concerns.map((c, i) => <li key={i} style={{ marginBottom: 4 }}>{c}</li>)}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Strengths */}
+                {resubAnalysis.strengths?.length > 0 && (
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8, color: '#16a34a' }}>Strengths to Preserve</div>
+                    <ul style={{ margin: 0, paddingLeft: 20, fontSize: 12, color: '#14532d' }}>
+                      {resubAnalysis.strengths.map((s, i) => <li key={i} style={{ marginBottom: 4 }}>{s}</li>)}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Recommended changes */}
+                {resubAnalysis.recommended_changes && Object.entries(resubAnalysis.recommended_changes).length > 0 && (
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Recommended Changes by Section</div>
+                    {Object.entries(resubAnalysis.recommended_changes).map(([sec, changes]) => (
+                      <div key={sec} style={{ marginBottom: 6, padding: '6px 10px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 6 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{sec}</div>
+                        <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12 }}>
+                          {(Array.isArray(changes) ? changes : [changes]).map((c, i) => <li key={i}>{c}</li>)}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Generate Introduction */}
+                <div style={{ marginTop: 20, padding: '14px 18px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>Generate Introduction Section</div>
+                  <p style={{ fontSize: 12, color: '#1e40af', margin: '0 0 10px' }}>
+                    1-page Introduction that acknowledges reviewer concerns and summarizes your A1 changes (required for resubmissions).
+                  </p>
+                  <button
+                    style={{ ...ghostBtn, background: resubGeneratingIntro ? '#9ca3af' : '#1d4ed8', color: '#fff', border: 'none' }}
+                    onClick={handleGenerateResubIntro}
+                    disabled={resubGeneratingIntro}
+                  >
+                    {resubGeneratingIntro ? '⟳ Generating...' : '✍️ Generate Introduction (1 page)'}
+                  </button>
+                  {sections.intro && (
+                    <div style={{ marginTop: 12, fontSize: 12, color: '#16a34a' }}>
+                      ✓ Introduction generated — see "Introduction (Resubmission)" in Section Writer
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Empty state */}
+            {!resubAnalysis && !resubAnalyzing && (
+              <div style={{ textAlign: 'center', padding: '40px 0', color: '#9ca3af', fontSize: 14 }}>
+                Paste reviewer comments above and click Analyze to get started
+              </div>
+            )}
           </div>
         )}
       </div>
