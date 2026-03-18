@@ -190,6 +190,19 @@ export function professorWritePrompt(secId, project, mechKey) {
     : ''
   const aimCount = mechKey === 'R21' || mechKey === 'STTR-I' || mechKey === 'SBIR-I' ? 2 : 3
 
+  // Institute-specific context
+  let instituteContext = ''
+  if (p.institute && INSTITUTES[p.institute]) {
+    const inst = INSTITUTES[p.institute]
+    instituteContext = `\nTARGET INSTITUTE: ${inst.name}
+Institute Priorities: ${inst.priorities}
+${inst.special_programs ? 'Special Programs: ' + inst.special_programs.join('; ') : ''}
+${mechKey.includes('STTR') && inst.sttr_i_budget ? 'Budget Guidance: ' + inst.sttr_i_budget : ''}
+${mechKey.includes('SBIR') && inst.sbir_i_budget ? 'Budget Guidance: ' + inst.sbir_i_budget : ''}
+Payline Context: ${mechKey.includes('STTR') ? inst.payline_sttr : mechKey.includes('SBIR') ? inst.payline_sbir : mechKey === 'R01' ? inst.payline_r01 : inst.payline_r21}
+`
+  }
+
   const prompts = {
     aims: `Write a compelling NIH Specific Aims page for a ${m.label} application.
 
@@ -201,7 +214,7 @@ Disease/indication: ${p.disease || 'Not specified'}
 Scientific premise: ${p.biology || 'Not specified'}
 Aims outline: ${p.aims || 'Not specified'}
 PA/RFA: ${p.pa || 'Not specified'}
-${phaseNote}
+${phaseNote}${instituteContext}
 
 STRUCTURE (no section headers):
 1. **Opening hook** (1-2 sentences): Bold statement of the unmet clinical need with specific mortality/morbidity data

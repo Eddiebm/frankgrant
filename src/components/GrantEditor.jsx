@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
 import { useApi } from '../hooks/useApi'
 import {
-  MECHANISMS, SECTIONS, WORDS_PER_PAGE,
+  MECHANISMS, SECTIONS, WORDS_PER_PAGE, INSTITUTES,
   countWords, wordsToPages, getDescriptor, getLimitsText
 } from '../lib/nih.js'
 import { PROFESSOR_SYSTEM, professorWritePrompt, polishPrompt, PROGRAM_DIRECTOR_SYSTEM, REVIEWER_1_SYSTEM, REVIEWER_2_SYSTEM, REVIEWER_3_SYSTEM, STUDY_SECTION_SUMMARY_SYSTEM, ADVISORY_COUNCIL_SYSTEM } from '../lib/personas.js'
@@ -14,7 +14,7 @@ export default function GrantEditor({ project, onSave, onBack }) {
   const [title, setTitle] = useState(project.title || '')
   const [mech, setMech] = useState(project.mechanism || 'STTR-I')
   const [setup, setSetup] = useState({
-    pi: '', partner: '', disease: '', biology: '', aims: '', pa: '', budget: '', commercial: '',
+    pi: '', partner: '', disease: '', biology: '', aims: '', pa: '', budget: '', commercial: '', institute: '',
     ...project.setup,
   })
   const [sections, setSections] = useState(project.sections || {})
@@ -142,7 +142,7 @@ export default function GrantEditor({ project, onSave, onBack }) {
       {/* SETUP TAB */}
       {activeTab === 'setup' && (
         <div>
-          <div style={limitsBox}>{getLimitsText(mech)}</div>
+          <div style={limitsBox}>{getLimitsText(mech, setup.institute)}</div>
           <div style={{ marginBottom: '1rem' }}>
             <div style={secLabel}>Mechanism</div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -150,6 +150,30 @@ export default function GrantEditor({ project, onSave, onBack }) {
                 <button key={key} onClick={() => setMech(key)} style={mechBtn(mech === key)}>{val.label}</button>
               ))}
             </div>
+          </div>
+          <div style={{ marginBottom: '1rem' }}>
+            <div style={secLabel}>NIH Institute (Optional)</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <button onClick={() => setSetup(s => ({ ...s, institute: '' }))} style={mechBtn(!setup.institute)}>
+                Generic NIH
+              </button>
+              {Object.entries(INSTITUTES).map(([key, val]) => (
+                <button key={key} onClick={() => setSetup(s => ({ ...s, institute: key }))} style={mechBtn(setup.institute === key)}>
+                  {key}
+                </button>
+              ))}
+            </div>
+            {setup.institute && INSTITUTES[setup.institute] && (
+              <div style={{ fontSize: 12, color: '#666', marginTop: 8, padding: '8px 12px', background: '#f8f8f8', borderRadius: 6 }}>
+                <strong>{INSTITUTES[setup.institute].name}</strong>
+                <br />Priorities: {INSTITUTES[setup.institute].priorities}
+                {INSTITUTES[setup.institute].special_programs && (
+                  <>
+                    <br />Programs: {INSTITUTES[setup.institute].special_programs.join(' · ')}
+                  </>
+                )}
+              </div>
+            )}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <Field label="PI / Small business" col="1/-1"><input style={inputStyle} value={setup.pi} onChange={e => setSetup(s => ({ ...s, pi: e.target.value }))} placeholder="e.g. COARE Holdings Inc." /></Field>
@@ -168,7 +192,7 @@ export default function GrantEditor({ project, onSave, onBack }) {
       {/* WRITER TAB */}
       {activeTab === 'writer' && (
         <div>
-          <div style={limitsBox}>{getLimitsText(mech)}</div>
+          <div style={limitsBox}>{getLimitsText(mech, setup.institute)}</div>
           <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: '1rem' }}>
             {visibleSecs.map(s => {
               const hasText = !!sections[s.id]
