@@ -377,8 +377,41 @@ ${mechKey.startsWith('STTR') || mechKey.startsWith('SBIR') ? `
 
 STYLE: Factual and confident. Show that you have everything needed to succeed. If a critical resource is at a collaborator's site, mention the collaboration.`,
 
-    commercial: `Write the Commercialization Plan section for a ${m.label} NIH STTR/SBIR application.
+    commercial: `Write the ${m.commercialType === 'potential' ? 'Commercialization Potential' : 'Commercialization Plan'} section for a ${m.label} NIH STTR/SBIR application.
 
+${m.commercialType === 'potential' ? `
+HARD LIMIT: 2 pages (~550 words). This is a BRIEF commercialization POTENTIAL section for Phase I.
+
+PROJECT CONTEXT:
+Title: ${p.title || 'Not specified'}
+Disease: ${p.disease || 'Not specified'}
+Organization: ${p.pi || 'Not specified'}
+Commercial context: ${p.commercial || 'Not specified'}
+
+REQUIRED CONTENT (4 paragraphs, ~550 words total):
+
+1. **Market Opportunity** (1 paragraph)
+   - Size of addressable market with specific numbers
+   - Current standard of care and unmet need
+   - Target customer segments
+
+2. **Target Customer and Value Proposition** (1 paragraph)
+   - Who will buy this product/service?
+   - What problem does it solve for them?
+   - Pricing expectations and reimbursement landscape
+
+3. **Competitive Landscape** (1 paragraph)
+   - Existing solutions and their limitations
+   - Your key differentiators
+   - Competitive advantages
+
+4. **Path to Phase II** (1 paragraph)
+   - Phase I go/no-go milestones
+   - What Phase II funding would accomplish
+   - Long-term commercialization vision
+
+STYLE: Specific and credible but BRIEF. This is a feasibility study - show commercial promise without full business plan detail.
+` : `
 HARD LIMIT: 12 pages (~3,300 words). TARGET for this draft: 1,200-1,500 words.
 
 PROJECT CONTEXT:
@@ -428,7 +461,122 @@ REQUIRED SUBSECTIONS:
    - Comparable transactions (acquisitions, licensing deals)
    - Exit timeline (5-7 years typical)
 
-STYLE: Specific and credible. Use real market data. Avoid vague "large and growing market" statements. Reviewers want to see you've done your homework.`,
+STYLE: Specific and credible. Use real market data. Avoid vague "large and growing market" statements. Reviewers want to see you've done your homework.`}
+`,
+
+    data_mgmt: `Write the Data Management and Sharing Plan for a ${m.label} NIH application.
+
+HARD LIMIT: 2 pages (~550 words)
+
+PROJECT CONTEXT:
+Title: ${p.title || 'Not specified'}
+Disease: ${p.disease || 'Not specified'}
+Biology: ${p.biology || 'Not specified'}
+${phaseNote}
+
+REQUIRED ELEMENTS (per NIH 2023 Data Management and Sharing Policy):
+
+1. **Data Types**
+   - What scientific data will be generated? (genomic, imaging, clinical, etc.)
+   - Estimated volume and file formats
+   - Specify which data will be preserved and shared
+
+2. **Related Tools, Software, and Code**
+   - Specialized software needed to access/analyze the data
+   - Will code be made available? (GitHub, Zenodo)
+
+3. **Standards**
+   - Metadata standards (e.g., MIAME for microarrays, BIDS for neuroimaging)
+   - Data file formats (CSV, BAM, NIfTI, etc.)
+   - Use of common data elements (CDEs) where applicable
+
+4. **Data Preservation, Access, and Timelines**
+   - Which NIH-designated repository? (dbGaP, GEO, SRA, ImmPort, etc.)
+   - When will data be shared? (at publication, end of funding period, or specify embargo period)
+   - How long will data be preserved? (typically ≥10 years)
+
+5. **Access, Distribution, and Reuse**
+   - Open access or controlled access?
+   - If controlled: what are the access procedures and criteria?
+   - Data Use Agreements if applicable
+
+6. **Oversight of Data Management and Sharing**
+   - Who is responsible? (PI, data manager, institutional office)
+   - Institutional resources for data sharing
+
+SPECIAL CONSIDERATIONS:
+${mechKey.startsWith('SBIR') || mechKey.startsWith('STTR') ? '- For SBIR/STTR: Balance data sharing with intellectual property protection. Specify embargo periods if needed.' : ''}
+- If human subjects data: describe de-identification procedures and consent for data sharing
+- If protected health information: describe HIPAA compliance
+
+STYLE: Specific and compliant. Reviewers check that you've addressed all required elements.`,
+
+    summary: `Write the Project Summary/Abstract for a ${m.label} NIH application.
+
+HARD LIMIT: 30 lines (approximately 400 words)
+
+PROJECT CONTEXT:
+Title: ${p.title || 'Not specified'}
+Disease: ${p.disease || 'Not specified'}
+Biology: ${p.biology || 'Not specified'}
+Aims: ${p.aims || 'Not specified'}
+${phaseNote}
+
+REQUIREMENTS:
+- Must be self-contained and describe the project without referencing the full application
+- Written for a scientifically literate but non-specialist audience
+- Avoid proprietary/confidential information
+- Will be publicly available on NIH Reporter if funded
+
+STRUCTURE (5 paragraphs, ~400 words):
+
+1. **Problem Statement** (2-3 sentences)
+   - Disease burden and unmet need
+   - Why current approaches are insufficient
+
+2. **Central Hypothesis and Rationale** (2-3 sentences)
+   - Your mechanistic hypothesis
+   - Key preliminary data that supports feasibility
+
+3. **Specific Aims Overview** (3-4 sentences)
+   - Brief description of each aim
+   - What experiments will be done
+
+4. **Expected Outcomes** (2 sentences)
+   - What you will learn
+   - How it advances the field
+
+5. **Impact** (2-3 sentences)
+   - Clinical or translational significance
+   - Path to patients or next phase of research
+
+${mechKey.startsWith('SBIR') || mechKey.startsWith('STTR') ? '- Note: Include brief mention of commercialization potential in the impact statement' : ''}
+
+STYLE: Clear, engaging, suitable for broad scientific audience.`,
+
+    narrative: `Write the Project Narrative for a ${m.label} NIH application.
+
+HARD LIMIT: 2-3 sentences (approximately 60 words)
+
+PROJECT CONTEXT:
+Disease: ${p.disease || 'Not specified'}
+Title: ${p.title || 'Not specified'}
+
+REQUIREMENTS:
+- Describe the relevance of this research to public health
+- Written in plain language understandable by a NON-SCIENTIST
+- Will be publicly available if funded
+- Must connect the research to human health impact
+
+FORMAT (2-3 sentences):
+Sentence 1: What is the health problem?
+Sentence 2: How will this research help address it?
+Sentence 3 (optional): Who will benefit?
+
+EXAMPLE:
+"Heart disease is the leading cause of death in the United States. This research will develop a new method to detect heart attacks earlier, allowing doctors to begin life-saving treatment sooner. The technology could help save thousands of lives each year."
+
+STYLE: Plain language. Avoid jargon. Think: explaining to your neighbor why your research matters.`,
   }
 
   return prompts[secId] || `Write the ${secId} section for this ${m.label} application. Title: ${p.title || 'Not specified'}`

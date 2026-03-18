@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react'
 import { useApi } from '../hooks/useApi'
 import {
   MECHANISMS, SECTIONS, WORDS_PER_PAGE, INSTITUTES,
-  getDescriptor, getLimitsText
+  getDescriptor, getLimitsText, getCommercialLabel, getProjectRules
 } from '../lib/nih.js'
 import { countWords, estimatePages } from '../lib/compression.js'
 import { PROFESSOR_SYSTEM, professorWritePrompt, polishPrompt, PROGRAM_DIRECTOR_SYSTEM, REVIEWER_1_SYSTEM, REVIEWER_2_SYSTEM, REVIEWER_3_SYSTEM, STUDY_SECTION_SUMMARY_SYSTEM, ADVISORY_COUNCIL_SYSTEM } from '../lib/personas.js'
@@ -60,12 +60,15 @@ export default function GrantEditor({ project, onSave, onBack }) {
     try {
       // Determine max_tokens based on section type
       const maxTokensBySection = {
+        'summary': 800,
+        'narrative': 300,
         'aims': 1200,
         'sig': 1000,
         'innov': 1000,
         'approach': 2500,
+        'data_mgmt': 1000,
         'facilities': 800,
-        'commercial': 1500
+        'commercial': m.commercialType === 'potential' ? 800 : 1500
       }
 
       const result = await api.callAI({
@@ -121,7 +124,8 @@ export default function GrantEditor({ project, onSave, onBack }) {
     let limit, label
     if (sec.pageLimit === 'aims') { limit = m.aims; label = 'Specific Aims' }
     else if (sec.pageLimit === 'strategy') { limit = m.strategy; label = 'Research Strategy (Sig+Innov+Approach combined)'; return { pages: getStrategyPages(), limit, label } }
-    else if (sec.pageLimit === 'commercial') { limit = m.commercial; label = 'Commercialization' }
+    else if (sec.pageLimit === 'commercial') { limit = m.commercial; label = getCommercialLabel(mech) || 'Commercialization' }
+    else if (sec.pageLimit === 'dataManagement') { limit = m.dataManagement || 2; label = 'Data Management Plan' }
     else return null
     return { pages, limit, label }
   }

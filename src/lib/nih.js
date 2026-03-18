@@ -97,24 +97,127 @@ export const INSTITUTES = {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const MECHANISMS = {
-  'STTR-I':     { label: 'STTR Phase I (R41)',     aims: 1, strategy: 6,  commercial: 0,  needsCommercial: false, code: 'R41' },
-  'STTR-II':    { label: 'STTR Phase II (R42)',    aims: 1, strategy: 12, commercial: 12, needsCommercial: true,  code: 'R42' },
-  'SBIR-I':     { label: 'SBIR Phase I (R43)',     aims: 1, strategy: 6,  commercial: 0,  needsCommercial: false, code: 'R43' },
-  'SBIR-II':    { label: 'SBIR Phase II (R44)',    aims: 1, strategy: 12, commercial: 12, needsCommercial: true,  code: 'R44' },
-  'FAST-TRACK': { label: 'Fast Track (R41+R42)',   aims: 1, strategy: 12, commercial: 12, needsCommercial: true,  code: 'FAST-TRACK' },
-  'NCI-IIB':    { label: 'NCI Phase IIB Bridge',   aims: 1, strategy: 12, commercial: 12, needsCommercial: true,  code: 'R44-BRIDGE', institute: 'NCI', budget: 'up to $4.5M total costs' },
-  'R21':        { label: 'R21',                    aims: 1, strategy: 6,  commercial: 0,  needsCommercial: false, code: 'R21' },
-  'R01':        { label: 'R01',                    aims: 1, strategy: 12, commercial: 0,  needsCommercial: false, code: 'R01' },
-  'K99':        { label: 'K99/R00',                aims: 1, strategy: 12, commercial: 0,  needsCommercial: false, code: 'K99' },
+  'STTR-I':     {
+    label: 'STTR Phase I (U43)',
+    aims: 1,
+    strategy: 6,
+    commercial: 2, // Commercialization POTENTIAL not Plan
+    needsCommercial: true,
+    commercialType: 'potential', // vs 'plan'
+    code: 'U43',
+    phase: 'I',
+    sttrPartnerMinimum: 0.40, // 40% work to research institution
+    dataManagement: 2,
+    introduction: 1 // resubmissions only
+  },
+  'STTR-II':    {
+    label: 'STTR Phase II (U44)',
+    aims: 1,
+    strategy: 12,
+    commercial: 12,
+    needsCommercial: true,
+    commercialType: 'plan',
+    code: 'U44',
+    phase: 'II',
+    sttrPartnerMinimum: 0.30, // 30% work to research institution
+    dataManagement: 2,
+    introduction: 1
+  },
+  'SBIR-I':     {
+    label: 'SBIR Phase I (R43)',
+    aims: 1,
+    strategy: 6,
+    commercial: 2, // Commercialization POTENTIAL
+    needsCommercial: true,
+    commercialType: 'potential',
+    code: 'R43',
+    phase: 'I',
+    dataManagement: 2,
+    introduction: 1
+  },
+  'SBIR-II':    {
+    label: 'SBIR Phase II (R44)',
+    aims: 1,
+    strategy: 12,
+    commercial: 12,
+    needsCommercial: true,
+    commercialType: 'plan',
+    code: 'R44',
+    phase: 'II',
+    dataManagement: 2,
+    introduction: 1
+  },
+  'FAST-TRACK': {
+    label: 'Fast Track (R41+R42)',
+    aims: 1,
+    strategyPhaseI: 6,  // Phase I research strategy separate
+    strategyPhaseII: 12, // Phase II research strategy separate
+    strategy: 18, // Combined for display only
+    commercial: 12,
+    needsCommercial: true,
+    commercialType: 'plan',
+    code: 'FAST-TRACK',
+    phase: 'I+II',
+    requiresGoNoGo: true,
+    dataManagement: 2,
+    introduction: 1
+  },
+  'NCI-IIB':    {
+    label: 'NCI Phase IIB Bridge',
+    aims: 1,
+    strategy: 12,
+    commercial: 12,
+    needsCommercial: true,
+    commercialType: 'plan',
+    code: 'R44-BRIDGE',
+    institute: 'NCI',
+    budget: 'up to $4.5M total costs',
+    phase: 'IIB',
+    dataManagement: 2,
+    introduction: 1
+  },
+  'R21':        {
+    label: 'R21',
+    aims: 1,
+    strategy: 6,
+    commercial: 0,
+    needsCommercial: false,
+    code: 'R21',
+    dataManagement: 2,
+    introduction: 1
+  },
+  'R01':        {
+    label: 'R01',
+    aims: 1,
+    strategy: 12,
+    commercial: 0,
+    needsCommercial: false,
+    code: 'R01',
+    dataManagement: 2,
+    introduction: 1
+  },
+  'K99':        {
+    label: 'K99/R00',
+    aims: 1,
+    strategy: 12,
+    commercial: 0,
+    needsCommercial: false,
+    code: 'K99',
+    dataManagement: 2,
+    introduction: 1
+  },
 }
 
 export const SECTIONS = [
-  { id: 'aims',       label: 'Specific aims',    pageLimit: 'aims',       partOfStrategy: false },
-  { id: 'sig',        label: 'Significance',     pageLimit: 'strategy',   partOfStrategy: true  },
-  { id: 'innov',      label: 'Innovation',       pageLimit: 'strategy',   partOfStrategy: true  },
-  { id: 'approach',   label: 'Approach',         pageLimit: 'strategy',   partOfStrategy: true  },
-  { id: 'facilities', label: 'Facilities',       pageLimit: null,         partOfStrategy: false },
-  { id: 'commercial', label: 'Commercialization',pageLimit: 'commercial', partOfStrategy: false },
+  { id: 'summary',       label: 'Project Summary',         pageLimit: null, partOfStrategy: false, lineLimit: 30 },
+  { id: 'narrative',     label: 'Project Narrative',       pageLimit: null, partOfStrategy: false, sentenceLimit: 3 },
+  { id: 'aims',          label: 'Specific Aims',           pageLimit: 'aims', partOfStrategy: false },
+  { id: 'sig',           label: 'Significance',            pageLimit: 'strategy', partOfStrategy: true },
+  { id: 'innov',         label: 'Innovation',              pageLimit: 'strategy', partOfStrategy: true },
+  { id: 'approach',      label: 'Approach',                pageLimit: 'strategy', partOfStrategy: true },
+  { id: 'data_mgmt',     label: 'Data Management Plan',    pageLimit: 'dataManagement', partOfStrategy: false },
+  { id: 'facilities',    label: 'Facilities',              pageLimit: null, partOfStrategy: false },
+  { id: 'commercial',    label: 'Commercialization',       pageLimit: 'commercial', partOfStrategy: false },
 ]
 
 export const NIH_FONTS = ['Arial', 'Helvetica', 'Palatino Linotype', 'Georgia']
@@ -170,4 +273,60 @@ export function getLimitsText(mechKey, instituteKey) {
   }
 
   return s
+}
+
+/**
+ * Get project rules - FOA rules if valid, otherwise mechanism defaults
+ * @param {Object} project - Project with foa_rules and mechanism
+ * @returns {Object} Rules object with page limits
+ */
+export function getProjectRules(project) {
+  // If project has valid FOA rules, use those
+  if (project && project.foa_rules && project.foa_valid) {
+    try {
+      const foaRules = typeof project.foa_rules === 'string'
+        ? JSON.parse(project.foa_rules)
+        : project.foa_rules
+
+      if (foaRules && foaRules.research_strategy_pages) {
+        return foaRules
+      }
+    } catch (e) {
+      console.error('Failed to parse FOA rules:', e)
+    }
+  }
+
+  // Fall back to mechanism defaults
+  const mechanism = project?.mechanism || 'STTR-I'
+  const mech = MECHANISMS[mechanism]
+
+  if (!mech) return null
+
+  return {
+    research_strategy_pages: mech.strategy || 6,
+    commercialization_plan_pages: mech.commercial || 0,
+    aims_pages: mech.aims || 1,
+    data_management_pages: mech.dataManagement || 2,
+    introduction_pages: mech.introduction || 1,
+    commercialization_type: mech.commercialType || 'plan',
+    phase: mech.phase,
+    sttr_partner_minimum: mech.sttrPartnerMinimum,
+    requires_go_no_go: mech.requiresGoNoGo || false,
+    strategy_phase_i_pages: mech.strategyPhaseI,
+    strategy_phase_ii_pages: mech.strategyPhaseII
+  }
+}
+
+/**
+ * Get commercial label based on phase
+ * @param {string} mechanism - Mechanism key
+ * @returns {string} Label for commercialization section
+ */
+export function getCommercialLabel(mechanism) {
+  const mech = MECHANISMS[mechanism]
+  if (!mech || !mech.needsCommercial) return null
+
+  return mech.commercialType === 'potential'
+    ? 'Commercialization Potential'
+    : 'Commercialization Plan'
 }

@@ -140,3 +140,27 @@ CREATE INDEX IF NOT EXISTS idx_users_meta_last_active ON users_meta(last_active)
 CREATE INDEX IF NOT EXISTS idx_users_meta_plan ON users_meta(plan_tier);
 CREATE INDEX IF NOT EXISTS idx_feedback_resolved ON feedback_log(resolved);
 CREATE INDEX IF NOT EXISTS idx_feedback_type ON feedback_log(feedback_type);
+
+-- ─── FOA PARSER (v4.0.0) ────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS foa_cache (
+  foa_number TEXT PRIMARY KEY,
+  rules TEXT,
+  fetched_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  valid INTEGER DEFAULT 0,
+  raw_text TEXT
+);
+
+-- Add FOA columns to projects (safe to re-run if columns exist)
+-- ALTER TABLE projects ADD COLUMN foa_number TEXT;
+-- ALTER TABLE projects ADD COLUMN foa_rules TEXT;
+-- ALTER TABLE projects ADD COLUMN foa_fetched_at INTEGER;
+-- ALTER TABLE projects ADD COLUMN foa_valid INTEGER DEFAULT 0;
+
+-- ─── COMPLIANCE CHECKING (v4.0.0) ───────────────────────────────────────────
+
+-- ALTER TABLE projects ADD COLUMN compliance_results TEXT;
+
+-- ─── NIH REPORTER REFERENCE GRANTS (v4.0.0) ─────────────────────────────────
+
+-- ALTER TABLE projects ADD COLUMN reference_grants TEXT;

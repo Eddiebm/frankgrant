@@ -1,7 +1,7 @@
 # FrankGrant Status Document
 
 **Last Updated:** 2026-03-18
-**Version:** 3.0.0
+**Version:** 4.0.0
 **Status:** Production (Internal COARE Tool)
 
 ---
@@ -11,7 +11,7 @@
 | Resource | URL/ID | Status |
 |----------|--------|--------|
 | **Frontend (Pages)** | https://frankgrant.pages.dev | ✅ Live |
-| **Latest Preview** | https://f0a6bb17.frankgrant.pages.dev | ✅ Live |
+| **Latest Preview** | https://c445f032.frankgrant.pages.dev | ✅ Live |
 | **API Worker** | https://frankgrant-worker.eddie-781pagesdev.workers.dev | ✅ Live |
 | **D1 Database** | frankgrant-db | ✅ Live |
 | **D1 Database ID** | 728339df-7875-4fb7-a58b-196cd8099e22 | — |
@@ -26,7 +26,7 @@
 ### **Core Grant Writing**
 - ✅ **Grant Wizard** - Single-textarea study description → auto-extract fields → sequential section generation
 - ✅ **Professor Persona** - Elite university (Harvard/Stanford) writing voice with no hedge words, active voice, hypothesis-driven
-- ✅ **Manual Grant Editor** - Full editor with 6 section types (Aims, Significance, Innovation, Approach, Facilities, Commercialization)
+- ✅ **Manual Grant Editor** - Full editor with 9 section types (Project Summary, Project Narrative, Aims, Significance, Innovation, Approach, Data Management Plan, Facilities, Commercialization)
 - ✅ **Auto-scoring** - Sections scored immediately after generation using Haiku
 - ✅ **Setup Persistence** - Project setup fields (PI, disease, biology, aims, etc.) saved to D1
 
@@ -39,6 +39,9 @@
 
 ### **NIH Compliance**
 - ✅ **Mechanism Support** - STTR-I/II, SBIR-I/II, FAST-TRACK, NCI-IIB, R21, R01, K99
+- ✅ **Correct Page Limits** - SBIR/STTR Phase I: 6-page Research Strategy + 2-page Commercialization Potential; Phase II: 12-page + 12-page Commercialization Plan; R01: 12-page; R21: 6-page
+- ✅ **Phase-Aware Prompts** - Generation prompts distinguish Phase I feasibility from Phase II full development
+- ✅ **STTR Partner Requirements** - 40% minimum work to research institution (Phase I), 30% (Phase II)
 - ✅ **Institute Rules** - NCI, NIGMS, NHLBI, NICHD, NIA with budget caps and paylines
 - ✅ **Page Limit Tracking** - Live word count, page estimates, compliance bars
 - ✅ **Institute Selector** - Shows budget guidance, paylines, priorities per institute
@@ -100,9 +103,6 @@
 - ⏳ **Resubmission Mode** - Introduction section, track changes, reviewer response import
 - ⏳ **Multi-Reviewer Independence** - 3 separate API calls for genuine independence
 - ⏳ **Additional Sections**:
-  - Data Management and Sharing Plan
-  - Project Summary/Abstract (30-line limit)
-  - Project Narrative (2-3 sentences)
   - Human Subjects
   - Vertebrate Animals
   - Cover Letter to SRO
@@ -293,6 +293,19 @@ CREATE TABLE IF NOT EXISTS feedback_log (
 );
 ```
 
+#### **foa_cache** (v4.0.0)
+```sql
+CREATE TABLE IF NOT EXISTS foa_cache (
+  foa_number TEXT PRIMARY KEY,
+  rules TEXT,
+  fetched_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  valid INTEGER DEFAULT 0,
+  raw_text TEXT
+);
+```
+
+**Note:** Schema also includes future columns for FOA Parser, Compliance Checking, and NIH Reporter features (see schema.sql for commented ALTER TABLE statements). These columns are prepared but not yet actively used in v4.0.0.
+
 #### **Indexes**
 ```sql
 CREATE INDEX IF NOT EXISTS idx_projects_user ON projects(user_id);
@@ -379,7 +392,7 @@ compatibility_flags = ["nodejs_compat"]
 
 [vars]
 ENVIRONMENT = "production"
-WORKER_VERSION = "3.0.0"
+WORKER_VERSION = "4.0.0"
 
 [[d1_databases]]
 binding = "DB"
@@ -498,12 +511,15 @@ npm run dev
 | letter | Haiku | 800 | Support letters |
 | score_section | Haiku | 600 | Section scoring |
 | pd_review | Sonnet | 1000 | PD memo |
+| write_summary | Sonnet | 800 | Project Summary |
+| write_narrative | Sonnet | 300 | Project Narrative |
 | write_aims | Sonnet | 1200 | Specific Aims |
 | write_sig | Sonnet | 1000 | Significance |
 | write_innov | Sonnet | 1000 | Innovation |
 | write_approach | Sonnet | 2500 | Approach (largest) |
+| write_data_mgmt | Sonnet | 1000 | Data Management Plan |
 | write_facilities | Sonnet | 800 | Facilities |
-| write_commercial | Sonnet | 1500 | Commercialization |
+| write_commercial | Sonnet | 800-1500 | Commercialization (phase-aware) |
 | reviewer_critique | Sonnet | 1000 | Reviewer feedback |
 | summary_statement | Sonnet | 1500 | NIH summary |
 | advisory_council | Sonnet | 800 | Council memo |
@@ -552,7 +568,50 @@ User → Clerk Auth → React App → Worker API → Anthropic API
 
 ---
 
-## 📝 Recent Changes (v3.0.0 - 2026-03-18)
+## 📝 Recent Changes
+
+### **v4.0.0 (2026-03-18) - NIH Compliance Overhaul**
+
+#### **Added**
+- ✅ **Data Management and Sharing Plan** - Required 2-page section per NIH 2023 policy
+  - 6 required elements: Data Types, Tools/Software, Standards, Preservation, Access/Distribution, Oversight
+  - Phase-aware prompts for SBIR/STTR (IP protection considerations)
+- ✅ **Project Summary/Abstract** - Required section with 30-line limit (~400 words)
+  - 5-paragraph structure: Problem, Hypothesis, Aims, Outcomes, Impact
+- ✅ **Project Narrative** - Required 2-3 sentence summary (~60 words)
+  - Format: Health problem, research solution, beneficiaries
+- ✅ **FOA Cache Table** - Schema preparation for FOA Parser (table created, parser not yet implemented)
+
+#### **Fixed**
+- ✅ **NIH Page Limits** - Corrected all mechanism page limits to match actual NIH requirements:
+  - SBIR/STTR Phase I: 6-page Research Strategy + 2-page Commercialization **Potential** (not Plan)
+  - SBIR/STTR Phase II: 12-page Research Strategy + 12-page Commercialization **Plan**
+  - R01: 12-page Research Strategy, no commercialization
+  - R21: 6-page Research Strategy, no commercialization
+  - Fast Track: Separate 6-page Phase I + 12-page Phase II Research Strategies with Go/No-Go milestones
+- ✅ **Phase-Aware Commercialization** - Generation prompts now distinguish:
+  - Phase I "Commercialization Potential": Brief 2-page feasibility assessment (4 paragraphs, ~550 words)
+  - Phase II "Commercialization Plan": Full 12-page business plan (7 subsections, ~3,300 words)
+- ✅ **STTR Partner Requirements** - Added work allocation requirements:
+  - Phase I: 40% minimum work to research institution partner
+  - Phase II: 30% minimum work to research institution partner
+
+#### **Changed**
+- Updated MECHANISMS object in nih.js with correct page limits and phase-specific fields
+- Updated all generation prompts to be phase-aware (commercial, aims, approach)
+- Added getProjectRules() helper for FOA rule fallback logic
+- Added getCommercialLabel() helper for dynamic section naming
+- Updated SECTIONS array to include summary, narrative, data_mgmt
+- Updated GrantEditor.jsx compliance tracking for new sections
+
+#### **Schema Prep (Not Implemented)**
+- Created foa_cache table for future FOA Parser
+- Documented ALTER TABLE statements for:
+  - FOA columns: foa_number, foa_rules, foa_fetched_at, foa_valid
+  - Compliance column: compliance_results
+  - NIH Reporter column: reference_grants
+
+### **v3.0.0 (2026-03-18)**
 
 ### **Added (v3.0.0)**
 - Complete Admin Command Station with 8 monitoring panels
