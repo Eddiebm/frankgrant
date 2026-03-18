@@ -186,3 +186,8 @@ CREATE INDEX IF NOT EXISTS idx_prelim_project ON preliminary_data(project_id);
 -- ALTER TABLE projects ADD COLUMN prelim_data_gaps TEXT;
 -- ALTER TABLE projects ADD COLUMN prelim_data_narrative TEXT;
 -- ALTER TABLE projects ADD COLUMN citation_suggestions TEXT;
+
+-- ─── VOICE MODE (v4.4.0) ─────────────────────────────────────────────────────
+-- Run individually:
+ALTER TABLE users_meta ADD COLUMN voice_enabled INTEGER DEFAULT 1;
+ALTER TABLE users_meta ADD COLUMN voice_tier TEXT DEFAULT null;

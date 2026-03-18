@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useApi } from '../hooks/useApi'
 import PreliminaryData from './PreliminaryData'
+import VoiceMode from './VoiceMode'
 import { generateGrantDOCX } from '../lib/docxExport'
 import {
   MECHANISMS, SECTIONS, WORDS_PER_PAGE, INSTITUTES,
@@ -68,6 +69,9 @@ export default function GrantEditor({ project, onSave, onBack }) {
   // Polish
   const [polishModal, setPolishModal] = useState(null) // null | { secId, original, polished }
   const [polishing, setPolishing] = useState({})
+
+  // Voice Mode
+  const [showVoiceMode, setShowVoiceMode] = useState(false)
 
   const pollTimers = useRef({})
 
@@ -459,6 +463,13 @@ export default function GrantEditor({ project, onSave, onBack }) {
           >
             🔬 {studySectionResults ? 'Review' : 'Study Section'}
           </button>
+          <button
+            onClick={() => setShowVoiceMode(true)}
+            style={{ ...ghostBtn, fontSize: 12, background: '#0e7490', color: '#fff', borderColor: '#0e7490' }}
+            title="Talk to your grant with AI voice assistant"
+          >
+            🎤 Voice Mode
+          </button>
         </div>
 
         {/* Top tabs */}
@@ -723,6 +734,22 @@ export default function GrantEditor({ project, onSave, onBack }) {
           polished={polishModal.polished}
           onAccept={handleAcceptPolish}
           onDiscard={() => setPolishModal(null)}
+        />
+      )}
+
+      {/* Voice Mode Overlay */}
+      {showVoiceMode && (
+        <VoiceMode
+          project={getProject()}
+          onSectionGenerated={(sectionId) => {
+            generateSection(sectionId)
+            setShowVoiceMode(false)
+            setTimeout(() => setShowVoiceMode(true), 100)
+          }}
+          onSectionUpdated={(sectionId, newText) => {
+            setSections(prev => ({ ...prev, [sectionId]: newText }))
+          }}
+          onClose={() => setShowVoiceMode(false)}
         />
       )}
     </div>

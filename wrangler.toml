@@ -5,7 +5,8 @@ compatibility_flags = ["nodejs_compat"]
 
 [vars]
 ENVIRONMENT = "production"
-WORKER_VERSION = "4.0.0"
+WORKER_VERSION = "4.4.0"
+ELEVENLABS_API_KEY = ""
 
 [[d1_databases]]
 binding = "DB"

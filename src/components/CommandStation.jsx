@@ -251,6 +251,23 @@ function UsersPanel({ data, api, onRefresh }) {
     }
   }
 
+  async function toggleVoice(userId, enabled) {
+    try {
+      await fetch(`${import.meta.env.VITE_WORKER_URL}/command/users/${userId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${await api.getToken()}`
+        },
+        body: JSON.stringify({ voice_enabled: enabled ? 1 : 0 })
+      })
+      onRefresh()
+      setSelectedUser(prev => prev ? { ...prev, voice_enabled: enabled ? 1 : 0 } : prev)
+    } catch (e) {
+      alert('Failed to update voice setting: ' + e.message)
+    }
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem' }}>
@@ -352,6 +369,23 @@ function UsersPanel({ data, api, onRefresh }) {
             <p><strong>Total Tokens:</strong> {selectedUser.total_tokens_used.toLocaleString()}</p>
             <p><strong>Estimated Cost:</strong> ${selectedUser.estimated_cost_usd.toFixed(2)}</p>
             <p><strong>Notes:</strong> {selectedUser.notes || 'None'}</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
+              <strong>Voice Mode:</strong>
+              <button
+                onClick={() => toggleVoice(selectedUser.id, selectedUser.voice_enabled !== 1)}
+                style={{
+                  padding: '3px 10px',
+                  fontSize: 12,
+                  borderRadius: 6,
+                  border: '1px solid #ddd',
+                  cursor: 'pointer',
+                  background: selectedUser.voice_enabled !== 0 ? '#0e7490' : '#e5e5e5',
+                  color: selectedUser.voice_enabled !== 0 ? '#fff' : '#666'
+                }}
+              >
+                {selectedUser.voice_enabled !== 0 ? 'Enabled' : 'Disabled'}
+              </button>
+            </div>
           </div>
           <div style={{ marginTop: '2rem' }}>
             {selectedUser.suspended === 1 ? (
@@ -517,6 +551,17 @@ function AICostsPanel({ data }) {
           </tbody>
         </table>
       </Section>
+
+      {data.voice && (
+        <Section title="🎤 Voice Mode">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
+            <StatCard label="Voice Sessions" value={data.voice.total_sessions || 0} />
+            <StatCard label="Voice Tokens" value={`${((data.voice.total_tokens || 0) / 1000).toFixed(1)}K`} />
+            <StatCard label="Voice Cost" value={`$${(data.voice.total_cost || 0).toFixed(2)}`} />
+            <StatCard label="Avg Session Cost" value={`$${(data.voice.avg_session_cost || 0).toFixed(3)}`} />
+          </div>
+        </Section>
+      )}
     </div>
   )
 }

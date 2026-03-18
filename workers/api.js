@@ -929,6 +929,10 @@ async function handleCommandUserUpdate(req, env, userId) {
   if (body.notes !== undefined) {
     await env.DB.prepare('UPDATE users_meta SET notes = ? WHERE id = ?').bind(body.notes, userId).run()
   }
+  if (body.voice_enabled !== undefined) {
+    await env.DB.prepare('UPDATE users_meta SET voice_enabled = ? WHERE id = ?').bind(body.voice_enabled ? 1 : 0, userId).run()
+    await env.DB.prepare('INSERT INTO admin_actions (action_type, entity, entity_id, old_value, new_value, admin_user_id) VALUES (?, ?, ?, ?, ?, ?)').bind('voice_toggle', 'user', userId, 'unknown', body.voice_enabled ? '1' : '0', adminUserId).run()
+  }
   return json({ ok: true })
 }
 
@@ -996,7 +1000,17 @@ async function handleCommandAICosts(req, env) {
 
   const byUser = await env.DB.prepare('SELECT u.email, u.email_domain, u.plan_tier, u.estimated_cost_usd, u.total_generations FROM users_meta u ORDER BY u.estimated_cost_usd DESC LIMIT 20').all()
 
-  return json({ today_spend: todaySpend, month_spend: monthSpend, by_feature: featureCosts, by_model: modelCosts, by_user: byUser.results })
+  const voiceRow = await env.DB.prepare('SELECT COUNT(*) as sessions, SUM(input_tokens + output_tokens) as tokens FROM usage_log WHERE action = ? AND created_at >= ?').bind('voice_chat', startOfMonth).first()
+  const voicePricing = PRICING['claude-sonnet-4-20250514']
+  const voiceCost = voiceRow ? ((voiceRow.tokens || 0) / 1000000) * ((voicePricing.input + voicePricing.output) / 2) : 0
+  const voiceStats = {
+    total_sessions: voiceRow?.sessions || 0,
+    total_tokens: voiceRow?.tokens || 0,
+    total_cost: voiceCost,
+    avg_session_cost: voiceRow?.sessions > 0 ? voiceCost / voiceRow.sessions : 0
+  }
+
+  return json({ today_spend: todaySpend, month_spend: monthSpend, by_feature: featureCosts, by_model: modelCosts, by_user: byUser.results, voice: voiceStats })
 }
 
 async function handleCommandGrants(req, env) {
@@ -1367,6 +1381,190 @@ async function handleCitations(req, env, userId) {
   return json({ citations, search_terms: searchTerms })
 }
 
+// ── Voice Mode Routes ─────────────────────────────────────────────────────────
+
+const VOICE_INTENT_PROMPT = `Classify this voice message into exactly one intent. Return only the intent word and optional section name separated by colon. Nothing else.
+Intents: STATUS, READ_SECTION, EDIT_SECTION, GENERATE, COMPLIANCE, PRELIM_DATA, STUDY_SECTION, NAVIGATION, QUESTION
+Examples:
+'read me the aims page' → READ_SECTION:aims
+'how many pages do I have left' → STATUS
+'make the significance stronger' → EDIT_SECTION:significance
+'what did reviewer 2 say' → STUDY_SECTION
+'write the approach section' → GENERATE:approach
+'what are my compliance issues' → COMPLIANCE
+'what is my preliminary data score' → PRELIM_DATA
+'go to the innovation section' → NAVIGATION:innovation
+'what is the budget cap for STTR Phase I' → QUESTION
+Message: `
+
+async function detectIntent(message, env) {
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 20, messages: [{ role: 'user', content: VOICE_INTENT_PROMPT + message }] }),
+  })
+  const r = await resp.json()
+  const text = (r.content?.[0]?.text || '').trim()
+  const [intent, section] = text.split(':')
+  return { intent: intent?.trim() || 'QUESTION', section: section?.trim() || null }
+}
+
+async function handleVoiceIntent(req, env, userId) {
+  const body = await req.json()
+  const { message } = body
+  if (!message) return err('message required')
+  const result = await detectIntent(message, env)
+  return json(result)
+}
+
+async function handleVoiceChat(req, env, userId) {
+  const body = await req.json()
+  const { message, project_id, conversation_history = [], current_section } = body
+  if (!message) return err('message required')
+
+  // Detect intent
+  const { intent, section: intentSection } = await detectIntent(message, env)
+
+  // Load project
+  let project = null, setup = {}, sections = {}
+  if (project_id) {
+    project = await env.DB.prepare(
+      'SELECT title, mechanism, setup, sections, foa_number, prelim_data_score, compliance_results, study_section_results FROM projects WHERE id = ? AND user_id = ?'
+    ).bind(project_id, userId).first()
+    if (project) {
+      try { setup = JSON.parse(project.setup || '{}') } catch {}
+      try { sections = JSON.parse(project.sections || '{}') } catch {}
+    }
+  }
+
+  // Build base context (under 600 tokens)
+  const baseContext = project ? {
+    title: project.title,
+    pi: setup.pi || setup.pi_name || 'the PI',
+    mechanism: project.mechanism,
+    institute: setup.institute || null,
+    disease: setup.disease || setup.disease_area || null,
+    foa: project.foa_number || null,
+    sections_generated: Object.keys(sections).filter(k => sections[k]?.length > 0),
+    word_counts: Object.fromEntries(Object.keys(sections).map(k => [k, (sections[k] || '').split(' ').filter(Boolean).length])),
+    research_strategy_pages: Math.round(((sections.sig || '').split(' ').length + (sections.innov || '').split(' ').length + (sections.approach || '').split(' ').length) / 250 * 10) / 10,
+    research_strategy_limit: (project.mechanism || '').includes('II') ? 12 : 6,
+    prelim_score: project.prelim_data_score || 0,
+    compliance_issues: (() => { try { return Object.values(JSON.parse(project.compliance_results || '{}')).reduce((a, r) => a + (r?.issues?.filter(i => i.severity === 'critical').length || 0), 0) } catch { return 0 } })(),
+    study_section_score: (() => { try { return JSON.parse(project.study_section_results || 'null')?.summary?.impact_score || null } catch { return null } })(),
+  } : null
+
+  // Load additional context based on intent
+  let additionalCtx = ''
+  if ((intent === 'READ_SECTION' || intent === 'EDIT_SECTION') && intentSection && sections[intentSection]) {
+    additionalCtx = `\nSECTION CONTENT (${intentSection}):\n${sections[intentSection].slice(0, 2000)}`
+  } else if (intent === 'COMPLIANCE' && project?.compliance_results) {
+    try { additionalCtx = `\nCOMPLIANCE RESULTS:\n${JSON.stringify(JSON.parse(project.compliance_results), null, 2).slice(0, 1000)}` } catch {}
+  } else if (intent === 'STUDY_SECTION' && project?.study_section_results) {
+    try { additionalCtx = `\nSTUDY SECTION RESULTS:\n${JSON.stringify(JSON.parse(project.study_section_results).summary, null, 2).slice(0, 800)}` } catch {}
+  }
+
+  // Keep last 6 exchanges
+  const recentHistory = (conversation_history || []).slice(-6)
+  const historyText = recentHistory.map(h => `${h.role === 'user' ? 'Researcher' : 'Assistant'}: ${h.content}`).join('\n')
+
+  // Build system prompt
+  const piName = setup.pi || 'the PI'
+  const lastName = piName.split(' ').pop() || 'there'
+  const systemPrompt = `You are an expert NIH grant writing assistant helping ${piName} with their ${project?.mechanism || 'NIH'} grant application${project?.title ? ` titled "${project.title}"` : ''}${setup.disease ? ` targeting ${setup.disease}` : ''}. You are speaking — the researcher is listening to your voice, not reading text. Follow these rules strictly:
+
+Keep all responses under 120 words unless you are reading a full grant section
+Never use bullet points, numbered lists, headers, or markdown
+Speak naturally and conversationally as if talking to a colleague
+When reading a section, read the complete text naturally without commentary
+After reading or explaining something, always offer one clear next option
+Address the researcher as Dr. ${lastName} occasionally to maintain professional rapport
+When asked about NIH rules, answer directly and confidently
+If asked to make a change, confirm what you will change before doing it
+Be warm but efficient — this is a working session not a chat
+
+Current grant state: ${baseContext ? JSON.stringify(baseContext) : 'No project loaded'}`
+
+  const userContent = `${additionalCtx}\n\nConversation history:\n${historyText}\n\nResearcher says: ${message}`
+
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 300,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userContent }],
+    }),
+  })
+  const result = await resp.json()
+  const responseText = result.content?.[0]?.text || ''
+  const inputTokens = result.usage?.input_tokens || 0
+  const outputTokens = result.usage?.output_tokens || 0
+
+  // Log usage
+  const pricing = PRICING['claude-sonnet-4-20250514']
+  const cost = (inputTokens / 1e6) * pricing.input + (outputTokens / 1e6) * pricing.output
+  await env.DB.prepare('INSERT INTO usage_log (id, user_id, action, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(crypto.randomUUID(), userId, 'voice_chat', 'claude-sonnet-4-20250514', inputTokens, outputTokens, 0, 0, Math.floor(Date.now() / 1000)).run()
+  await trackUserActivity(userId, '', env, true, inputTokens + outputTokens, cost)
+
+  // Determine action
+  let action = null
+  if (intent === 'GENERATE' && intentSection) action = { type: 'generate', section: intentSection }
+  else if (intent === 'EDIT_SECTION' && intentSection) action = { type: 'edit', section: intentSection }
+
+  return json({ response: responseText, intent, action, tokens_used: inputTokens + outputTokens })
+}
+
+async function handleVoiceSpeak(req, env, userId) {
+  const body = await req.json()
+  const { text, use_elevenlabs } = body
+  if (!text) return err('text required')
+
+  const wordCount = text.trim().split(/\s+/).length
+
+  if (use_elevenlabs && env.ELEVENLABS_API_KEY && wordCount > 50) {
+    try {
+      const elevenResp = await fetch('https://api.elevenlabs.io/v1/text-to-speech/pNInz6obpgDQGcFmaJgB', {
+        method: 'POST',
+        headers: { 'xi-api-key': env.ELEVENLABS_API_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text,
+          model_id: 'eleven_monolingual_v1',
+          voice_settings: { stability: 0.75, similarity_boost: 0.75 },
+        }),
+      })
+      if (elevenResp.ok) {
+        const audioBuffer = await elevenResp.arrayBuffer()
+        return new Response(audioBuffer, { status: 200, headers: { ...CORS, 'Content-Type': 'audio/mpeg' } })
+      }
+    } catch {}
+  }
+
+  return json({ fallback: true, text })
+}
+
+async function handleVoiceSessionGet(req, env, userId) {
+  const url = new URL(req.url)
+  const projectId = url.searchParams.get('project_id')
+  if (!projectId) return json({ conversation_history: [], session_cost: 0, summary: null })
+
+  const key = `voice:${projectId}:${userId}`
+  const data = await env.KV.get(key, 'json')
+  return json(data || { conversation_history: [], session_cost: 0, summary: null })
+}
+
+async function handleVoiceSessionPost(req, env, userId) {
+  const body = await req.json()
+  const { project_id, conversation_history, session_cost, summary } = body
+  if (!project_id) return err('project_id required')
+
+  const key = `voice:${project_id}:${userId}`
+  await env.KV.put(key, JSON.stringify({ conversation_history, session_cost, summary }), { expirationTtl: 4 * 3600 })
+  return json({ ok: true })
+}
+
 // ── Study Section Simulation ──────────────────────────────────────────────────
 const SS_REVIEWER_1 = `You are the PRIMARY REVIEWER (basic scientist, molecular/cellular focus, 25 years running an NIH-funded lab). Score each criterion 1-9 (1=Exceptional, 9=Poor). Be thorough, candid, and specific. At the very end output exactly: SCORES: {"impact":N,"significance":N,"innovation":N,"approach":N,"investigators":N,"environment":N}`
 const SS_REVIEWER_2 = `You are the SECONDARY REVIEWER (translational physician-scientist MD/PhD). Critique clinical relevance and path to patients. Score each criterion 1-9. At the very end output exactly: SCORES: {"impact":N,"significance":N,"innovation":N,"approach":N,"investigators":N,"environment":N}`
@@ -1694,6 +1892,33 @@ export default {
       // Citations (PubMed)
       if (path === '/api/citations' && req.method === 'POST') {
         const response = await handleCitations(req, env, userId)
+        await logError(path, 200, null, Date.now() - startTime, userId, env)
+        return response
+      }
+
+      // Voice Mode
+      if (path === '/api/voice/intent' && req.method === 'POST') {
+        const response = await handleVoiceIntent(req, env, userId)
+        await logError(path, 200, null, Date.now() - startTime, userId, env)
+        return response
+      }
+      if (path === '/api/voice/chat' && req.method === 'POST') {
+        const response = await handleVoiceChat(req, env, userId)
+        await logError(path, 200, null, Date.now() - startTime, userId, env)
+        return response
+      }
+      if (path === '/api/voice/speak' && req.method === 'POST') {
+        const response = await handleVoiceSpeak(req, env, userId)
+        await logError(path, 200, null, Date.now() - startTime, userId, env)
+        return response
+      }
+      if (path === '/api/voice/session' && req.method === 'GET') {
+        const response = await handleVoiceSessionGet(req, env, userId)
+        await logError(path, 200, null, Date.now() - startTime, userId, env)
+        return response
+      }
+      if (path === '/api/voice/session' && req.method === 'POST') {
+        const response = await handleVoiceSessionPost(req, env, userId)
         await logError(path, 200, null, Date.now() - startTime, userId, env)
         return response
       }

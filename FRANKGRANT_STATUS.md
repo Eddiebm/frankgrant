@@ -1,7 +1,7 @@
 # FrankGrant Status Document
 
 **Last Updated:** 2026-03-18
-**Version:** 4.3.0
+**Version:** 4.4.0
 **Status:** Production (Internal COARE Tool)
 
 ---
@@ -11,7 +11,7 @@
 | Resource | URL/ID | Status |
 |----------|--------|--------|
 | **Frontend (Pages)** | https://frankgrant.pages.dev | ✅ Live |
-| **Latest Preview** | https://45502fa7.frankgrant.pages.dev | ✅ Live |
+| **Latest Preview** | https://1f2f5581.frankgrant.pages.dev | ✅ Live |
 | **API Worker** | https://frankgrant-worker.eddie-781pagesdev.workers.dev | ✅ Live |
 | **D1 Database** | frankgrant-db | ✅ Live |
 | **D1 Database ID** | 728339df-7875-4fb7-a58b-196cd8099e22 | — |
@@ -74,6 +74,25 @@
 - ✅ **Diff modal** - Side-by-side Original vs Polished in Georgia serif
 - ✅ **Accept / Discard** - Accept overwrites section and saves; Discard cancels
 - ✅ **Sonnet powered** - Removes hedges, converts to active voice, strengthens hooks
+
+### **Voice Mode (v4.4.0)**
+- ✅ **Full-screen overlay** - Dark modal with teal/purple/amber status indicators
+- ✅ **Web Speech API** - Browser-native speech recognition (Chrome/Edge/Safari)
+- ✅ **ElevenLabs TTS** - High-quality voice synthesis for responses >50 words (Adam voice)
+- ✅ **Browser TTS fallback** - Web Speech API SpeechSynthesisUtterance for short responses or when ElevenLabs unavailable
+- ✅ **Intent detection** - Haiku classifies user message (READ_SECTION, GENERATE, COMPLIANCE, etc.) in ~300ms
+- ✅ **Smart context** - Loads section content, compliance results, study section scores based on detected intent
+- ✅ **Conversation history** - Last 6 exchanges passed to Sonnet; session persisted in KV (4h TTL)
+- ✅ **Section generation** - "Write my Aims section" triggers generateSection() flow then re-enters voice
+- ✅ **Section update** - Voice edits trigger onSectionUpdated callback
+- ✅ **Keyboard shortcuts** - Space=toggle mic, Esc=exit, P=pause/resume
+- ✅ **Waveform animation** - 5-bar CSS keyframe animation (staggered delays)
+- ✅ **Session cost tracking** - Sonnet calls logged as `voice_chat` in usage_log
+- ✅ **Admin monitoring** - Voice section in AI Costs panel (sessions, tokens, cost, avg session cost)
+- ✅ **voice_enabled toggle** - Per-user voice enable/disable in Command Station Users panel
+- ✅ **D1 columns** - `voice_enabled INTEGER DEFAULT 1`, `voice_tier TEXT` on users_meta
+- ✅ **KV session storage** - `voice:{project_id}:{user_id}` with 4h expiration
+- ✅ **Toolbar button** - "🎤 Voice Mode" teal/cyan button in project toolbar
 
 ### **NIH Compliance**
 - ✅ **Mechanism Support** - STTR-I/II, SBIR-I/II, FAST-TRACK, NCI-IIB, R21, R01, K99
