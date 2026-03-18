@@ -317,7 +317,7 @@ Title: ${p.title || 'Not specified'}
 Disease: ${p.disease || 'Not specified'}
 Biology: ${p.biology || 'Not specified'}
 Aims: ${p.aims || 'Not specified'}
-${phaseNote}${referenceContext}
+${phaseNote}${referenceContext}${p.prelim_data_narrative ? `\nPRELIMINARY DATA (integrate naturally into Aim rationale sections):\n${p.prelim_data_narrative}\n` : ''}${p.prelim_data_gaps?.gaps?.filter(g => g.importance === 'high').length > 0 ? `\nCRITICAL DATA GAPS TO ADDRESS (weave into pitfalls/alternatives):\n${p.prelim_data_gaps.gaps.filter(g => g.importance === 'high').map(g => `- ${g.gap}: ${g.suggestion}`).join('\n')}\n` : ''}
 
 FOR EACH SPECIFIC AIM, INCLUDE:
 

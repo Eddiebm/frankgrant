@@ -1,7 +1,7 @@
 # FrankGrant Status Document
 
 **Last Updated:** 2026-03-18
-**Version:** 4.1.0
+**Version:** 4.2.0
 **Status:** Production (Internal COARE Tool)
 
 ---
@@ -36,6 +36,23 @@
 - ✅ **Study Section (3 reviewers)** - Basic scientist, translational/clinical, methodologist (personas ready, UI pending)
 - ✅ **Advisory Council** - Final funding recommendation (persona ready, UI pending)
 - ✅ **Biosketch Generator** - NIH SF424 format
+
+### **Preliminary Data System (v4.2.0)**
+- ✅ **Figure Upload** - Drag-and-drop JPEG/PNG/GIF/WebP/PDF (max 10MB), labeled per figure
+- ✅ **Claude Vision Analysis** - Haiku describes each figure for grant context (3-5 sentences)
+- ✅ **Gap Analysis** - Haiku reviews all figures as NIH reviewer, returns score 0-100, label, gaps, strengths
+- ✅ **Score Circle** - Visual score ring in prelim drawer toolbar button with color coding
+- ✅ **Narrative Generation** - Sonnet writes polished "Preliminary Data" prose from all figures
+- ✅ **Use in Approach** - One-click inserts narrative into Approach section, or appends on generate
+- ✅ **Approach Prompt Injection** - `prelim_data_narrative` and `critical_gaps` (high-importance) injected into Approach writing prompt
+- ✅ **Drawer UI** - 📎 Prelim toolbar button opens 400px side panel with Upload/Analysis/Narrative tabs
+
+### **PubMed Citations (v4.2.0)**
+- ✅ **Per-Section Citations** - "📚 Find Citations" button under each section in writer tab
+- ✅ **Keyword Extraction** - Haiku extracts 3 PubMed search queries from section text
+- ✅ **PubMed E-utilities** - esearch + esummary API calls (no API key required)
+- ✅ **Citation Panel** - Shows title, authors, journal, year, PubMed link, Insert button
+- ✅ **Insert to Section** - Appends formatted citation text to section textarea
 
 ### **NIH Compliance**
 - ✅ **Mechanism Support** - STTR-I/II, SBIR-I/II, FAST-TRACK, NCI-IIB, R21, R01, K99
@@ -91,6 +108,7 @@
 ## ⏳ Features: Pending Implementation
 
 ### **High Priority**
+- ⏳ **GrantWizard Prelim Upload Step** - Optional prelim upload between 'review' and 'generating' steps (deferred from v4.2.0)
 - ⏳ **Polish Button** - Rewrite sections with Professor persona (persona exists, UI button needed)
 - ⏳ **PD Review Button** - Get Program Director feedback (persona exists, UI button needed)
 - ⏳ **Study Section Button** - Full 3-reviewer panel simulation (personas exist, UI integration needed)

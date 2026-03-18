@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useApi } from '../hooks/useApi'
+import PreliminaryData from './PreliminaryData'
 import {
   MECHANISMS, SECTIONS, WORDS_PER_PAGE, INSTITUTES,
   getDescriptor, getLimitsText, getCommercialLabel, getProjectRules
@@ -46,6 +47,15 @@ export default function GrantEditor({ project, onSave, onBack }) {
   const [analyzingGrant, setAnalyzingGrant] = useState({})
   const [addedGrants, setAddedGrants] = useState({})
 
+  // Preliminary data state
+  const [showPrelimDrawer, setShowPrelimDrawer] = useState(false)
+  const [prelimScore, setPrelimScore] = useState(project.prelim_data_score || 0)
+
+  // Citations state per section
+  const [citationSection, setCitationSection] = useState(null)
+  const [citationResults, setCitationResults] = useState({})
+  const [citationLoading, setCitationLoading] = useState({})
+
   const pollTimers = useRef({})
 
   const m = MECHANISMS[mech] || MECHANISMS['STTR-I']
@@ -57,6 +67,8 @@ export default function GrantEditor({ project, onSave, onBack }) {
       disease: setup.disease, biology: setup.biology, aims: setup.aims,
       pa: setup.pa, budget: setup.budget, commercial: setup.commercial,
       reference_grants: referenceGrants,
+      prelim_data_narrative: project.prelim_data_narrative || null,
+      prelim_data_gaps: project.prelim_data_gaps || null,
     }
   }
 
@@ -298,8 +310,28 @@ export default function GrantEditor({ project, onSave, onBack }) {
     setAnalyzingGrant(a => ({ ...a, [index]: false }))
   }
 
+  async function handleFindCitations(secId) {
+    const text = sections[secId]
+    if (!text) return
+    setCitationSection(secId)
+    setCitationLoading(l => ({ ...l, [secId]: true }))
+    try {
+      const result = await api.getCitations(text, secId)
+      setCitationResults(r => ({ ...r, [secId]: result.citations || [] }))
+    } catch (e) {
+      setCitationResults(r => ({ ...r, [secId]: [] }))
+    }
+    setCitationLoading(l => ({ ...l, [secId]: false }))
+  }
+
+  function handleInsertCitation(secId, citationText) {
+    const current = sections[secId] || ''
+    const updated = updateSection(secId, current + '\n\n' + citationText)
+    save(updated, scores)
+  }
+
   return (
-    <div style={{ maxWidth: showGrantDrawer ? 'none' : 900, margin: '0 auto', padding: '1.5rem', display: 'flex', gap: 0 }}>
+    <div style={{ maxWidth: (showGrantDrawer || showPrelimDrawer) ? 'none' : 900, margin: '0 auto', padding: '1.5rem', display: 'flex', gap: 0 }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: '1.5rem' }}>
@@ -315,7 +347,19 @@ export default function GrantEditor({ project, onSave, onBack }) {
             {saveState === 'saving' ? 'Saving...' : saveState === 'unsaved' ? 'Unsaved' : saveState === 'error' ? 'Save failed' : 'Saved'}
           </span>
           <button
-            onClick={() => setShowGrantDrawer(d => !d)}
+            onClick={() => { setShowPrelimDrawer(d => !d); setShowGrantDrawer(false) }}
+            style={{ ...ghostBtn, fontSize: 12, background: showPrelimDrawer ? '#f0f0f0' : '#fff', position: 'relative' }}
+            title="Preliminary data"
+          >
+            📎 Prelim
+            {prelimScore > 0 && (
+              <span style={{ marginLeft: 5, fontSize: 10, background: prelimScore >= 70 ? '#16a34a' : '#d97706', color: '#fff', borderRadius: 10, padding: '1px 6px' }}>
+                {prelimScore}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => { setShowGrantDrawer(d => !d); setShowPrelimDrawer(false) }}
             style={{ ...ghostBtn, fontSize: 12, background: showGrantDrawer ? '#f0f0f0' : '#fff', position: 'relative' }}
             title="Find funded NIH grants"
           >
@@ -466,6 +510,26 @@ export default function GrantEditor({ project, onSave, onBack }) {
                   onRecheck={() => recheckCompliance(sec.id)}
                   hasText={!!sections[sec.id]}
                 />
+
+                {/* Citations */}
+                {sections[sec.id] && (
+                  <div style={{ marginTop: 8 }}>
+                    <button
+                      onClick={() => citationSection === sec.id ? setCitationSection(null) : handleFindCitations(sec.id)}
+                      disabled={citationLoading[sec.id]}
+                      style={{ ...ghostBtn, fontSize: 11, padding: '4px 10px' }}
+                    >
+                      {citationLoading[sec.id] ? '⟳ Searching PubMed…' : citationSection === sec.id && citationResults[sec.id] ? '▲ Hide Citations' : '📚 Find Citations'}
+                    </button>
+                    {citationSection === sec.id && citationResults[sec.id] && (
+                      <CitationsPanel
+                        citations={citationResults[sec.id]}
+                        onInsert={(cite) => handleInsertCitation(sec.id, cite)}
+                        onRefresh={() => handleFindCitations(sec.id)}
+                      />
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -496,6 +560,27 @@ export default function GrantEditor({ project, onSave, onBack }) {
           </div>
         )}
       </div>
+
+      {/* Preliminary Data Drawer */}
+      {showPrelimDrawer && (
+        <div style={{
+          width: 400, flexShrink: 0, borderLeft: '0.5px solid #e5e5e5', marginLeft: 20,
+          paddingLeft: 20, maxHeight: '90vh', overflowY: 'auto',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <div style={{ fontWeight: 600, fontSize: 14 }}>Preliminary Data</div>
+            <button onClick={() => setShowPrelimDrawer(false)} style={{ ...ghostBtn, padding: '4px 10px', fontSize: 12 }}>✕</button>
+          </div>
+          <PreliminaryData
+            projectId={project.id}
+            onNarrativeGenerated={(narrative) => {
+              const updated = updateSection('approach', (sections.approach || '') + '\n\nPRELIMINARY DATA:\n' + narrative)
+              save(updated, scores)
+              setShowPrelimDrawer(false)
+            }}
+          />
+        </div>
+      )}
 
       {/* Grant Search Drawer */}
       {showGrantDrawer && (
@@ -778,6 +863,45 @@ function FullGrantCompliance({ sections, scores, mech }) {
       {violations.length
         ? `Formatting violations: ${violations.join(' · ')} — Fix before submitting.`
         : `Formatting check passed. All sections within NIH page limits for ${m.label}. Verify font, margins, and single-column in your final PDF.`}
+    </div>
+  )
+}
+
+// ── Citations Panel ──────────────────────────────────────────────────────────
+function CitationsPanel({ citations, onInsert, onRefresh }) {
+  if (citations.length === 0) {
+    return (
+      <div style={{ marginTop: 8, padding: '10px 12px', border: '0.5px solid #e5e5e5', borderRadius: 8, fontSize: 12, color: '#888', fontStyle: 'italic' }}>
+        No relevant citations found. Try adding more specific terminology to this section.
+        <button onClick={onRefresh} style={{ ...ghostBtn, fontSize: 11, marginLeft: 8 }}>Try again</button>
+      </div>
+    )
+  }
+  return (
+    <div style={{ marginTop: 8, border: '0.5px solid #e5e5e5', borderRadius: 8, overflow: 'hidden' }}>
+      <div style={{ padding: '7px 12px', background: '#f8f8f8', fontSize: 11, fontWeight: 600, color: '#555', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>📚 {citations.length} relevant citation{citations.length !== 1 ? 's' : ''} from PubMed</span>
+        <button onClick={onRefresh} style={{ ...ghostBtn, fontSize: 10, padding: '2px 8px' }}>Refresh</button>
+      </div>
+      {citations.map((cite, i) => (
+        <div key={i} style={{ padding: '8px 12px', borderTop: '0.5px solid #f0f0f0' }}>
+          <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 2, lineHeight: 1.4 }}>{cite.title}</div>
+          <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>
+            {cite.authors} · {cite.journal} {cite.year}
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <a href={cite.pubmed_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: '#3b82f6', textDecoration: 'none' }}>
+              PubMed ↗
+            </a>
+            <button
+              onClick={() => onInsert(cite.citation_text)}
+              style={{ ...ghostBtn, fontSize: 10, padding: '2px 8px' }}
+            >
+              Insert
+            </button>
+          </div>
+        </div>
+      ))}
     </div>
   )
 }

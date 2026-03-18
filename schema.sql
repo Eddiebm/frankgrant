@@ -163,3 +163,26 @@ CREATE TABLE IF NOT EXISTS foa_cache (
 
 -- ─── NIH REPORTER REFERENCE GRANTS (v4.1.0) ─────────────────────────────────
 -- ALTER TABLE projects ADD COLUMN reference_grants TEXT;
+
+-- ─── PRELIMINARY DATA (v4.2.0) ───────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS preliminary_data (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  file_name TEXT,
+  file_type TEXT,
+  file_size INTEGER,
+  label TEXT,
+  ai_description TEXT,
+  ai_narrative TEXT,
+  created_at INTEGER DEFAULT (unixepoch())
+);
+
+CREATE INDEX IF NOT EXISTS idx_prelim_project ON preliminary_data(project_id);
+
+-- Run individually (catch duplicate column errors):
+-- ALTER TABLE projects ADD COLUMN prelim_data_score INTEGER DEFAULT 0;
+-- ALTER TABLE projects ADD COLUMN prelim_data_gaps TEXT;
+-- ALTER TABLE projects ADD COLUMN prelim_data_narrative TEXT;
+-- ALTER TABLE projects ADD COLUMN citation_suggestions TEXT;

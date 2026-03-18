@@ -50,8 +50,34 @@ export function useApi() {
   // Compliance
   async function getCompliance(projectId) { return request('GET', `/projects/${projectId}/compliance`) }
 
+  // Preliminary data
+  async function uploadPrelim(projectId, file, label) {
+    const token = await getToken()
+    const form = new FormData()
+    form.append('file', file)
+    if (label) form.append('label', label)
+    const res = await fetch(`${API_BASE}/projects/${projectId}/prelim`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    })
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({ error: res.statusText }))
+      throw new Error(e.error || `HTTP ${res.status}`)
+    }
+    return res.json()
+  }
+  async function listPrelim(projectId) { return request('GET', `/projects/${projectId}/prelim`) }
+  async function deletePrelim(projectId, itemId) { return request('DELETE', `/projects/${projectId}/prelim/${itemId}`) }
+  async function analyzePrelim(projectId) { return request('POST', `/projects/${projectId}/prelim/analyze`, {}) }
+  async function generatePrelimNarrative(projectId) { return request('POST', `/projects/${projectId}/prelim/narrative`, {}) }
+
+  // Citations
+  async function getCitations(section_text, section_id) { return request('POST', '/citations', { section_text, section_id }) }
+
   return {
     callAI, listProjects, createProject, getProject, updateProject, deleteProject, getUsage,
     parseFOA, searchGrants, analyzeGrant, saveReference, getCompliance, getToken,
+    uploadPrelim, listPrelim, deletePrelim, analyzePrelim, generatePrelimNarrative, getCitations,
   }
 }

@@ -1,7 +1,8 @@
 /**
- * FrankGrant API Worker v4.1.0
+ * FrankGrant API Worker v4.2.0
  * Handles: auth validation, AI proxy, project CRUD, usage logging, admin monitoring,
- *          FOA parsing, NIH Reporter search, inline compliance checking
+ *          FOA parsing, NIH Reporter search, inline compliance checking,
+ *          preliminary data upload/analysis/narrative, PubMed citations
  */
 
 const ADMIN_EMAIL = 'eddieb@coareholdings.com'
@@ -175,6 +176,10 @@ const MAX_TOKENS_BY_FEATURE = {
   'foa_extract': 800,
   'grant_analyze': 800,
   'section_compliance': 500,
+  'prelim_describe': 600,
+  'prelim_narrative': 1500,
+  'prelim_analyze': 800,
+  'citations': 200,
   'default': 1000,
 }
 
@@ -441,6 +446,10 @@ async function handleGetProject(req, env, userId, projectId) {
   row.foa_rules = row.foa_rules ? JSON.parse(row.foa_rules) : null
   row.reference_grants = row.reference_grants ? JSON.parse(row.reference_grants) : []
   row.compliance_results = row.compliance_results ? JSON.parse(row.compliance_results) : {}
+  row.prelim_data_score = row.prelim_data_score || 0
+  row.prelim_data_gaps = row.prelim_data_gaps ? JSON.parse(row.prelim_data_gaps) : null
+  row.prelim_data_narrative = row.prelim_data_narrative || null
+  row.citation_suggestions = row.citation_suggestions ? JSON.parse(row.citation_suggestions) : {}
   return json(row)
 }
 
@@ -453,7 +462,7 @@ async function handleUpdateProject(req, env, userId, projectId) {
       section_summaries = ?, compressed_grant = ?, is_resubmission = ?,
       introduction = ?, study_section = ?, review_status = ?,
       foa_number = ?, foa_rules = ?, foa_fetched_at = ?, foa_valid = ?,
-      reference_grants = ?,
+      reference_grants = ?, citation_suggestions = ?,
       updated_at = ?
      WHERE id = ? AND user_id = ?`
   ).bind(
@@ -473,6 +482,7 @@ async function handleUpdateProject(req, env, userId, projectId) {
     body.foa_fetched_at || null,
     body.foa_valid ? 1 : 0,
     body.reference_grants ? JSON.stringify(body.reference_grants) : null,
+    body.citation_suggestions ? JSON.stringify(body.citation_suggestions) : null,
     now, projectId, userId
   ).run()
   if (result.changes === 0) return err('Project not found', 404)
@@ -1057,6 +1067,306 @@ async function handleCommandFeedbackCluster(req, env) {
   return json({ themes: JSON.parse(text) })
 }
 
+// ── Preliminary Data ──────────────────────────────────────────────────────────
+
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer)
+  let binary = ''
+  for (let i = 0; i < bytes.length; i += 8192) {
+    binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + 8192, bytes.length)))
+  }
+  return btoa(binary)
+}
+
+async function handlePrelimUpload(req, env, userId, projectId) {
+  const project = await env.DB.prepare(
+    'SELECT id FROM projects WHERE id = ? AND user_id = ?'
+  ).bind(projectId, userId).first()
+  if (!project) return err('Project not found', 404)
+
+  let formData
+  try { formData = await req.formData() } catch (e) { return err('Invalid multipart form data') }
+
+  const file = formData.get('file')
+  const label = (formData.get('label') || '').slice(0, 200)
+
+  if (!file) return err('file required')
+
+  const supportedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf']
+  const fileType = file.type || 'image/png'
+  if (!supportedTypes.includes(fileType)) {
+    return err('Unsupported file type. Use JPEG, PNG, GIF, WebP, or PDF.')
+  }
+
+  const arrayBuffer = await file.arrayBuffer()
+  if (arrayBuffer.byteLength > 10 * 1024 * 1024) return err('File too large (10MB max)')
+
+  const base64Data = arrayBufferToBase64(arrayBuffer)
+  const fileName = (file.name || 'figure').slice(0, 200)
+  const fileSize = arrayBuffer.byteLength
+
+  // Describe using Claude vision
+  const visionContent = fileType === 'application/pdf'
+    ? [
+        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64Data } },
+        { type: 'text', text: 'Describe the scientific content of this document for use as preliminary data in an NIH grant. Focus on key findings, figures, statistical results, and how this supports research aims. Be specific. 3-5 sentences.' },
+      ]
+    : [
+        { type: 'image', source: { type: 'base64', media_type: fileType, data: base64Data } },
+        { type: 'text', text: 'Describe this scientific figure for use as preliminary data in an NIH grant. Focus on what the data shows, key findings, statistical significance if visible, and how it supports the research aims. 3-5 sentences.' },
+      ]
+
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 600, messages: [{ role: 'user', content: visionContent }] }),
+  })
+
+  const result = await resp.json()
+  const description = result.content?.[0]?.text || 'Unable to analyze figure.'
+
+  const inputTokens = result.usage?.input_tokens || 0
+  const outputTokens = result.usage?.output_tokens || 0
+  await env.DB.prepare(
+    'INSERT INTO usage_log (id, user_id, action, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(crypto.randomUUID(), userId, 'prelim_describe', 'claude-haiku-4-5-20251001', inputTokens, outputTokens, 0, 0, Math.floor(Date.now() / 1000)).run()
+
+  const insertResult = await env.DB.prepare(
+    'INSERT INTO preliminary_data (project_id, user_id, file_name, file_type, file_size, label, ai_description, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(projectId, userId, fileName, fileType, fileSize, label || null, description, Math.floor(Date.now() / 1000)).run()
+
+  return json({ ok: true, id: insertResult.meta.last_row_id, description }, 201)
+}
+
+async function handlePrelimList(req, env, userId, projectId) {
+  const project = await env.DB.prepare(
+    'SELECT id, prelim_data_score, prelim_data_gaps, prelim_data_narrative FROM projects WHERE id = ? AND user_id = ?'
+  ).bind(projectId, userId).first()
+  if (!project) return err('Project not found', 404)
+
+  const items = await env.DB.prepare(
+    'SELECT id, file_name, file_type, file_size, label, ai_description, ai_narrative, created_at FROM preliminary_data WHERE project_id = ? ORDER BY created_at ASC'
+  ).bind(projectId).all()
+
+  return json({
+    items: items.results,
+    score: project.prelim_data_score || 0,
+    gaps: project.prelim_data_gaps ? JSON.parse(project.prelim_data_gaps) : null,
+    narrative: project.prelim_data_narrative || null,
+  })
+}
+
+async function handlePrelimDelete(req, env, userId, projectId, itemId) {
+  const project = await env.DB.prepare(
+    'SELECT id FROM projects WHERE id = ? AND user_id = ?'
+  ).bind(projectId, userId).first()
+  if (!project) return err('Project not found', 404)
+
+  await env.DB.prepare('DELETE FROM preliminary_data WHERE id = ? AND project_id = ?').bind(itemId, projectId).run()
+  return json({ ok: true })
+}
+
+async function handlePrelimAnalyze(req, env, userId, projectId) {
+  const project = await env.DB.prepare(
+    'SELECT mechanism, reference_grants, setup FROM projects WHERE id = ? AND user_id = ?'
+  ).bind(projectId, userId).first()
+  if (!project) return err('Project not found', 404)
+
+  const items = await env.DB.prepare(
+    'SELECT label, ai_description FROM preliminary_data WHERE project_id = ? ORDER BY created_at ASC'
+  ).bind(projectId).all()
+  if (items.results.length === 0) return err('No preliminary data uploaded yet')
+
+  const descriptions = items.results.map((item, i) =>
+    `Figure ${i + 1}${item.label ? ` (${item.label})` : ''}: ${item.ai_description}`
+  ).join('\n\n')
+
+  let refContext = ''
+  if (project.reference_grants) {
+    try {
+      const refs = JSON.parse(project.reference_grants)
+      const highlights = refs.slice(0, 3).map(r => r.analysis?.approach_highlights).filter(Boolean)
+      if (highlights.length > 0) refContext = `\n\nFunded grants in this space emphasize: ${highlights.join(' | ')}`
+    } catch {}
+  }
+
+  const prompt = `You are an NIH study section reviewer evaluating preliminary data for a ${project.mechanism || 'SBIR/STTR'} application.
+
+PRELIMINARY DATA FIGURES:
+${descriptions}${refContext}
+
+Evaluate the sufficiency of this preliminary data. Return ONLY valid JSON:
+{
+  "score": <integer 0-100>,
+  "score_label": "<Weak|Adequate|Strong|Excellent>",
+  "gaps": [
+    { "gap": "...", "importance": "high|medium|low", "suggestion": "..." }
+  ],
+  "strengths": ["..."],
+  "summary": "2-3 sentence reviewer-perspective assessment"
+}`
+
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 800, messages: [{ role: 'user', content: prompt }] }),
+  })
+
+  const result = await resp.json()
+  const raw = result.content?.[0]?.text?.replace(/```json|```/g, '').trim()
+  let analysis
+  try { analysis = JSON.parse(raw) } catch { return err('Analysis parsing failed') }
+
+  const inputTokens = result.usage?.input_tokens || 0
+  const outputTokens = result.usage?.output_tokens || 0
+  await env.DB.prepare(
+    'INSERT INTO usage_log (id, user_id, action, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(crypto.randomUUID(), userId, 'prelim_analyze', 'claude-haiku-4-5-20251001', inputTokens, outputTokens, 0, 0, Math.floor(Date.now() / 1000)).run()
+
+  await env.DB.prepare(
+    'UPDATE projects SET prelim_data_score = ?, prelim_data_gaps = ? WHERE id = ? AND user_id = ?'
+  ).bind(analysis.score || 0, JSON.stringify(analysis), projectId, userId).run()
+
+  return json(analysis)
+}
+
+async function handlePrelimNarrative(req, env, userId, projectId) {
+  const project = await env.DB.prepare(
+    'SELECT mechanism, setup FROM projects WHERE id = ? AND user_id = ?'
+  ).bind(projectId, userId).first()
+  if (!project) return err('Project not found', 404)
+
+  const items = await env.DB.prepare(
+    'SELECT label, ai_description FROM preliminary_data WHERE project_id = ? ORDER BY created_at ASC'
+  ).bind(projectId).all()
+  if (items.results.length === 0) return err('No preliminary data uploaded yet')
+
+  let setup = {}
+  try { setup = JSON.parse(project.setup || '{}') } catch {}
+
+  const descriptions = items.results.map((item, i) =>
+    `Figure ${i + 1}${item.label ? ` — ${item.label}` : ''}: ${item.ai_description}`
+  ).join('\n\n')
+
+  const prompt = `You are a grant writing expert. Write a compelling "Preliminary Data" section for an NIH ${project.mechanism || 'SBIR/STTR'} application.
+
+PROJECT CONTEXT:
+Technology: ${setup.technology || setup.innovation || 'Not specified'}
+Problem: ${setup.problem || 'Not specified'}
+
+FIGURES:
+${descriptions}
+
+Write 2-4 paragraphs that:
+1. Open with a strong topic sentence connecting preliminary data to the central hypothesis
+2. Present each piece of data in logical narrative flow (not a list)
+3. Emphasize statistical significance, reproducibility, and translational relevance
+4. Close with a forward-looking sentence about how this data de-risks the proposed work
+
+Use present tense. Reference figures as "Figure X". No bullet points. Scientific NIH-reviewer prose.`
+
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1500, messages: [{ role: 'user', content: prompt }] }),
+  })
+
+  const result = await resp.json()
+  const narrative = result.content?.[0]?.text || ''
+
+  const inputTokens = result.usage?.input_tokens || 0
+  const outputTokens = result.usage?.output_tokens || 0
+  const pricing = PRICING['claude-sonnet-4-20250514']
+  const cost = (inputTokens / 1e6) * pricing.input + (outputTokens / 1e6) * pricing.output
+
+  await env.DB.prepare(
+    'INSERT INTO usage_log (id, user_id, action, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(crypto.randomUUID(), userId, 'prelim_narrative', 'claude-sonnet-4-20250514', inputTokens, outputTokens, 0, 0, Math.floor(Date.now() / 1000)).run()
+
+  await trackUserActivity(userId, '', env, true, inputTokens + outputTokens, cost)
+
+  await env.DB.prepare(
+    'UPDATE projects SET prelim_data_narrative = ? WHERE id = ? AND user_id = ?'
+  ).bind(narrative, projectId, userId).run()
+
+  return json({ narrative })
+}
+
+async function handleCitations(req, env, userId) {
+  const body = await req.json()
+  const { section_text, section_id } = body
+  if (!section_text) return err('section_text required')
+
+  // Extract PubMed search terms from section text using Haiku
+  const kwResp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 200,
+      messages: [{
+        role: 'user',
+        content: `Extract 3 PubMed search queries from this NIH grant ${section_id || 'section'}. Return ONLY a JSON array of 3 strings. Each query should be 3-6 words of key scientific concepts.\n\nSection:\n${section_text.slice(0, 2000)}\n\nExample: ["CRISPR cancer gene therapy", "tumor microenvironment immunotherapy", "checkpoint inhibitor resistance mechanisms"]`,
+      }],
+    }),
+  })
+
+  const kwResult = await kwResp.json()
+  const kwRaw = kwResult.content?.[0]?.text?.replace(/```json|```/g, '').trim()
+  let searchTerms = []
+  try { searchTerms = JSON.parse(kwRaw) } catch {}
+
+  if (searchTerms.length === 0) return json({ citations: [], search_terms: [] })
+
+  // Search PubMed for each term
+  const allPMIDs = new Set()
+  for (const term of searchTerms.slice(0, 3)) {
+    try {
+      const encoded = encodeURIComponent(term)
+      const resp = await fetch(
+        `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${encoded}&retmax=5&sort=relevance&retmode=json`,
+        { headers: { 'User-Agent': 'FrankGrant/4.2.0' } }
+      )
+      const data = await resp.json()
+      ;(data.esearchresult?.idlist || []).forEach(id => allPMIDs.add(id))
+    } catch {}
+  }
+
+  if (allPMIDs.size === 0) return json({ citations: [], search_terms: searchTerms })
+
+  // Fetch summaries
+  const pmidList = [...allPMIDs].slice(0, 15).join(',')
+  let citations = []
+  try {
+    const summResp = await fetch(
+      `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id=${pmidList}&retmode=json`,
+      { headers: { 'User-Agent': 'FrankGrant/4.2.0' } }
+    )
+    const summData = await summResp.json()
+    const uids = summData.result?.uids || []
+    citations = uids.map(uid => {
+      const a = summData.result[uid]
+      if (!a) return null
+      const authList = a.authors || []
+      const authorStr = authList.slice(0, 3).map(x => x.name).join(', ') + (authList.length > 3 ? ' et al.' : '')
+      const year = (a.pubdate || '').slice(0, 4)
+      return {
+        pmid: uid,
+        title: a.title || '',
+        authors: authorStr,
+        journal: a.source || '',
+        year,
+        citation_text: `${authorStr}. ${a.title || ''} ${a.source || ''}. ${year};${a.volume || ''}${a.issue ? `(${a.issue})` : ''}:${a.pages || ''}.`,
+        pubmed_url: `https://pubmed.ncbi.nlm.nih.gov/${uid}/`,
+      }
+    }).filter(Boolean)
+  } catch (e) {
+    console.error('PubMed summary failed:', e)
+  }
+
+  return json({ citations, search_terms: searchTerms })
+}
+
 // ── Main fetch handler ────────────────────────────────────────────────────────
 export default {
   async fetch(req, env, ctx) {
@@ -1185,6 +1495,47 @@ export default {
         const response = await handleGetCompliance(req, env, userId, complianceMatch[1])
         const responseTime = Date.now() - startTime
         await logError(path, 200, null, responseTime, userId, env)
+        return response
+      }
+
+      // Preliminary data endpoints
+      const prelimMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/prelim$/)
+      if (prelimMatch) {
+        const projectId = prelimMatch[1]
+        let response
+        if (req.method === 'POST') response = await handlePrelimUpload(req, env, userId, projectId)
+        else if (req.method === 'GET') response = await handlePrelimList(req, env, userId, projectId)
+        if (response) {
+          await logError(path, response.status, null, Date.now() - startTime, userId, env)
+          return response
+        }
+      }
+
+      const prelimItemMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/prelim\/(\d+)$/)
+      if (prelimItemMatch && req.method === 'DELETE') {
+        const response = await handlePrelimDelete(req, env, userId, prelimItemMatch[1], parseInt(prelimItemMatch[2]))
+        await logError(path, 200, null, Date.now() - startTime, userId, env)
+        return response
+      }
+
+      const prelimAnalyzeMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/prelim\/analyze$/)
+      if (prelimAnalyzeMatch && req.method === 'POST') {
+        const response = await handlePrelimAnalyze(req, env, userId, prelimAnalyzeMatch[1])
+        await logError(path, 200, null, Date.now() - startTime, userId, env)
+        return response
+      }
+
+      const prelimNarrativeMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/prelim\/narrative$/)
+      if (prelimNarrativeMatch && req.method === 'POST') {
+        const response = await handlePrelimNarrative(req, env, userId, prelimNarrativeMatch[1])
+        await logError(path, 200, null, Date.now() - startTime, userId, env)
+        return response
+      }
+
+      // Citations (PubMed)
+      if (path === '/api/citations' && req.method === 'POST') {
+        const response = await handleCitations(req, env, userId)
+        await logError(path, 200, null, Date.now() - startTime, userId, env)
         return response
       }
 
