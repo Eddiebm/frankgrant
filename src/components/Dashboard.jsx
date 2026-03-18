@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react'
 import { useUser, UserButton } from '@clerk/clerk-react'
 import { useApi } from '../hooks/useApi'
 import GrantEditor from './GrantEditor'
+import Scorer from './Scorer'
 
 export default function Dashboard() {
   const { user } = useUser()
   const api = useApi()
   const [projects, setProjects] = useState([])
   const [activeProject, setActiveProject] = useState(null)
+  const [activeView, setActiveView] = useState('projects') // 'projects', 'editor', 'scorer'
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
 
@@ -41,6 +43,7 @@ export default function Dashboard() {
     try {
       const proj = await api.getProject(id)
       setActiveProject(proj)
+      setActiveView('editor')
     } catch (e) {
       alert('Error loading project: ' + e.message)
     }
@@ -65,14 +68,18 @@ export default function Dashboard() {
     if (activeProject?.id === id) setActiveProject(null)
   }
 
-  if (activeProject) {
+  if (activeView === 'editor' && activeProject) {
     return (
       <GrantEditor
         project={activeProject}
         onSave={saveProject}
-        onBack={() => setActiveProject(null)}
+        onBack={() => { setActiveProject(null); setActiveView('projects') }}
       />
     )
+  }
+
+  if (activeView === 'scorer') {
+    return <Scorer onBack={() => setActiveView('projects')} />
   }
 
   return (
@@ -90,9 +97,14 @@ export default function Dashboard() {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
         <h2 style={{ fontSize: 15, fontWeight: 500 }}>Your grants</h2>
-        <button onClick={newProject} disabled={creating} style={btnStyle}>
-          {creating ? 'Creating...' : '+ New grant'}
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => setActiveView('scorer')} style={btnStyle}>
+            📊 Score Document
+          </button>
+          <button onClick={newProject} disabled={creating} style={btnStyle}>
+            {creating ? 'Creating...' : '+ New grant'}
+          </button>
+        </div>
       </div>
 
       {loading ? (
