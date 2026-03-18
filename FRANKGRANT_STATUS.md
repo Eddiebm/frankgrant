@@ -1,7 +1,7 @@
 # FrankGrant Status Document
 
 **Last Updated:** 2026-03-18
-**Version:** 4.2.0
+**Version:** 4.3.0
 **Status:** Production (Internal COARE Tool)
 
 ---
@@ -11,7 +11,7 @@
 | Resource | URL/ID | Status |
 |----------|--------|--------|
 | **Frontend (Pages)** | https://frankgrant.pages.dev | ✅ Live |
-| **Latest Preview** | https://c445f032.frankgrant.pages.dev | ✅ Live |
+| **Latest Preview** | https://45502fa7.frankgrant.pages.dev | ✅ Live |
 | **API Worker** | https://frankgrant-worker.eddie-781pagesdev.workers.dev | ✅ Live |
 | **D1 Database** | frankgrant-db | ✅ Live |
 | **D1 Database ID** | 728339df-7875-4fb7-a58b-196cd8099e22 | — |
@@ -53,6 +53,27 @@
 - ✅ **PubMed E-utilities** - esearch + esummary API calls (no API key required)
 - ✅ **Citation Panel** - Shows title, authors, journal, year, PubMed link, Insert button
 - ✅ **Insert to Section** - Appends formatted citation text to section textarea
+
+### **DOCX Export (v4.3.0)**
+- ✅ **Client-side generation** - `docx` v9.6.1, Georgia font, 0.5" margins, US Letter
+- ✅ **Correct section order** - Title page → Summary → Narrative → Aims (pg break) → Research Strategy A/B/C (pg break) → Commercialization → Data Mgmt → Facilities
+- ✅ **Page numbers** - Centered in footer
+- ✅ **Mechanism-aware** - Commercialization only for SBIR/STTR; label adjusts for Phase I vs II
+- ✅ **Two export points** - Toolbar "📄 DOCX" button + "Export DOCX" in Full Grant tab
+
+### **Study Section Simulation (v4.3.0)**
+- ✅ **3 parallel Sonnet calls** - Primary (basic scientist), Secondary (physician-scientist), Reader (biostatistician)
+- ✅ **SRO synthesis** - Fourth Sonnet call generates NIH Summary Statement JSON
+- ✅ **Progress modal** - 4-step animated progress during ~25-30s API calls
+- ✅ **Results modal** - Impact score, percentile, criterion table, reviewer accordions, synthesis
+- ✅ **Persisted** - `study_section_results` column, "View Last Study Section" on toolbar if results exist
+- ✅ **Fundability statement** - Green/yellow/red based on impact score
+
+### **Polish Button (v4.3.0)**
+- ✅ **Per-section** - "✨ Polish" button next to "📚 Find Citations" in writer tab
+- ✅ **Diff modal** - Side-by-side Original vs Polished in Georgia serif
+- ✅ **Accept / Discard** - Accept overwrites section and saves; Discard cancels
+- ✅ **Sonnet powered** - Removes hedges, converts to active voice, strengthens hooks
 
 ### **NIH Compliance**
 - ✅ **Mechanism Support** - STTR-I/II, SBIR-I/II, FAST-TRACK, NCI-IIB, R21, R01, K99

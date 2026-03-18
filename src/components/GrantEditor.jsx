@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useApi } from '../hooks/useApi'
 import PreliminaryData from './PreliminaryData'
+import { generateGrantDOCX } from '../lib/docxExport'
 import {
   MECHANISMS, SECTIONS, WORDS_PER_PAGE, INSTITUTES,
   getDescriptor, getLimitsText, getCommercialLabel, getProjectRules
@@ -55,6 +56,18 @@ export default function GrantEditor({ project, onSave, onBack }) {
   const [citationSection, setCitationSection] = useState(null)
   const [citationResults, setCitationResults] = useState({})
   const [citationLoading, setCitationLoading] = useState({})
+
+  // DOCX export
+  const [exportingDocx, setExportingDocx] = useState(false)
+
+  // Study Section
+  const [studySectionModal, setStudySectionModal] = useState(null) // null | 'progress' | 'results'
+  const [studySectionStep, setStudySectionStep] = useState(0)
+  const [studySectionResults, setStudySectionResults] = useState(project.study_section_results || null)
+
+  // Polish
+  const [polishModal, setPolishModal] = useState(null) // null | { secId, original, polished }
+  const [polishing, setPolishing] = useState({})
 
   const pollTimers = useRef({})
 
@@ -330,6 +343,66 @@ export default function GrantEditor({ project, onSave, onBack }) {
     save(updated, scores)
   }
 
+  // ── DOCX Export ─────────────────────────────────────────────────────────────
+  async function handleExportDOCX() {
+    setExportingDocx(true)
+    try {
+      const buffer = await generateGrantDOCX(getProject(), sections, scores)
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = (title || 'grant').replace(/[^a-z0-9]/gi, '_').toLowerCase() + '.docx'
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      alert('Export failed: ' + e.message)
+    }
+    setExportingDocx(false)
+  }
+
+  // ── Study Section ────────────────────────────────────────────────────────────
+  async function handleRunStudySection() {
+    setStudySectionModal('progress')
+    setStudySectionStep(0)
+    const t1 = setTimeout(() => setStudySectionStep(1), 6000)
+    const t2 = setTimeout(() => setStudySectionStep(2), 14000)
+    const t3 = setTimeout(() => setStudySectionStep(3), 22000)
+    try {
+      const results = await api.runStudySection(project.id)
+      clearTimeout(t1); clearTimeout(t2); clearTimeout(t3)
+      setStudySectionStep(3)
+      setStudySectionResults(results)
+      setTimeout(() => setStudySectionModal('results'), 400)
+    } catch (e) {
+      clearTimeout(t1); clearTimeout(t2); clearTimeout(t3)
+      setStudySectionModal(null)
+      alert('Study section simulation failed: ' + e.message)
+    }
+  }
+
+  // ── Polish ───────────────────────────────────────────────────────────────────
+  async function handlePolish(secId) {
+    const text = sections[secId]
+    if (!text) return
+    setPolishing(p => ({ ...p, [secId]: true }))
+    try {
+      const sec = SECTIONS.find(s => s.id === secId)
+      const result = await api.polishSection(project.id, secId, text, sec?.label || secId)
+      setPolishModal({ secId, original: text, polished: result.polished })
+    } catch (e) {
+      alert('Polish failed: ' + e.message)
+    }
+    setPolishing(p => ({ ...p, [secId]: false }))
+  }
+
+  function handleAcceptPolish() {
+    if (!polishModal) return
+    const updated = updateSection(polishModal.secId, polishModal.polished)
+    save(updated, scores)
+    setPolishModal(null)
+  }
+
   return (
     <div style={{ maxWidth: (showGrantDrawer || showPrelimDrawer) ? 'none' : 900, margin: '0 auto', padding: '1.5rem', display: 'flex', gap: 0 }}>
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -371,6 +444,21 @@ export default function GrantEditor({ project, onSave, onBack }) {
             )}
           </button>
           <button onClick={() => save()} style={ghostBtn}>Save</button>
+          <button
+            onClick={handleExportDOCX}
+            disabled={exportingDocx}
+            style={{ ...ghostBtn, fontSize: 12 }}
+            title="Export as Word document"
+          >
+            {exportingDocx ? '⟳' : '📄'} DOCX
+          </button>
+          <button
+            onClick={() => studySectionResults ? setStudySectionModal('results') : handleRunStudySection()}
+            style={{ ...ghostBtn, fontSize: 12 }}
+            title="Simulate NIH study section review"
+          >
+            🔬 {studySectionResults ? 'Review' : 'Study Section'}
+          </button>
         </div>
 
         {/* Top tabs */}
@@ -511,16 +599,26 @@ export default function GrantEditor({ project, onSave, onBack }) {
                   hasText={!!sections[sec.id]}
                 />
 
-                {/* Citations */}
+                {/* Citations + Polish */}
                 {sections[sec.id] && (
-                  <div style={{ marginTop: 8 }}>
-                    <button
-                      onClick={() => citationSection === sec.id ? setCitationSection(null) : handleFindCitations(sec.id)}
-                      disabled={citationLoading[sec.id]}
-                      style={{ ...ghostBtn, fontSize: 11, padding: '4px 10px' }}
-                    >
-                      {citationLoading[sec.id] ? '⟳ Searching PubMed…' : citationSection === sec.id && citationResults[sec.id] ? '▲ Hide Citations' : '📚 Find Citations'}
-                    </button>
+                  <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button
+                        onClick={() => citationSection === sec.id ? setCitationSection(null) : handleFindCitations(sec.id)}
+                        disabled={citationLoading[sec.id]}
+                        style={{ ...ghostBtn, fontSize: 11, padding: '4px 10px' }}
+                      >
+                        {citationLoading[sec.id] ? '⟳ Searching PubMed…' : citationSection === sec.id && citationResults[sec.id] ? '▲ Hide Citations' : '📚 Find Citations'}
+                      </button>
+                      <button
+                        onClick={() => handlePolish(sec.id)}
+                        disabled={polishing[sec.id]}
+                        style={{ ...ghostBtn, fontSize: 11, padding: '4px 10px' }}
+                        title="Elevate writing quality without changing scientific content"
+                      >
+                        {polishing[sec.id] ? '⟳ Polishing…' : '✨ Polish'}
+                      </button>
+                    </div>
                     {citationSection === sec.id && citationResults[sec.id] && (
                       <CitationsPanel
                         citations={citationResults[sec.id]}
@@ -556,6 +654,9 @@ export default function GrantEditor({ project, onSave, onBack }) {
             <div style={{ display: 'flex', gap: 8, marginTop: '1.5rem' }}>
               <button style={ghostBtn} onClick={() => copyAll(visibleSecs, sections, title, mech)}>Copy full text</button>
               <button style={ghostBtn} onClick={() => downloadTxt(visibleSecs, sections, title, mech)}>Download .txt</button>
+              <button style={ghostBtn} onClick={handleExportDOCX} disabled={exportingDocx}>
+                {exportingDocx ? 'Exporting…' : '📄 Export DOCX'}
+              </button>
             </div>
           </div>
         )}
@@ -597,6 +698,31 @@ export default function GrantEditor({ project, onSave, onBack }) {
           referenceCount={referenceGrants.length}
           onClose={() => setShowGrantDrawer(false)}
           mech={mech}
+        />
+      )}
+
+      {/* Study Section Progress Modal */}
+      {studySectionModal === 'progress' && (
+        <StudySectionProgressModal step={studySectionStep} />
+      )}
+
+      {/* Study Section Results Modal */}
+      {studySectionModal === 'results' && studySectionResults && (
+        <StudySectionResultsModal
+          results={studySectionResults}
+          onClose={() => setStudySectionModal(null)}
+          onRerun={handleRunStudySection}
+        />
+      )}
+
+      {/* Polish Modal */}
+      {polishModal && (
+        <PolishModal
+          secId={polishModal.secId}
+          original={polishModal.original}
+          polished={polishModal.polished}
+          onAccept={handleAcceptPolish}
+          onDiscard={() => setPolishModal(null)}
         />
       )}
     </div>
@@ -902,6 +1028,197 @@ function CitationsPanel({ citations, onInsert, onRefresh }) {
           </div>
         </div>
       ))}
+    </div>
+  )
+}
+
+// ── Study Section Progress Modal ─────────────────────────────────────────────
+function StudySectionProgressModal({ step }) {
+  const steps = [
+    { label: 'Assembling reviewer panel', detail: 'Basic scientist · Physician-scientist · Biostatistician' },
+    { label: 'Primary reviewer reading', detail: 'Scoring significance, innovation, approach…' },
+    { label: 'Secondary & third reviewers', detail: 'Critiquing clinical relevance and study design…' },
+    { label: 'SRO synthesizing summary', detail: 'Writing NIH Summary Statement…' },
+  ]
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+      <div style={{ background: '#fff', borderRadius: 12, padding: '2rem', width: 420, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+        <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 6 }}>🔬 Study Section Simulation</div>
+        <div style={{ fontSize: 13, color: '#888', marginBottom: 24 }}>NIH-style peer review in progress…</div>
+        {steps.map((s, i) => (
+          <div key={i} style={{ display: 'flex', gap: 12, marginBottom: 16, alignItems: 'flex-start' }}>
+            <div style={{
+              width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
+              background: i < step ? '#16a34a' : i === step ? '#2563eb' : '#f0f0f0',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: i <= step ? '#fff' : '#999',
+            }}>
+              {i < step ? '✓' : i === step ? '…' : i + 1}
+            </div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: i === step ? 600 : 400, color: i > step ? '#aaa' : '#111' }}>{s.label}</div>
+              {i === step && <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>{s.detail}</div>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Study Section Results Modal ──────────────────────────────────────────────
+function StudySectionResultsModal({ results, onClose, onRerun }) {
+  const [activeReviewer, setActiveReviewer] = useState(null)
+  const sum = results.summary || {}
+  const impact = sum.impact_score || 0
+  const percentile = sum.percentile || 0
+  const criteria = sum.criteria || {}
+  const impactColor = impact <= 2 ? '#16a34a' : impact <= 4 ? '#2563eb' : impact <= 6 ? '#d97706' : '#dc2626'
+
+  const reviewers = [
+    { key: 'reviewer_1', label: 'Primary Reviewer', role: 'Basic scientist · Molecular/cellular' },
+    { key: 'reviewer_2', label: 'Secondary Reviewer', role: 'Physician-scientist · Translational' },
+    { key: 'reviewer_3', label: 'Reader', role: 'Biostatistician · Methodologist' },
+  ]
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
+      <div style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 720, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+        {/* Header */}
+        <div style={{ padding: '1.25rem 1.5rem', borderBottom: '0.5px solid #e5e5e5', display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 600, fontSize: 16 }}>Study Section Results</div>
+            <div style={{ fontSize: 12, color: '#888' }}>
+              {results.generated_at ? new Date(results.generated_at * 1000).toLocaleString() : ''}
+            </div>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 36, fontWeight: 700, color: impactColor, lineHeight: 1 }}>{impact.toFixed(1)}</div>
+            <div style={{ fontSize: 11, color: '#888' }}>Impact Score</div>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 36, fontWeight: 700, color: impactColor, lineHeight: 1 }}>{percentile}<span style={{ fontSize: 18 }}>th</span></div>
+            <div style={{ fontSize: 11, color: '#888' }}>Percentile</div>
+          </div>
+          <button onClick={onClose} style={{ ...ghostBtn, padding: '4px 10px', fontSize: 13 }}>✕</button>
+        </div>
+
+        <div style={{ overflowY: 'auto', flex: 1, padding: '1.25rem 1.5rem' }}>
+          {/* Criteria table */}
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#555', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>Criterion Scores (1 = Exceptional, 9 = Poor)</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 6 }}>
+              {Object.entries(criteria).map(([k, v]) => (
+                <div key={k} style={{ padding: '8px 10px', background: '#f8f8f8', borderRadius: 8, textAlign: 'center' }}>
+                  <div style={{ fontSize: 20, fontWeight: 600, color: v <= 3 ? '#16a34a' : v <= 5 ? '#2563eb' : '#dc2626' }}>{v}</div>
+                  <div style={{ fontSize: 10, color: '#888', textTransform: 'capitalize' }}>{k}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Strengths + Weaknesses */}
+          {(sum.strengths?.length > 0 || sum.weaknesses?.length > 0) && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+              {sum.strengths?.length > 0 && (
+                <div style={{ padding: '10px 12px', background: '#f0fdf4', borderRadius: 8, border: '0.5px solid #86efac' }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#166534', marginBottom: 6 }}>Strengths</div>
+                  {sum.strengths.map((s, i) => <div key={i} style={{ fontSize: 12, color: '#15803d', marginBottom: 3 }}>✓ {s}</div>)}
+                </div>
+              )}
+              {sum.weaknesses?.length > 0 && (
+                <div style={{ padding: '10px 12px', background: '#fef2f2', borderRadius: 8, border: '0.5px solid #fca5a5' }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#991b1b', marginBottom: 6 }}>Concerns</div>
+                  {sum.weaknesses.map((w, i) => <div key={i} style={{ fontSize: 12, color: '#b91c1c', marginBottom: 3 }}>△ {w}</div>)}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Synthesis */}
+          {sum.synthesis && (
+            <div style={{ padding: '10px 12px', background: '#f8f8f8', borderRadius: 8, marginBottom: 20 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#555', marginBottom: 6 }}>SRO Synthesis</div>
+              <div style={{ fontSize: 13, lineHeight: 1.7, color: '#333', whiteSpace: 'pre-wrap' }}>{sum.synthesis}</div>
+            </div>
+          )}
+
+          {/* Fundability */}
+          {sum.fundability && (
+            <div style={{ padding: '8px 14px', background: impact <= 4 ? '#f0fdf4' : '#fffbeb', border: `0.5px solid ${impact <= 4 ? '#86efac' : '#fcd34d'}`, borderRadius: 8, fontSize: 13, fontWeight: 500, color: impact <= 4 ? '#166534' : '#92400e', marginBottom: 20 }}>
+              {sum.fundability}
+            </div>
+          )}
+
+          {/* Individual Reviewer Critiques */}
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#555', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>Reviewer Critiques</div>
+          {reviewers.map(r => {
+            const data = results[r.key]
+            if (!data) return null
+            const scores = data.scores || {}
+            return (
+              <div key={r.key} style={{ border: '0.5px solid #e5e5e5', borderRadius: 8, marginBottom: 8, overflow: 'hidden' }}>
+                <div
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#f8f8f8', cursor: 'pointer' }}
+                  onClick={() => setActiveReviewer(activeReviewer === r.key ? null : r.key)}
+                >
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500 }}>{r.label}</div>
+                    <div style={{ fontSize: 11, color: '#888' }}>{r.role}</div>
+                  </div>
+                  <div style={{ fontSize: 18, fontWeight: 600, color: (scores.impact || 5) <= 3 ? '#16a34a' : (scores.impact || 5) <= 5 ? '#2563eb' : '#dc2626' }}>
+                    {scores.impact || '—'}
+                  </div>
+                  <span style={{ color: '#888', fontSize: 12 }}>{activeReviewer === r.key ? '▲' : '▼'}</span>
+                </div>
+                {activeReviewer === r.key && (
+                  <div style={{ padding: '10px 12px', fontSize: 13, lineHeight: 1.7, whiteSpace: 'pre-wrap', color: '#333', borderTop: '0.5px solid #e5e5e5', maxHeight: 300, overflowY: 'auto' }}>
+                    {data.critique}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+
+        <div style={{ padding: '1rem 1.5rem', borderTop: '0.5px solid #e5e5e5', display: 'flex', gap: 8 }}>
+          <button onClick={onRerun} style={ghostBtn}>Re-run</button>
+          <button onClick={onClose} style={{ ...ghostBtn, marginLeft: 'auto' }}>Close</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Polish Modal ─────────────────────────────────────────────────────────────
+function PolishModal({ secId, original, polished, onAccept, onDiscard }) {
+  const sec = SECTIONS.find(s => s.id === secId)
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
+      <div style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 900, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+        <div style={{ padding: '1rem 1.5rem', borderBottom: '0.5px solid #e5e5e5', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 600, fontSize: 15 }}>✨ Polish — {sec?.label || secId}</div>
+            <div style={{ fontSize: 12, color: '#888' }}>Review changes below. Accept to replace your current text.</div>
+          </div>
+          <button onClick={onDiscard} style={{ ...ghostBtn, padding: '4px 10px', fontSize: 13 }}>✕</button>
+        </div>
+        <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0, overflowY: 'auto', minHeight: 0 }}>
+          <div style={{ padding: '1rem 1.25rem', borderRight: '0.5px solid #e5e5e5', overflowY: 'auto' }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>Original</div>
+            <div style={{ fontSize: 13, lineHeight: 1.8, whiteSpace: 'pre-wrap', color: '#555', fontFamily: 'Georgia, serif' }}>{original}</div>
+          </div>
+          <div style={{ padding: '1rem 1.25rem', overflowY: 'auto', background: '#fafff8' }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#16a34a', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>Polished ✨</div>
+            <div style={{ fontSize: 13, lineHeight: 1.8, whiteSpace: 'pre-wrap', color: '#111', fontFamily: 'Georgia, serif' }}>{polished}</div>
+          </div>
+        </div>
+        <div style={{ padding: '1rem 1.5rem', borderTop: '0.5px solid #e5e5e5', display: 'flex', gap: 8 }}>
+          <button onClick={onAccept} style={{ ...ghostBtn, background: '#16a34a', color: '#fff', borderColor: '#16a34a', fontWeight: 500 }}>
+            Accept polished version
+          </button>
+          <button onClick={onDiscard} style={ghostBtn}>Discard</button>
+        </div>
+      </div>
     </div>
   )
 }

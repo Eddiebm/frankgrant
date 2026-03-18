@@ -1367,6 +1367,165 @@ async function handleCitations(req, env, userId) {
   return json({ citations, search_terms: searchTerms })
 }
 
+// ── Study Section Simulation ──────────────────────────────────────────────────
+const SS_REVIEWER_1 = `You are the PRIMARY REVIEWER (basic scientist, molecular/cellular focus, 25 years running an NIH-funded lab). Score each criterion 1-9 (1=Exceptional, 9=Poor). Be thorough, candid, and specific. At the very end output exactly: SCORES: {"impact":N,"significance":N,"innovation":N,"approach":N,"investigators":N,"environment":N}`
+const SS_REVIEWER_2 = `You are the SECONDARY REVIEWER (translational physician-scientist MD/PhD). Critique clinical relevance and path to patients. Score each criterion 1-9. At the very end output exactly: SCORES: {"impact":N,"significance":N,"innovation":N,"approach":N,"investigators":N,"environment":N}`
+const SS_REVIEWER_3 = `You are the READER (biostatistician/methodologist). Focus on study design, power calculations, SABV. Give a brief critique focused heavily on Approach. Score all criteria 1-9. At the very end output exactly: SCORES: {"impact":N,"significance":N,"innovation":N,"approach":N,"investigators":N,"environment":N}`
+const SS_SUMMARY = `You are the Scientific Review Officer (SRO) synthesizing three reviewer critiques into an NIH Summary Statement. Output ONLY valid JSON: {"impact_score":N,"percentile":N,"criteria":{"significance":N,"innovation":N,"approach":N,"investigators":N,"environment":N},"strengths":["..."],"weaknesses":["..."],"synthesis":"...","fundability":"..."}`
+
+async function handleStudySection(req, env, userId, projectId) {
+  const project = await env.DB.prepare(
+    'SELECT mechanism, setup, sections FROM projects WHERE id = ? AND user_id = ?'
+  ).bind(projectId, userId).first()
+  if (!project) return err('Project not found', 404)
+
+  let setup = {}, sections = {}
+  try { setup = JSON.parse(project.setup || '{}') } catch {}
+  try { sections = JSON.parse(project.sections || '{}') } catch {}
+
+  const grantText = [
+    sections.aims ? `SPECIFIC AIMS:\n${sections.aims}` : '',
+    sections.sig ? `SIGNIFICANCE:\n${sections.sig}` : '',
+    sections.innov ? `INNOVATION:\n${sections.innov}` : '',
+    sections.approach ? `APPROACH (first 3000 chars):\n${(sections.approach || '').slice(0, 3000)}` : '',
+  ].filter(Boolean).join('\n\n---\n\n') || 'No sections generated yet.'
+
+  const userMsg = `Review this NIH ${project.mechanism || 'grant'} application:
+
+TITLE: ${setup.title || setup.disease || 'Untitled'}
+PI: ${setup.pi || 'Not specified'}
+DISEASE/INDICATION: ${setup.disease || 'Not specified'}
+
+${grantText.slice(0, 7000)}`
+
+  const callReviewer = async (system) => {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 900, system, messages: [{ role: 'user', content: userMsg }] }),
+    })
+    const r = await resp.json()
+    return { text: r.content?.[0]?.text || '', usage: r.usage }
+  }
+
+  const [rev1, rev2, rev3] = await Promise.all([
+    callReviewer(SS_REVIEWER_1),
+    callReviewer(SS_REVIEWER_2),
+    callReviewer(SS_REVIEWER_3),
+  ])
+
+  const extractScores = (text) => {
+    const m = text.match(/SCORES:\s*(\{[^}]+\})/)
+    if (m) { try { return JSON.parse(m[1]) } catch {} }
+    const m2 = text.match(/\{"impact"\s*:\s*\d/)
+    if (m2) { try { return JSON.parse(m2[0] + '}') } catch {} }
+    return { impact: 5, significance: 4, innovation: 4, approach: 5, investigators: 4, environment: 3 }
+  }
+
+  const s1 = extractScores(rev1.text), s2 = extractScores(rev2.text), s3 = extractScores(rev3.text)
+
+  const synthResp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1000,
+      system: SS_SUMMARY,
+      messages: [{ role: 'user', content: `PRIMARY REVIEWER:\n${rev1.text}\n\nSECONDARY REVIEWER:\n${rev2.text}\n\nREADER:\n${rev3.text}` }],
+    }),
+  })
+  const synthResult = await synthResp.json()
+  const synthText = synthResult.content?.[0]?.text || ''
+
+  let summary = null
+  const jm = synthText.match(/\{[\s\S]*\}/)
+  if (jm) { try { summary = JSON.parse(jm[0]) } catch {} }
+
+  if (!summary) {
+    const avg = (k) => Math.round((s1[k] + s2[k] + s3[k]) / 3 * 10) / 10
+    const avgImpact = avg('impact')
+    summary = {
+      impact_score: avgImpact,
+      percentile: Math.min(99, Math.round(avgImpact * 9.5 + 5)),
+      criteria: { significance: avg('significance'), innovation: avg('innovation'), approach: avg('approach'), investigators: avg('investigators'), environment: avg('environment') },
+      strengths: [], weaknesses: [],
+      synthesis: synthText.slice(0, 800),
+      fundability: avgImpact <= 2.5 ? 'Likely fundable' : avgImpact <= 4 ? 'Competitive, near payline' : avgImpact <= 6 ? 'Above payline for most ICs' : 'Below typical payline',
+    }
+  }
+
+  const totalIn = (rev1.usage?.input_tokens || 0) + (rev2.usage?.input_tokens || 0) + (rev3.usage?.input_tokens || 0) + (synthResult.usage?.input_tokens || 0)
+  const totalOut = (rev1.usage?.output_tokens || 0) + (rev2.usage?.output_tokens || 0) + (rev3.usage?.output_tokens || 0) + (synthResult.usage?.output_tokens || 0)
+  const pricing = PRICING['claude-sonnet-4-20250514']
+  const cost = (totalIn / 1e6) * pricing.input + (totalOut / 1e6) * pricing.output
+
+  await env.DB.prepare('INSERT INTO usage_log (id, user_id, action, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(crypto.randomUUID(), userId, 'study_section', 'claude-sonnet-4-20250514', totalIn, totalOut, 0, 0, Math.floor(Date.now() / 1000)).run()
+  await trackUserActivity(userId, '', env, true, totalIn + totalOut, cost)
+
+  const results = {
+    reviewer_1: { critique: rev1.text, scores: s1 },
+    reviewer_2: { critique: rev2.text, scores: s2 },
+    reviewer_3: { critique: rev3.text, scores: s3 },
+    summary,
+    generated_at: Math.floor(Date.now() / 1000),
+  }
+
+  try {
+    await env.DB.prepare('UPDATE projects SET study_section_results = ? WHERE id = ? AND user_id = ?')
+      .bind(JSON.stringify(results), projectId, userId).run()
+  } catch {}
+
+  return json(results)
+}
+
+// ── Polish Section ────────────────────────────────────────────────────────────
+async function handlePolish(req, env, userId, projectId) {
+  const project = await env.DB.prepare('SELECT id FROM projects WHERE id = ? AND user_id = ?').bind(projectId, userId).first()
+  if (!project) return err('Project not found', 404)
+
+  const body = await req.json()
+  const { section_id, section_text, section_label } = body
+  if (!section_text) return err('section_text required')
+
+  const POLISH_SYSTEM = `You are an elite NIH grant writer who has helped secure over $500M in NIH funding. Your specialty is elevating good science into exceptional grant writing without changing the scientific content.`
+
+  const prompt = `Rewrite this NIH grant section (${section_label || section_id}) to elevate it to the highest professional standard WITHOUT changing the scientific content.
+
+ORIGINAL:
+${section_text}
+
+OBJECTIVES:
+1. Remove ALL hedge words: "may", "might", "could", "potentially", "possibly"
+2. Convert passive voice to active voice
+3. Strengthen the opening hook to immediately grab the reviewer
+4. Make knowledge gaps more precise and compelling
+5. State hypotheses as falsifiable claims, not plans
+6. Ensure every paragraph has a clear topic sentence
+7. Strengthen the closing impact statement
+
+PRESERVE scientific facts, structure, and word count (±10%). Return ONLY the polished text.`
+
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 2500, system: POLISH_SYSTEM, messages: [{ role: 'user', content: prompt }] }),
+  })
+  const result = await resp.json()
+  const polished = result.content?.[0]?.text || ''
+
+  const inputTokens = result.usage?.input_tokens || 0
+  const outputTokens = result.usage?.output_tokens || 0
+  const pricing = PRICING['claude-sonnet-4-20250514']
+  const cost = (inputTokens / 1e6) * pricing.input + (outputTokens / 1e6) * pricing.output
+
+  await env.DB.prepare('INSERT INTO usage_log (id, user_id, action, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(crypto.randomUUID(), userId, 'polish', 'claude-sonnet-4-20250514', inputTokens, outputTokens, 0, 0, Math.floor(Date.now() / 1000)).run()
+  await trackUserActivity(userId, '', env, true, inputTokens + outputTokens, cost)
+
+  return json({ polished, section_id })
+}
+
 // ── Main fetch handler ────────────────────────────────────────────────────────
 export default {
   async fetch(req, env, ctx) {
@@ -1535,6 +1694,22 @@ export default {
       // Citations (PubMed)
       if (path === '/api/citations' && req.method === 'POST') {
         const response = await handleCitations(req, env, userId)
+        await logError(path, 200, null, Date.now() - startTime, userId, env)
+        return response
+      }
+
+      // Study Section Simulation
+      const studySectionMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/study-section$/)
+      if (studySectionMatch && req.method === 'POST') {
+        const response = await handleStudySection(req, env, userId, studySectionMatch[1])
+        await logError(path, 200, null, Date.now() - startTime, userId, env)
+        return response
+      }
+
+      // Polish Section
+      const polishMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/polish$/)
+      if (polishMatch && req.method === 'POST') {
+        const response = await handlePolish(req, env, userId, polishMatch[1])
         await logError(path, 200, null, Date.now() - startTime, userId, env)
         return response
       }
