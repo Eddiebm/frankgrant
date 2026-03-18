@@ -2,11 +2,13 @@ import { useState, useCallback } from 'react'
 import { useApi } from '../hooks/useApi'
 import {
   MECHANISMS, SECTIONS, WORDS_PER_PAGE, INSTITUTES,
-  countWords, wordsToPages, getDescriptor, getLimitsText
+  getDescriptor, getLimitsText
 } from '../lib/nih.js'
+import { countWords, estimatePages } from '../lib/compression.js'
 import { PROFESSOR_SYSTEM, professorWritePrompt, polishPrompt, PROGRAM_DIRECTOR_SYSTEM, REVIEWER_1_SYSTEM, REVIEWER_2_SYSTEM, REVIEWER_3_SYSTEM, STUDY_SECTION_SUMMARY_SYSTEM, ADVISORY_COUNCIL_SYSTEM } from '../lib/personas.js'
 
-const MODEL = 'claude-sonnet-4-20250514'
+const HAIKU = 'claude-haiku-4-5-20251001'
+const SONNET = 'claude-sonnet-4-20250514'
 
 export default function GrantEditor({ project, onSave, onBack }) {
   const api = useApi()
@@ -56,8 +58,19 @@ export default function GrantEditor({ project, onSave, onBack }) {
   async function generateSection(secId) {
     setGenerating(g => ({ ...g, [secId]: true }))
     try {
+      // Determine max_tokens based on section type
+      const maxTokensBySection = {
+        'aims': 1200,
+        'sig': 1000,
+        'innov': 1000,
+        'approach': 2500,
+        'facilities': 800,
+        'commercial': 1500
+      }
+
       const result = await api.callAI({
-        model: MODEL, max_tokens: 1500,
+        model: SONNET,
+        max_tokens: maxTokensBySection[secId] || 1500,
         system: PROFESSOR_SYSTEM,
         messages: [{ role: 'user', content: professorWritePrompt(secId, getProject(), mech) }],
       }, `write_${secId}`)
@@ -78,10 +91,11 @@ export default function GrantEditor({ project, onSave, onBack }) {
     setScoring(s => ({ ...s, [secId]: true }))
     try {
       const result = await api.callAI({
-        model: MODEL, max_tokens: 1000,
-        system: SCORE_SYSTEM,
+        model: HAIKU, // Use Haiku for scoring
+        max_tokens: 600,
+        system: `You are an expert NIH grant reviewer. Score this section on the NIH 1-9 scale (1=best). Return ONLY valid JSON: {"score":2,"descriptor":"Outstanding","strengths":["..."],"weaknesses":["..."],"narrative":"..."}`,
         messages: [{ role: 'user', content: `Section: ${sec.label}\nMechanism: ${mech}\n\n${text.slice(0, 6000)}\n\nScore this section. Return only JSON.` }],
-      }, `score_${secId}`)
+      }, 'score_section')
       const raw = result.content.map(b => b.text || '').join('').replace(/```json|```/g, '').trim()
       const scored = JSON.parse(raw)
       const updatedScores = { ...scores, [secId]: scored }
@@ -95,7 +109,7 @@ export default function GrantEditor({ project, onSave, onBack }) {
 
   function getStrategyPages() {
     const words = ['sig', 'innov', 'approach'].reduce((acc, id) => acc + countWords(sections[id]), 0)
-    return wordsToPages(words)
+    return estimatePages(words)
   }
 
   function getComplianceStatus(secId) {
@@ -103,7 +117,7 @@ export default function GrantEditor({ project, onSave, onBack }) {
     if (!sec?.pageLimit) return null
     const text = sections[secId] || ''
     const words = countWords(text)
-    const pages = wordsToPages(words)
+    const pages = estimatePages(words)
     let limit, label
     if (sec.pageLimit === 'aims') { limit = m.aims; label = 'Specific Aims' }
     else if (sec.pageLimit === 'strategy') { limit = m.strategy; label = 'Research Strategy (Sig+Innov+Approach combined)'; return { pages: getStrategyPages(), limit, label } }
@@ -235,7 +249,7 @@ export default function GrantEditor({ project, onSave, onBack }) {
               />
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
                 <span style={{ fontSize: 11, color: '#999' }}>
-                  {countWords(sections[sec.id] || '')} words · ~{wordsToPages(countWords(sections[sec.id] || '')).toFixed(1)} pages
+                  {countWords(sections[sec.id] || '')} words · ~{estimatePages(countWords(sections[sec.id] || '')).toFixed(1)} pages
                 </span>
                 {sections[sec.id] && !scores[sec.id] && (
                   <button onClick={() => scoreSection(sec.id)} disabled={scoring[sec.id]} style={{ ...ghostBtn, fontSize: 11 }}>
@@ -258,7 +272,7 @@ export default function GrantEditor({ project, onSave, onBack }) {
                 {sec.label}
                 {scores[sec.id] && <span style={{ fontSize: 11, color: '#888', fontWeight: 400 }}>· Score: {scores[sec.id].score} — {scores[sec.id].descriptor || getDescriptor(scores[sec.id].score)}</span>}
                 <span style={{ marginLeft: 'auto', fontSize: 11, color: '#999', fontWeight: 400 }}>
-                  {sections[sec.id] ? `${countWords(sections[sec.id])} words · ~${wordsToPages(countWords(sections[sec.id])).toFixed(1)} pp` : ''}
+                  {sections[sec.id] ? `${countWords(sections[sec.id])} words · ~${estimatePages(countWords(sections[sec.id])).toFixed(1)} pp` : ''}
                 </span>
               </div>
               <div style={{ fontSize: 13, lineHeight: 1.8, whiteSpace: 'pre-wrap', color: sections[sec.id] ? '#111' : '#999', fontStyle: sections[sec.id] ? 'normal' : 'italic', fontFamily: 'Georgia, serif' }}>
@@ -326,14 +340,14 @@ function ScoreBar({ score, label, loading, onRescore }) {
 
 function FullGrantCompliance({ sections, scores, mech }) {
   const m = MECHANISMS[mech] || MECHANISMS['STTR-I']
-  const aimsPages = wordsToPages(countWords(sections.aims || ''))
+  const aimsPages = estimatePages(countWords(sections.aims || ''))
   const stratWords = ['sig', 'innov', 'approach'].reduce((a, id) => a + countWords(sections[id] || ''), 0)
-  const stratPages = wordsToPages(stratWords)
+  const stratPages = estimatePages(stratWords)
   const violations = []
   if (aimsPages > 1.05) violations.push(`Specific Aims: ${aimsPages.toFixed(1)} pp (limit 1)`)
   if (stratPages > m.strategy * 1.02) violations.push(`Research Strategy: ${stratPages.toFixed(1)} pp (limit ${m.strategy})`)
   if (m.needsCommercial) {
-    const cp = wordsToPages(countWords(sections.commercial || ''))
+    const cp = estimatePages(countWords(sections.commercial || ''))
     if (cp > m.commercial * 1.02) violations.push(`Commercialization: ${cp.toFixed(1)} pp (limit ${m.commercial})`)
   }
   return (

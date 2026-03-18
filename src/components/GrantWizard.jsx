@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useApi } from '../hooks/useApi'
 import { EXTRACT_STUDY_SYSTEM, PROFESSOR_SYSTEM, professorWritePrompt } from '../lib/personas'
-import { MECHANISMS, SECTIONS, countWords, wordsToPages } from '../lib/nih'
+import { MECHANISMS, SECTIONS } from '../lib/nih'
+import { countWords, estimatePages, createSectionSummary } from '../lib/compression'
 
-const MODEL = 'claude-sonnet-4-20250514'
+const HAIKU = 'claude-haiku-4-5-20251001'
+const SONNET = 'claude-sonnet-4-20250514'
 
 export default function GrantWizard({ onComplete, onCancel }) {
   const api = useApi()
@@ -21,8 +23,8 @@ export default function GrantWizard({ onComplete, onCancel }) {
     setExtracting(true)
     try {
       const result = await api.callAI({
-        model: MODEL,
-        max_tokens: 1500,
+        model: HAIKU, // Use Haiku for extraction
+        max_tokens: 500,
         system: EXTRACT_STUDY_SYSTEM,
         messages: [{ role: 'user', content: description }]
       }, 'extract_study')
@@ -62,33 +64,55 @@ export default function GrantWizard({ onComplete, onCancel }) {
 
     const sections = {}
     const scoreResults = {}
+    const sectionSummaries = {}
 
     for (let i = 0; i < sectionsToGenerate.length; i++) {
       const sec = sectionsToGenerate[i]
       setProgress({ current: i, total: sectionsToGenerate.length, section: sec.label })
 
       try {
-        // Generate section
+        // Determine appropriate model and max_tokens based on section
+        const isApproach = sec.id === 'approach'
+        const writeModel = SONNET
+        const writeMaxTokens = isApproach ? 2500 : (sec.id === 'aims' ? 1200 : 1500)
+
+        // Generate section using Sonnet
         const writeResult = await api.callAI({
-          model: MODEL,
-          max_tokens: 1500,
+          model: writeModel,
+          max_tokens: writeMaxTokens,
           system: PROFESSOR_SYSTEM,
           messages: [{ role: 'user', content: professorWritePrompt(sec.id, project, mechanism) }]
-        }, `wizard_write_${sec.id}`)
+        }, `write_${sec.id}`)
 
         const text = writeResult.content[0].text
         sections[sec.id] = text
         setGeneratedSections({ ...sections })
 
-        // Score section immediately
+        // Create section summary using Haiku for progressive context
+        if (text && text.length > 100) {
+          try {
+            const summaryResult = await api.callAI({
+              model: HAIKU,
+              max_tokens: 300,
+              system: 'You are a technical summarizer. Compress this grant section into exactly 200 words preserving all key scientific content.',
+              messages: [{ role: 'user', content: `Summarize this ${sec.label} section:\n\n${text.slice(0, 4000)}` }]
+            }, 'section_summary')
+
+            sectionSummaries[sec.id] = summaryResult.content[0].text
+          } catch (e) {
+            console.error(`Summary ${sec.id} failed:`, e)
+          }
+        }
+
+        // Score section immediately using Haiku
         if (text && text.length > 50) {
           try {
             const scoreResult = await api.callAI({
-              model: MODEL,
-              max_tokens: 1000,
+              model: HAIKU,
+              max_tokens: 600,
               system: `You are an expert NIH grant reviewer. Score this section on the NIH 1-9 scale (1=best). Return ONLY valid JSON: {"score":2,"descriptor":"Outstanding","strengths":["..."],"weaknesses":["..."],"narrative":"..."}`,
               messages: [{ role: 'user', content: `Section: ${sec.label}\n\n${text.slice(0, 4000)}\n\nScore this section. Return only JSON.` }]
-            }, `wizard_score_${sec.id}`)
+            }, 'score_section')
 
             const raw = scoreResult.content[0].text.replace(/```json|```/g, '').trim()
             const scored = JSON.parse(raw)
@@ -117,10 +141,12 @@ export default function GrantWizard({ onComplete, onCancel }) {
         biology: extracted.biology,
         aims: extracted.aims,
         pa: extracted.pa,
-        commercial: extracted.commercial
+        commercial: extracted.commercial,
+        institute: extracted.institute || ''
       },
       sections,
-      scores: scoreResults
+      scores: scoreResults,
+      section_summaries: sectionSummaries
     }
 
     // Call onComplete with the new project

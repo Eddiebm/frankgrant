@@ -5,6 +5,7 @@ import GrantEditor from './GrantEditor'
 import Scorer from './Scorer'
 import GrantWizard from './GrantWizard'
 import BiosketchGenerator from './BiosketchGenerator'
+import UsageMeter from './UsageMeter'
 
 export default function Dashboard() {
   const { user } = useUser()
@@ -122,6 +123,8 @@ export default function Dashboard() {
           <UserButton afterSignOutUrl="/" />
         </div>
       </div>
+
+      <UsageMeter />
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
         <h2 style={{ fontSize: 15, fontWeight: 500 }}>Your grants</h2>

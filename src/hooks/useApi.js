@@ -34,7 +34,7 @@ export function useApi() {
   async function updateProject(id, data) { return request('PUT', `/projects/${id}`, data) }
   async function deleteProject(id) { return request('DELETE', `/projects/${id}`) }
 
-  // Usage
+  // Usage with detailed monthly tracking
   async function getUsage() { return request('GET', '/usage') }
 
   return { callAI, listProjects, createProject, getProject, updateProject, deleteProject, getUsage }

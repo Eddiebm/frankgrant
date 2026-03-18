@@ -122,18 +122,111 @@ async function ensureUser(clerkPayload, env) {
 
 // ── Route handlers ───────────────────────────────────────────────────────────
 
+// ── Token pricing (per 1M tokens) ─────────────────────────────────────────
+const PRICING = {
+  'claude-sonnet-4-20250514': { input: 3.00, output: 15.00 },
+  'claude-haiku-4-5-20251001': { input: 0.25, output: 1.25 },
+}
+
+// ── Usage tier limits (monthly) ────────────────────────────────────────────
+const TIER_LIMITS = {
+  'individual': 15.00,
+  'lab': 40.00,
+  'unlimited': Infinity,
+}
+
+// ── Max tokens per feature ─────────────────────────────────────────────────
+const MAX_TOKENS_BY_FEATURE = {
+  'extract_study': 300,
+  'compress_grant': 300,
+  'section_summary': 200,
+  'compliance': 500,
+  'letter': 800,
+  'score_section': 600,
+  'pd_review': 1000,
+  'write_aims': 1200,
+  'write_sig': 1000,
+  'write_innov': 1000,
+  'write_approach': 2500,
+  'write_facilities': 800,
+  'write_commercial': 1500,
+  'reviewer_critique': 1000,
+  'summary_statement': 1500,
+  'advisory_council': 800,
+  'biosketch': 1500,
+  'polish': 1000,
+  'default': 1000,
+}
+
+async function checkMonthlyBudget(userId, env, estimatedCost) {
+  const now = new Date()
+  const monthKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`
+
+  // Get user's tier
+  const user = await env.DB.prepare('SELECT plan FROM users WHERE id = ?').bind(userId).first()
+  const tier = user?.plan || 'individual'
+  const limit = TIER_LIMITS[tier] || TIER_LIMITS['individual']
+
+  // Calculate current month's spend
+  const startOfMonth = new Date(now.getUTCFullYear(), now.getUTCMonth(), 1).getTime() / 1000
+  const usage = await env.DB.prepare(
+    `SELECT SUM(input_tokens) as total_input, SUM(output_tokens) as total_output, model
+     FROM usage_log
+     WHERE user_id = ? AND created_at >= ?
+     GROUP BY model`
+  ).bind(userId, startOfMonth).all()
+
+  let currentSpend = 0
+  for (const row of usage.results || []) {
+    const pricing = PRICING[row.model] || PRICING['claude-sonnet-4-20250514']
+    currentSpend += (row.total_input / 1000000) * pricing.input
+    currentSpend += (row.total_output / 1000000) * pricing.output
+  }
+
+  if (currentSpend + estimatedCost > limit) {
+    return { allowed: false, currentSpend, limit, tier }
+  }
+
+  return { allowed: true, currentSpend, limit, tier }
+}
+
 async function handleAI(req, env, userId) {
   const allowed = await checkRateLimit(userId, env)
   if (!allowed) return err('Rate limit exceeded — 30 requests per hour', 429)
 
   const body = await req.json()
 
-  // Safety: strip any injected system prompts beyond what we allow
+  // Model validation
   const allowed_models = ['claude-sonnet-4-20250514', 'claude-haiku-4-5-20251001']
   if (!allowed_models.includes(body.model)) {
     body.model = 'claude-sonnet-4-20250514'
   }
-  body.max_tokens = Math.min(body.max_tokens || 1000, 2000)
+
+  // Set max_tokens based on feature
+  const feature = body._action || 'default'
+  const featureMaxTokens = MAX_TOKENS_BY_FEATURE[feature] || MAX_TOKENS_BY_FEATURE['default']
+  body.max_tokens = Math.min(body.max_tokens || featureMaxTokens, featureMaxTokens)
+
+  // Add prompt caching to system prompts if provided
+  if (body.system && typeof body.system === 'string') {
+    body.system = [
+      {
+        type: 'text',
+        text: body.system,
+        cache_control: { type: 'ephemeral' }
+      }
+    ]
+  }
+
+  // Estimate cost for budget check
+  const estimatedInputTokens = JSON.stringify(body).length / 4 // rough estimate
+  const pricing = PRICING[body.model]
+  const estimatedCost = (estimatedInputTokens / 1000000) * pricing.input + (body.max_tokens / 1000000) * pricing.output
+
+  const budgetCheck = await checkMonthlyBudget(userId, env, estimatedCost)
+  if (!budgetCheck.allowed) {
+    return err(`Monthly budget exceeded. Current: $${budgetCheck.currentSpend.toFixed(2)} / $${budgetCheck.limit.toFixed(2)} (${budgetCheck.tier} tier)`, 429)
+  }
 
   const resp = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -147,12 +240,25 @@ async function handleAI(req, env, userId) {
 
   const result = await resp.json()
 
-  // Log usage
+  // Log usage with model and feature
   const inputTokens = result.usage?.input_tokens || 0
   const outputTokens = result.usage?.output_tokens || 0
+  const cacheCreationTokens = result.usage?.cache_creation_input_tokens || 0
+  const cacheReadTokens = result.usage?.cache_read_input_tokens || 0
+
   await env.DB.prepare(
-    'INSERT INTO usage_log (id, user_id, action, input_tokens, output_tokens) VALUES (?, ?, ?, ?, ?)'
-  ).bind(crypto.randomUUID(), userId, body._action || 'ai_call', inputTokens, outputTokens).run()
+    'INSERT INTO usage_log (id, user_id, action, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(
+    crypto.randomUUID(),
+    userId,
+    feature,
+    body.model,
+    inputTokens,
+    outputTokens,
+    cacheCreationTokens,
+    cacheReadTokens,
+    Math.floor(Date.now() / 1000)
+  ).run()
 
   return json(result)
 }
@@ -169,7 +275,7 @@ async function handleCreateProject(req, env, userId) {
   const id = crypto.randomUUID()
   const now = Math.floor(Date.now() / 1000)
   await env.DB.prepare(
-    'INSERT INTO projects (id, user_id, title, mechanism, setup, sections, scores, is_resubmission, introduction, study_section, updated_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    'INSERT INTO projects (id, user_id, title, mechanism, setup, sections, scores, section_summaries, compressed_grant, is_resubmission, introduction, study_section, review_status, updated_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
   ).bind(
     id, userId,
     body.title || 'Untitled grant',
@@ -177,9 +283,12 @@ async function handleCreateProject(req, env, userId) {
     JSON.stringify(body.setup || {}),
     JSON.stringify(body.sections || {}),
     JSON.stringify(body.scores || {}),
+    JSON.stringify(body.section_summaries || {}),
+    body.compressed_grant || null,
     body.is_resubmission ? 1 : 0,
     body.introduction || null,
     body.study_section || null,
+    body.review_status || 'pending',
     now, now
   ).run()
   return json({ id, title: body.title, mechanism: body.mechanism, created_at: now }, 201)
@@ -193,6 +302,7 @@ async function handleGetProject(req, env, userId, projectId) {
   row.setup = JSON.parse(row.setup || '{}')
   row.sections = JSON.parse(row.sections || '{}')
   row.scores = JSON.parse(row.scores || '{}')
+  row.section_summaries = JSON.parse(row.section_summaries || '{}')
   row.is_resubmission = row.is_resubmission === 1
   return json(row)
 }
@@ -201,16 +311,19 @@ async function handleUpdateProject(req, env, userId, projectId) {
   const body = await req.json()
   const now = Math.floor(Date.now() / 1000)
   const result = await env.DB.prepare(
-    'UPDATE projects SET title = ?, mechanism = ?, setup = ?, sections = ?, scores = ?, is_resubmission = ?, introduction = ?, study_section = ?, updated_at = ? WHERE id = ? AND user_id = ?'
+    'UPDATE projects SET title = ?, mechanism = ?, setup = ?, sections = ?, scores = ?, section_summaries = ?, compressed_grant = ?, is_resubmission = ?, introduction = ?, study_section = ?, review_status = ?, updated_at = ? WHERE id = ? AND user_id = ?'
   ).bind(
     body.title || 'Untitled grant',
     body.mechanism || 'STTR-I',
     JSON.stringify(body.setup || {}),
     JSON.stringify(body.sections || {}),
     JSON.stringify(body.scores || {}),
+    JSON.stringify(body.section_summaries || {}),
+    body.compressed_grant || null,
     body.is_resubmission ? 1 : 0,
     body.introduction || null,
     body.study_section || null,
+    body.review_status || 'pending',
     now, projectId, userId
   ).run()
   if (result.changes === 0) return err('Project not found', 404)
@@ -225,15 +338,77 @@ async function handleDeleteProject(req, env, userId, projectId) {
 }
 
 async function handleUsage(req, env, userId) {
-  const rows = await env.DB.prepare(
+  // Get current month's usage
+  const now = new Date()
+  const startOfMonth = new Date(now.getUTCFullYear(), now.getUTCMonth(), 1).getTime() / 1000
+
+  const monthlyUsage = await env.DB.prepare(
+    `SELECT
+       model,
+       SUM(input_tokens) as input_tokens,
+       SUM(output_tokens) as output_tokens,
+       SUM(cache_creation_tokens) as cache_creation_tokens,
+       SUM(cache_read_tokens) as cache_read_tokens,
+       COUNT(*) as calls
+     FROM usage_log
+     WHERE user_id = ? AND created_at >= ?
+     GROUP BY model`
+  ).bind(userId, startOfMonth).all()
+
+  // Calculate costs
+  let totalCost = 0
+  const breakdown = []
+
+  for (const row of monthlyUsage.results || []) {
+    const pricing = PRICING[row.model] || PRICING['claude-sonnet-4-20250514']
+    const inputCost = (row.input_tokens / 1000000) * pricing.input
+    const outputCost = (row.output_tokens / 1000000) * pricing.output
+    const cacheCreationCost = (row.cache_creation_tokens / 1000000) * pricing.input
+    const cacheReadCost = (row.cache_read_tokens / 1000000) * (pricing.input * 0.1) // 90% discount
+
+    const modelCost = inputCost + outputCost + cacheCreationCost + cacheReadCost
+    totalCost += modelCost
+
+    breakdown.push({
+      model: row.model,
+      input_tokens: row.input_tokens,
+      output_tokens: row.output_tokens,
+      cache_creation_tokens: row.cache_creation_tokens,
+      cache_read_tokens: row.cache_read_tokens,
+      calls: row.calls,
+      cost: modelCost
+    })
+  }
+
+  // Get user's tier
+  const user = await env.DB.prepare('SELECT plan FROM users WHERE id = ?').bind(userId).first()
+  const tier = user?.plan || 'individual'
+  const limit = TIER_LIMITS[tier] || TIER_LIMITS['individual']
+
+  // All-time usage
+  const allTimeUsage = await env.DB.prepare(
     `SELECT
        COUNT(*) as total_calls,
        SUM(input_tokens) as total_input,
-       SUM(output_tokens) as total_output,
-       SUM(input_tokens + output_tokens) as total_tokens
+       SUM(output_tokens) as total_output
      FROM usage_log WHERE user_id = ?`
   ).bind(userId).first()
-  return json(rows)
+
+  return json({
+    monthly: {
+      cost: totalCost,
+      limit: limit,
+      tier: tier,
+      percentage: (totalCost / limit) * 100,
+      breakdown: breakdown
+    },
+    all_time: {
+      total_calls: allTimeUsage.total_calls || 0,
+      total_input: allTimeUsage.total_input || 0,
+      total_output: allTimeUsage.total_output || 0,
+      total_tokens: (allTimeUsage.total_input || 0) + (allTimeUsage.total_output || 0)
+    }
+  })
 }
 
 // ── Main fetch handler ───────────────────────────────────────────────────────
