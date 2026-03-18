@@ -1,13 +1,14 @@
 export const WORDS_PER_PAGE = 275
 
 export const MECHANISMS = {
-  'STTR-I':  { label: 'STTR Phase I (R41)',  aims: 1, strategy: 6,  commercial: 0,  needsCommercial: false, code: 'R41' },
-  'STTR-II': { label: 'STTR Phase II (R42)', aims: 1, strategy: 12, commercial: 12, needsCommercial: true,  code: 'R42' },
-  'SBIR-I':  { label: 'SBIR Phase I (R43)',  aims: 1, strategy: 6,  commercial: 0,  needsCommercial: false, code: 'R43' },
-  'SBIR-II': { label: 'SBIR Phase II (R44)', aims: 1, strategy: 12, commercial: 12, needsCommercial: true,  code: 'R44' },
-  'R21':     { label: 'R21',                 aims: 1, strategy: 6,  commercial: 0,  needsCommercial: false, code: 'R21' },
-  'R01':     { label: 'R01',                 aims: 1, strategy: 12, commercial: 0,  needsCommercial: false, code: 'R01' },
-  'K99':     { label: 'K99/R00',             aims: 1, strategy: 12, commercial: 0,  needsCommercial: false, code: 'K99' },
+  'STTR-I':     { label: 'STTR Phase I (R41)',     aims: 1, strategy: 6,  commercial: 0,  needsCommercial: false, code: 'R41' },
+  'STTR-II':    { label: 'STTR Phase II (R42)',    aims: 1, strategy: 12, commercial: 12, needsCommercial: true,  code: 'R42' },
+  'SBIR-I':     { label: 'SBIR Phase I (R43)',     aims: 1, strategy: 6,  commercial: 0,  needsCommercial: false, code: 'R43' },
+  'SBIR-II':    { label: 'SBIR Phase II (R44)',    aims: 1, strategy: 12, commercial: 12, needsCommercial: true,  code: 'R44' },
+  'FAST-TRACK': { label: 'Fast Track (R41+R42)',   aims: 1, strategy: 12, commercial: 12, needsCommercial: true,  code: 'FAST-TRACK' },
+  'R21':        { label: 'R21',                    aims: 1, strategy: 6,  commercial: 0,  needsCommercial: false, code: 'R21' },
+  'R01':        { label: 'R01',                    aims: 1, strategy: 12, commercial: 0,  needsCommercial: false, code: 'R01' },
+  'K99':        { label: 'K99/R00',                aims: 1, strategy: 12, commercial: 0,  needsCommercial: false, code: 'K99' },
 }
 
 export const SECTIONS = [
