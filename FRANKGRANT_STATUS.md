@@ -1,7 +1,7 @@
 # FrankGrant Status Document
 
 **Last Updated:** 2026-03-18
-**Version:** 4.0.0
+**Version:** 4.1.0
 **Status:** Production (Internal COARE Tool)
 
 ---
@@ -95,7 +95,7 @@
 - ⏳ **PD Review Button** - Get Program Director feedback (persona exists, UI button needed)
 - ⏳ **Study Section Button** - Full 3-reviewer panel simulation (personas exist, UI integration needed)
 - ⏳ **Advisory Council Button** - Council funding recommendation (persona exists, UI button needed)
-- ⏳ **Compliance Checker** - Pre-export validation with pass/fail checklist
+- ✅ **Compliance Checker** - Inline per-section AI compliance check with severity levels (v4.1.0)
 - ⏳ **DOCX Export** - Properly formatted with Georgia 11pt, 0.5" margins
 - ⏳ **PDF Preview** - In-browser rendering with NIH formatting
 
@@ -569,6 +569,22 @@ User → Clerk Auth → React App → Worker API → Anthropic API
 ---
 
 ## 📝 Recent Changes
+
+### **v4.1.0 (2026-03-18) - FOA Parser, NIH Reporter Search, Inline Compliance**
+
+#### **Added**
+- ✅ **FOA Parser** — Enter FOA/RFA number in project setup, auto-fetches NIH page, extracts rules via Haiku. Shows confirmation card (title, institute, due dates, page limits, budget, top priorities). Falls back gracefully if FOA not found. Caches results in D1 `foa_cache` table for 24 hours.
+- ✅ **NIH Reporter Grant Search** — "🔍 Grants" toolbar button opens 380px right-side drawer. Search funded NIH grants by keyword pre-populated from disease field. Results show PI, institution, award amount, fiscal year, truncated abstract with Read More. "Use as Reference" analyzes abstract with Haiku, saves analysis to project (max 5).
+- ✅ **Reference Grant Context** — When reference grants are saved, Significance/Innovation/Approach prompts automatically include analysis patterns (framing, terminology, reviewer signals) without copying content.
+- ✅ **Inline Compliance Checking** — After every section generation, non-blocking Haiku compliance check runs server-side via `ctx.waitUntil()`. Frontend polls `GET /api/projects/:id/compliance` every 4s (max 10 polls). CompliancePanel shows below each section: 🔴 critical / 🟡 warning / 💡 suggestion rows with element, description, fix. Re-check button triggers fresh check.
+- ✅ **New Worker Routes** — `POST /api/foa/parse`, `POST /api/search/grants`, `POST /api/search/analyze-grant`, `POST /api/search/save-reference`, `GET /api/projects/:id/compliance`
+- ✅ **New DB Columns** — `projects.foa_number`, `projects.foa_rules`, `projects.foa_fetched_at`, `projects.foa_valid`, `projects.reference_grants`, `projects.compliance_results`
+
+#### **Changed**
+- Worker updated to v4.1.0, `ctx` added to fetch handler for `waitUntil` support
+- Project CRUD handlers updated to read/write all new columns
+- `useApi.js` extended with `parseFOA`, `searchGrants`, `analyzeGrant`, `saveReference`, `getCompliance`
+- `src/lib/foa_parser.js` created with `extractFOASections`, `FOA_EXTRACTION_PROMPT`, `validateFOARules`
 
 ### **v4.0.0 (2026-03-18) - NIH Compliance Overhaul**
 

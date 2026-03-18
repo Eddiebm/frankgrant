@@ -190,6 +190,30 @@ export function professorWritePrompt(secId, project, mechKey) {
     : ''
   const aimCount = mechKey === 'R21' || mechKey === 'STTR-I' || mechKey === 'SBIR-I' ? 2 : 3
 
+  // Reference grants context — inject patterns from funded grants for sig/innov/approach
+  let referenceContext = ''
+  if (['sig', 'innov', 'approach'].includes(secId) && p.reference_grants && p.reference_grants.length > 0) {
+    const analyses = p.reference_grants
+      .filter(r => r.analysis)
+      .map((r, i) => {
+        const a = r.analysis
+        return `Reference ${i + 1}: "${r.grant_title}"
+- Significance framing: ${a.significance_framing || 'N/A'}
+- Aims structure: ${a.aims_structure || 'N/A'}
+- Innovation claims: ${a.innovation_claims || 'N/A'}
+- Key terminology: ${(a.key_terminology || []).join(', ')}
+- Reviewer signals: ${a.reviewer_signals || 'N/A'}
+- Approach highlights: ${a.approach_highlights || 'N/A'}`
+      })
+      .join('\n\n')
+
+    if (analyses) {
+      referenceContext = `\nFUNDED REFERENCE GRANTS (use for framing and terminology inspiration, NOT copying):
+${analyses}
+Use these patterns to strengthen your framing. Adapt terminology and structural approaches. Do NOT copy content.\n`
+    }
+  }
+
   // Institute-specific context
   let instituteContext = ''
   if (p.institute && INSTITUTES[p.institute]) {
@@ -236,7 +260,7 @@ PROJECT CONTEXT:
 Title: ${p.title || 'Not specified'}
 Disease: ${p.disease || 'Not specified'}
 Biology: ${p.biology || 'Not specified'}
-${phaseNote}
+${phaseNote}${referenceContext}
 
 REQUIRED SUBSECTIONS:
 1. **Public Health Significance**
@@ -264,7 +288,7 @@ PROJECT CONTEXT:
 Title: ${p.title || 'Not specified'}
 Biology: ${p.biology || 'Not specified'}
 Aims: ${p.aims || 'Not specified'}
-${phaseNote}
+${phaseNote}${referenceContext}
 
 WHAT TO INCLUDE:
 1. **Conceptual Innovation**: What existing paradigm are you challenging? Be specific.
@@ -293,7 +317,7 @@ Title: ${p.title || 'Not specified'}
 Disease: ${p.disease || 'Not specified'}
 Biology: ${p.biology || 'Not specified'}
 Aims: ${p.aims || 'Not specified'}
-${phaseNote}
+${phaseNote}${referenceContext}
 
 FOR EACH SPECIFIC AIM, INCLUDE:
 

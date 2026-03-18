@@ -34,8 +34,24 @@ export function useApi() {
   async function updateProject(id, data) { return request('PUT', `/projects/${id}`, data) }
   async function deleteProject(id) { return request('DELETE', `/projects/${id}`) }
 
-  // Usage with detailed monthly tracking
+  // Usage
   async function getUsage() { return request('GET', '/usage') }
 
-  return { callAI, listProjects, createProject, getProject, updateProject, deleteProject, getUsage, getToken }
+  // FOA Parser
+  async function parseFOA(foa_number) { return request('POST', '/foa/parse', { foa_number }) }
+
+  // NIH Reporter
+  async function searchGrants(params) { return request('POST', '/search/grants', params) }
+  async function analyzeGrant(abstract) { return request('POST', '/search/analyze-grant', { abstract }) }
+  async function saveReference(project_id, grant_title, grant_abstract, analysis) {
+    return request('POST', '/search/save-reference', { project_id, grant_title, grant_abstract, analysis })
+  }
+
+  // Compliance
+  async function getCompliance(projectId) { return request('GET', `/projects/${projectId}/compliance`) }
+
+  return {
+    callAI, listProjects, createProject, getProject, updateProject, deleteProject, getUsage,
+    parseFOA, searchGrants, analyzeGrant, saveReference, getCompliance, getToken,
+  }
 }

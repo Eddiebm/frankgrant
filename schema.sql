@@ -151,16 +151,15 @@ CREATE TABLE IF NOT EXISTS foa_cache (
   raw_text TEXT
 );
 
--- Add FOA columns to projects (safe to re-run if columns exist)
+-- Add FOA columns to projects (v4.1.0 — already applied to remote DB)
+-- Run manually if needed: wrangler d1 execute frankgrant-db --remote --command "ALTER TABLE projects ADD COLUMN foa_number TEXT"
 -- ALTER TABLE projects ADD COLUMN foa_number TEXT;
 -- ALTER TABLE projects ADD COLUMN foa_rules TEXT;
 -- ALTER TABLE projects ADD COLUMN foa_fetched_at INTEGER;
 -- ALTER TABLE projects ADD COLUMN foa_valid INTEGER DEFAULT 0;
 
--- ─── COMPLIANCE CHECKING (v4.0.0) ───────────────────────────────────────────
-
+-- ─── COMPLIANCE CHECKING (v4.1.0) ───────────────────────────────────────────
 -- ALTER TABLE projects ADD COLUMN compliance_results TEXT;
 
--- ─── NIH REPORTER REFERENCE GRANTS (v4.0.0) ─────────────────────────────────
-
+-- ─── NIH REPORTER REFERENCE GRANTS (v4.1.0) ─────────────────────────────────
 -- ALTER TABLE projects ADD COLUMN reference_grants TEXT;
