@@ -11,7 +11,8 @@
     "worker:dev": "wrangler dev workers/api.js",
     "worker:deploy": "wrangler deploy workers/api.js",
     "db:init": "wrangler d1 execute frankgrant-db --file=schema.sql",
-    "db:init:remote": "wrangler d1 execute frankgrant-db --remote --file=schema.sql"
+    "db:init:remote": "wrangler d1 execute frankgrant-db --remote --file=schema.sql",
+    "worker:rollback": "npx wrangler deployments rollback"
   },
   "dependencies": {
     "@clerk/backend": "^3.2.1",

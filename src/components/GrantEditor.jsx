@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useUser } from '@clerk/clerk-react'
-import { useApi } from '../hooks/useApi'
+import { useApi, AIUnavailableError } from '../hooks/useApi'
 import PreliminaryData from './PreliminaryData'
 import VoiceMode from './VoiceMode'
 import CollaborationPanel from './CollaborationPanel'
@@ -113,6 +113,29 @@ export default function GrantEditor({ project, onSave, onBack }) {
 
   // Voice Mode
   const [showVoiceMode, setShowVoiceMode] = useState(false)
+
+  // AI unavailable / retry state
+  const [aiUnavailable, setAiUnavailable] = useState(null) // { sectionId, retryAfter, countdown }
+  const retryTimerRef = useRef(null)
+
+  function handleAIUnavailable(e, sectionId) {
+    if (!(e instanceof AIUnavailableError)) return false
+    const retryAfter = e.retryAfter || 60
+    setAiUnavailable({ sectionId, retryAfter, countdown: retryAfter })
+    let count = retryAfter
+    retryTimerRef.current = setInterval(() => {
+      count--
+      setAiUnavailable(prev => prev ? { ...prev, countdown: count } : null)
+      if (count <= 0) {
+        clearInterval(retryTimerRef.current)
+        setAiUnavailable(null)
+        generateSection(sectionId)
+      }
+    }, 1000)
+    return true
+  }
+
+  useEffect(() => () => { if (retryTimerRef.current) clearInterval(retryTimerRef.current) }, [])
 
   // Collaboration
   const { user } = useUser()
@@ -274,7 +297,9 @@ export default function GrantEditor({ project, onSave, onBack }) {
       // Start compliance polling
       startCompliancePolling(secId)
     } catch (e) {
-      alert('Generation failed: ' + e.message)
+      if (!handleAIUnavailable(e, secId)) {
+        alert('Generation failed: ' + e.message)
+      }
     }
     setGenerating(g => ({ ...g, [secId]: false }))
   }
@@ -1553,6 +1578,19 @@ export default function GrantEditor({ project, onSave, onBack }) {
             }}
             onClose={() => setShowBibliography(false)}
           />
+        </div>
+      )}
+
+      {/* AI Unavailable Banner */}
+      {aiUnavailable && (
+        <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', background: '#451a03', border: '1px solid #92400e', borderRadius: 12, padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 14, zIndex: 800, boxShadow: '0 4px 20px rgba(0,0,0,0.4)', maxWidth: 480 }}>
+          <span style={{ fontSize: 20 }}>⚠️</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: '#fde68a' }}>AI generation temporarily unavailable</div>
+            <div style={{ fontSize: 12, color: '#d97706', marginTop: 2 }}>Your work is saved. Auto-retrying in {aiUnavailable.countdown}s…</div>
+          </div>
+          <button onClick={() => { if (retryTimerRef.current) clearInterval(retryTimerRef.current); setAiUnavailable(null); generateSection(aiUnavailable.sectionId) }} style={{ padding: '6px 14px', background: '#d97706', border: 'none', borderRadius: 6, color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600, flexShrink: 0 }}>Retry Now</button>
+          <button onClick={() => { if (retryTimerRef.current) clearInterval(retryTimerRef.current); setAiUnavailable(null) }} style={{ background: 'none', border: 'none', color: '#d97706', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>×</button>
         </div>
       )}
 

@@ -2,6 +2,15 @@ import { useAuth } from '@clerk/clerk-react'
 
 const API_BASE = import.meta.env.VITE_WORKER_URL || '/api'
 
+// Custom error class for AI unavailability — used by UI for retry countdown
+export class AIUnavailableError extends Error {
+  constructor(retryAfter = 60) {
+    super('ai_unavailable')
+    this.name = 'AIUnavailableError'
+    this.retryAfter = retryAfter
+  }
+}
+
 export function useApi() {
   const { getToken } = useAuth()
 
@@ -17,6 +26,10 @@ export function useApi() {
     })
     if (!res.ok) {
       const e = await res.json().catch(() => ({ error: res.statusText }))
+      // Handle AI unavailability specially so UI can show retry countdown
+      if (res.status === 503 && e.error === 'ai_unavailable') {
+        throw new AIUnavailableError(e.retry_after || 60)
+      }
       throw new Error(e.error || `HTTP ${res.status}`)
     }
     return res.json()
@@ -26,6 +39,10 @@ export function useApi() {
   async function callAI(payload, action = 'ai_call') {
     return request('POST', '/ai', { ...payload, _action: action })
   }
+
+  // Status
+  async function getAnthropicStatus() { return fetch(`${API_BASE}/status/anthropic`).then(r => r.json()).catch(() => ({ indicator: 'unknown' })) }
+  async function getAppStatus() { return fetch(`${API_BASE}/status`).then(r => r.json()).catch(() => ({ overall: 'unknown', components: {} })) }
 
   // Projects
   async function listProjects() { return request('GET', '/projects') }
@@ -154,5 +171,6 @@ export function useApi() {
     inviteCollaborator, getCollaborators, deleteCollaborator, patchCollaborator, acceptInvitation,
     getSharedProjects, getPendingInvitations, postComment, getComments, patchComment, deleteComment,
     assignSection, createSnapshot, getVersions, getVersion, restoreVersion,
+    getAnthropicStatus, getAppStatus,
   }
 }

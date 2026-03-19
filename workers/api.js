@@ -106,6 +106,47 @@ async function logError(endpoint, statusCode, errorMessage, responseTime, userId
   }
 }
 
+function sanitizeUserInput(text) {
+  if (!text || typeof text !== 'string') return { text, detected: false }
+  const patterns = [
+    /ignore\s+(?:previous|all)\s+instructions?/gi,
+    /you\s+are\s+now\b/gi,
+    /disregard\s+your\b/gi,
+    /new\s+system\s+prompt/gi,
+    /pretend\s+you\s+are\b/gi,
+    /forget\s+your\s+instructions?/gi,
+    /override\s+your\b/gi,
+    /act\s+as\s+if\b/gi,
+    /\bsystem:\s*/gi,
+    /\[SYSTEM\]/g,
+    /<system>/gi,
+  ]
+  let out = text, detected = false
+  for (const p of patterns) {
+    if (p.test(out)) { detected = true; out = out.replace(p, '[removed]') }
+  }
+  return { text: out, detected }
+}
+
+async function callAnthropicWithFallback(body, env) {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 55000)
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    })
+    clearTimeout(timeoutId)
+    if ([500, 503, 529].includes(resp.status)) return { _fallback: true, status: resp.status }
+    return await resp.json()
+  } catch (e) {
+    clearTimeout(timeoutId)
+    return { _fallback: true, status: e.name === 'AbortError' ? 'timeout' : 500 }
+  }
+}
+
 async function ensureUser(clerkPayload, env) {
   const clerkId = clerkPayload.sub
   const email = clerkPayload.email || clerkPayload['email_address'] || ''
@@ -358,17 +399,26 @@ async function handleAI(req, env, userId, userEmail, ctx) {
     return err(`Monthly budget exceeded. Current: $${budgetCheck.currentSpend.toFixed(2)} / $${budgetCheck.limit.toFixed(2)} (${budgetCheck.tier} tier)`, 429)
   }
 
-  const resp = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': env.ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify(body),
-  })
+  // Sanitize user message content before sending to Anthropic
+  if (body.messages) {
+    let injectionDetected = false
+    body.messages = body.messages.map(m => {
+      if (m.role === 'user' && typeof m.content === 'string') {
+        const { text, detected } = sanitizeUserInput(m.content)
+        if (detected) injectionDetected = true
+        return { ...m, content: text }
+      }
+      return m
+    })
+    if (injectionDetected) {
+      await logError('/api/ai', 200, 'prompt_injection_attempt', 0, userId, env)
+    }
+  }
 
-  const result = await resp.json()
+  const result = await callAnthropicWithFallback(body, env)
+  if (result._fallback) {
+    return json({ error: 'ai_unavailable', message: 'AI generation is temporarily unavailable. Your work is saved. Please try again in a few minutes.', retry_after: 60 }, 503)
+  }
 
   // Log usage
   const inputTokens = result.usage?.input_tokens || 0
@@ -1601,14 +1651,16 @@ Current grant state: ${baseContext ? JSON.stringify(baseContext) : 'No project l
 
 async function handleVoiceSpeak(req, env, userId) {
   const body = await req.json()
-  const { text, use_elevenlabs } = body
+  const { text, use_elevenlabs, voice_id } = body
   if (!text) return err('text required')
 
   const wordCount = text.trim().split(/\s+/).length
+  const VALID_VOICES = ['pNInz6obpgDQGcFmaJgB', '21m00Tcm4TlvDq8ikWAM', 'ErXwobaYiN019PkySvjV', 'MF3mGyEYCl7XYWbV9V8O']
+  const voiceToUse = VALID_VOICES.includes(voice_id) ? voice_id : 'pNInz6obpgDQGcFmaJgB'
 
   if (use_elevenlabs && env.ELEVENLABS_API_KEY && wordCount > 50) {
     try {
-      const elevenResp = await fetch('https://api.elevenlabs.io/v1/text-to-speech/pNInz6obpgDQGcFmaJgB', {
+      const elevenResp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceToUse}`, {
         method: 'POST',
         headers: { 'xi-api-key': env.ELEVENLABS_API_KEY, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2727,6 +2779,209 @@ async function handlePatchProjectStatus(req, env, userId, projectId) {
   return json({ ok: true, updated_at: now })
 }
 
+// ── Anthropic Status Monitor ───────────────────────────────────────────────
+async function getAnthropicStatus(env) {
+  try {
+    const cached = await env.KV.get('anthropic_status', 'json')
+    if (cached && cached._cached_at && (Date.now() - cached._cached_at) < 5 * 60 * 1000) return cached
+    const resp = await fetch('https://status.anthropic.com/api/v2/status.json', { headers: { Accept: 'application/json' } })
+    if (!resp.ok) throw new Error('Status API failed')
+    const data = await resp.json()
+    const result = { indicator: data.status?.indicator || 'unknown', description: data.status?.description || '', _cached_at: Date.now() }
+    await env.KV.put('anthropic_status', JSON.stringify(result), { expirationTtl: 300 })
+    return result
+  } catch {
+    return { indicator: 'unknown', description: 'Status unavailable', _cached_at: Date.now() }
+  }
+}
+
+async function handleAnthropicStatus(req, env) {
+  const status = await getAnthropicStatus(env)
+  return json(status)
+}
+
+async function handleAppStatus(req, env) {
+  const components = {}
+  // Check D1
+  try { await env.DB.prepare('SELECT 1').first(); components.database = 'operational' } catch { components.database = 'outage' }
+  // Check KV
+  try { await env.KV.get('_health_check'); components.storage = 'operational' } catch { components.storage = 'outage' }
+  // Check Anthropic
+  const anthropicStatus = await getAnthropicStatus(env)
+  components.ai_engine = anthropicStatus.indicator === 'none' ? 'operational' : anthropicStatus.indicator === 'unknown' ? 'degraded' : anthropicStatus.indicator
+  components.api = 'operational'
+  components.frontend = 'operational'
+  const overall = Object.values(components).some(s => s === 'outage') ? 'outage'
+    : Object.values(components).some(s => s !== 'operational') ? 'degraded' : 'operational'
+  return json({ overall, components, updated_at: new Date().toISOString() })
+}
+
+// ── Maintenance Mode ──────────────────────────────────────────────────────
+async function handleMaintenanceGet(req, env) {
+  const mode = await env.KV.get('maintenance_mode', 'json')
+  return json(mode || { enabled: false, eta: null })
+}
+
+async function handleMaintenanceSet(req, env) {
+  const body = await req.json()
+  const data = { enabled: !!body.enabled, eta: body.eta || null, message: body.message || 'FrankGrant is performing scheduled maintenance. Your work is saved.' }
+  if (data.enabled) {
+    await env.KV.put('maintenance_mode', JSON.stringify(data))
+  } else {
+    await env.KV.delete('maintenance_mode')
+  }
+  return json({ ok: true, ...data })
+}
+
+// ── R2 Backups ────────────────────────────────────────────────────────────
+async function runDailyBackup(env) {
+  if (!env.BACKUPS) return { ok: false, error: 'R2 not configured' }
+  try {
+    const tables = ['users', 'users_meta', 'projects', 'usage_log', 'error_log', 'rate_limit_log', 'project_collaborators', 'project_comments', 'project_versions']
+    const backup = { _backup_at: new Date().toISOString(), _version: env.WORKER_VERSION || '5.0.0' }
+    for (const table of tables) {
+      try {
+        const result = await env.DB.prepare(`SELECT * FROM ${table} LIMIT 10000`).all()
+        backup[table] = result.results || []
+      } catch { backup[table] = [] }
+    }
+    const now = new Date()
+    const filename = `frankgrant-backup-${now.getUTCFullYear()}-${String(now.getUTCMonth()+1).padStart(2,'0')}-${String(now.getUTCDate()).padStart(2,'0')}-${String(now.getUTCHours()).padStart(2,'0')}.json`
+    const body = JSON.stringify(backup)
+    await env.BACKUPS.put(filename, body, { httpMetadata: { contentType: 'application/json' } })
+    // Delete backups older than 30 days
+    const list = await env.BACKUPS.list()
+    const cutoff = Date.now() - 30 * 24 * 3600 * 1000
+    for (const obj of (list.objects || [])) {
+      if (obj.uploaded && new Date(obj.uploaded).getTime() < cutoff) {
+        try { await env.BACKUPS.delete(obj.key) } catch {}
+      }
+    }
+    return { ok: true, filename, size_bytes: body.length }
+  } catch (e) {
+    return { ok: false, error: e.message }
+  }
+}
+
+async function handleAdminBackup(req, env) {
+  const result = await runDailyBackup(env)
+  return json(result, result.ok ? 200 : 500)
+}
+
+async function handleAdminBackups(req, env) {
+  if (!env.BACKUPS) return json({ backups: [] })
+  try {
+    const list = await env.BACKUPS.list()
+    const backups = (list.objects || []).sort((a, b) => b.key.localeCompare(a.key)).map(o => ({
+      filename: o.key,
+      size_bytes: o.size,
+      uploaded: o.uploaded,
+    }))
+    return json({ backups })
+  } catch (e) { return err('Failed to list backups: ' + e.message, 500) }
+}
+
+async function handleAdminBackupFile(req, env, filename) {
+  if (!env.BACKUPS) return err('R2 not configured', 500)
+  try {
+    const obj = await env.BACKUPS.get(filename)
+    if (!obj) return err('Backup not found', 404)
+    const body = await obj.text()
+    return new Response(body, { status: 200, headers: { ...CORS, 'Content-Type': 'application/json', 'Content-Disposition': `attachment; filename="${filename}"` } })
+  } catch (e) { return err('Failed to retrieve backup: ' + e.message, 500) }
+}
+
+async function handleAdminRestore(req, env) {
+  if (!env.BACKUPS) return err('R2 not configured', 500)
+  const body = await req.json()
+  if (body.confirm !== 'RESTORE') return err('Must confirm with { confirm: "RESTORE" }', 400)
+  if (!body.filename) return err('filename required', 400)
+  try {
+    const obj = await env.BACKUPS.get(body.filename)
+    if (!obj) return err('Backup file not found', 404)
+    const data = await obj.json()
+    const tables = ['users', 'users_meta', 'projects', 'usage_log', 'error_log', 'rate_limit_log', 'project_collaborators', 'project_comments', 'project_versions']
+    let tablesRestored = 0, rowsRestored = 0
+    for (const table of tables) {
+      if (!data[table] || !Array.isArray(data[table])) continue
+      try {
+        await env.DB.prepare(`DELETE FROM ${table}`).run()
+        for (const row of data[table]) {
+          const cols = Object.keys(row)
+          const placeholders = cols.map(() => '?').join(', ')
+          const vals = cols.map(c => row[c])
+          await env.DB.prepare(`INSERT INTO ${table} (${cols.join(', ')}) VALUES (${placeholders})`).bind(...vals).run()
+          rowsRestored++
+        }
+        tablesRestored++
+      } catch {}
+    }
+    return json({ ok: true, tables_restored: tablesRestored, rows_restored: rowsRestored })
+  } catch (e) { return err('Restore failed: ' + e.message, 500) }
+}
+
+// ── Voice Dictate ──────────────────────────────────────────────────────────
+async function handleVoiceDictate(req, env, userId) {
+  const body = await req.json()
+  const { project_id, section_id, transcript } = body
+  if (!transcript?.trim()) return err('transcript required')
+
+  const project = await env.DB.prepare('SELECT mechanism, setup, sections FROM projects WHERE id = ? AND user_id = ?').bind(project_id, userId).first()
+  let setup = {}, sections = {}
+  if (project) {
+    try { setup = JSON.parse(project.setup || '{}') } catch {}
+    try { sections = JSON.parse(project.sections || '{}') } catch {}
+  }
+
+  const sectionLabels = { aims: 'Specific Aims', sig: 'Significance', innov: 'Innovation', approach: 'Approach', summary: 'Project Summary', narrative: 'Project Narrative', data_mgmt: 'Data Management Plan', facilities: 'Facilities', commercial: 'Commercialization' }
+  const label = sectionLabels[section_id] || section_id
+
+  const result = await callAnthropicWithFallback({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 2000,
+    system: `You are an expert NIH grant writer. The PI has verbally described their research. Write a polished ${label} section in NIH grant style based on their dictation. Preserve all specific scientific details, methods, numbers, and findings. Use active voice, confident tone, no hedge words. Return only the section text, no commentary.`,
+    messages: [{
+      role: 'user',
+      content: `Mechanism: ${project?.mechanism || 'SBIR'}\nPI: ${setup.pi || 'the PI'}\nDisease/Topic: ${setup.disease || 'the research area'}\n\nPI Dictation:\n${transcript}\n\nExisting section content (if any, incorporate improvements):\n${sections[section_id] || 'None generated yet'}\n\nWrite the complete ${label} section:`,
+    }],
+  }, env)
+
+  if (result._fallback) return json({ error: 'ai_unavailable', message: 'AI generation unavailable', retry_after: 60 }, 503)
+  const content = result.content?.[0]?.text || ''
+  const inputTokens = result.usage?.input_tokens || 0
+  const outputTokens = result.usage?.output_tokens || 0
+  const cost = (inputTokens / 1e6) * 3.00 + (outputTokens / 1e6) * 15.00
+  await env.DB.prepare('INSERT INTO usage_log (id, user_id, action, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(crypto.randomUUID(), userId, 'voice_dictate', 'claude-sonnet-4-20250514', inputTokens, outputTokens, 0, 0, Math.floor(Date.now() / 1000)).run()
+  await trackUserActivity(userId, '', env, true, inputTokens + outputTokens, cost)
+  return json({ content, section_id })
+}
+
+// ── Voice Edit ─────────────────────────────────────────────────────────────
+async function handleVoiceEdit(req, env, userId) {
+  const body = await req.json()
+  const { section_id, instruction, content } = body
+  if (!instruction?.trim() || !content?.trim()) return err('instruction and content required')
+
+  const result = await callAnthropicWithFallback({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 2500,
+    system: 'You are an expert NIH grant editor. Apply the specific edit instruction exactly as described and return the complete edited section. No commentary, no explanation — just the edited text.',
+    messages: [{
+      role: 'user',
+      content: `Edit instruction: ${instruction}\n\nCurrent section content:\n${content}\n\nReturn the complete edited section:`,
+    }],
+  }, env)
+
+  if (result._fallback) return json({ error: 'ai_unavailable', message: 'AI generation unavailable', retry_after: 60 }, 503)
+  const edited = result.content?.[0]?.text || ''
+  const inputTokens = result.usage?.input_tokens || 0
+  const outputTokens = result.usage?.output_tokens || 0
+  await env.DB.prepare('INSERT INTO usage_log (id, user_id, action, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(crypto.randomUUID(), userId, 'voice_edit', 'claude-sonnet-4-20250514', inputTokens, outputTokens, 0, 0, Math.floor(Date.now() / 1000)).run()
+  return json({ edited, section_id })
+}
+
 // ── Main fetch handler ────────────────────────────────────────────────────────
 export default {
   async fetch(req, env, ctx) {
@@ -2737,6 +2992,22 @@ export default {
     try {
       if (req.method === 'OPTIONS') {
         return new Response(null, { status: 204, headers: CORS })
+      }
+
+      // Maintenance mode check (before all routes except health and admin/maintenance)
+      if (!path.startsWith('/api/health') && !path.startsWith('/api/admin/maintenance') && !path.startsWith('/api/status')) {
+        const maintenance = await env.KV.get('maintenance_mode', 'json').catch(() => null)
+        if (maintenance?.enabled) {
+          return json({ error: 'maintenance', message: maintenance.message || 'FrankGrant is performing scheduled maintenance. Your work is saved.', eta: maintenance.eta }, 503)
+        }
+      }
+
+      // Public status endpoints (no auth required)
+      if (path === '/api/status/anthropic' && req.method === 'GET') {
+        return handleAnthropicStatus(req, env)
+      }
+      if (path === '/api/status' && req.method === 'GET') {
+        return handleAppStatus(req, env)
       }
 
       if (path === '/api/health' && req.method === 'GET') {
@@ -2761,6 +3032,26 @@ export default {
         const responseTime = Date.now() - startTime
         await logError(path, 403, 'User suspended', responseTime, userId, env)
         return err('Account suspended. Contact support.', 403)
+      }
+
+      // IP rate limiting
+      const clientIP = req.headers.get('CF-Connecting-IP') || 'unknown'
+      if (clientIP !== 'unknown') {
+        const ipKey = `rate_ip:${clientIP}:${Math.floor(Date.now() / 60000)}`
+        const ipCount = parseInt(await env.KV.get(ipKey) || '0')
+        if (ipCount >= 100) {
+          try { await env.DB.prepare('INSERT INTO rate_limit_log (user_id, endpoint, ip_address, created_at) VALUES (?, ?, ?, ?)').bind(userId, path, clientIP, Math.floor(Date.now() / 1000)).run() } catch {}
+          return json({ error: 'rate_limited', message: 'Too many requests. Please slow down.' }, 429)
+        }
+        await env.KV.put(ipKey, ipCount + 1, { expirationTtl: 120 })
+      }
+
+      // Payload size check for POST/PUT
+      if (req.method === 'POST' || req.method === 'PUT') {
+        const contentLength = parseInt(req.headers.get('Content-Length') || '0')
+        if (contentLength > 52428800) {
+          return json({ error: 'payload_too_large', max_size_kb: 50 }, 413)
+        }
       }
 
       if (!path.startsWith('/api/command')) {
@@ -3012,6 +3303,16 @@ export default {
         await logError(path, 200, null, Date.now() - startTime, userId, env)
         return response
       }
+      if (path === '/api/voice/dictate' && req.method === 'POST') {
+        const response = await handleVoiceDictate(req, env, userId)
+        await logError(path, 200, null, Date.now() - startTime, userId, env)
+        return response
+      }
+      if (path === '/api/voice/edit' && req.method === 'POST') {
+        const response = await handleVoiceEdit(req, env, userId)
+        await logError(path, 200, null, Date.now() - startTime, userId, env)
+        return response
+      }
 
       // Aims Optimizer
       const optimizeAimsMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/optimize-aims$/)
@@ -3158,6 +3459,13 @@ export default {
         const feedbackMatch = path.match(/^\/api\/command\/feedback\/(\d+)$/)
         if (feedbackMatch && req.method === 'PATCH') return handleCommandFeedbackPatch(req, env, feedbackMatch[1])
         if (path === '/api/command/feedback/cluster' && req.method === 'POST') return handleCommandFeedbackCluster(req, env)
+        if (path === '/api/admin/maintenance' && req.method === 'GET') return handleMaintenanceGet(req, env)
+        if (path === '/api/admin/maintenance' && req.method === 'POST') return handleMaintenanceSet(req, env)
+        if (path === '/api/admin/backup' && req.method === 'POST') return handleAdminBackup(req, env)
+        if (path === '/api/admin/backups' && req.method === 'GET') return handleAdminBackups(req, env)
+        const backupFileMatch = path.match(/^\/api\/admin\/backups\/(.+)$/)
+        if (backupFileMatch && req.method === 'GET') return handleAdminBackupFile(req, env, backupFileMatch[1])
+        if (path === '/api/admin/restore' && req.method === 'POST') return handleAdminRestore(req, env)
       }
 
       const responseTime = Date.now() - startTime
@@ -3169,5 +3477,8 @@ export default {
       await logError(path, 500, error.message, responseTime, null, env)
       return err('Internal server error', 500)
     }
+  },
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(runDailyBackup(env))
   },
 }

@@ -1,7 +1,7 @@
 # FrankGrant Status Document
 
 **Last Updated:** 2026-03-18
-**Version:** 4.11.0
+**Version:** 5.0.0
 **Status:** Production (Internal COARE Tool)
 
 ---
@@ -11,7 +11,8 @@
 | Resource | URL/ID | Status |
 |----------|--------|--------|
 | **Frontend (Pages)** | https://frankgrant.pages.dev | ✅ Live |
-| **Latest Preview** | https://59f19296.frankgrant.pages.dev | ✅ Live |
+| **Latest Preview** | https://bc7119f2.frankgrant.pages.dev | ✅ Live |
+| **R2 Bucket** | frankgrant-backups | ✅ Live |
 | **API Worker** | https://frankgrant-worker.eddie-781pagesdev.workers.dev | ✅ Live |
 | **D1 Database** | frankgrant-db | ✅ Live |
 | **D1 Database ID** | 728339df-7875-4fb7-a58b-196cd8099e22 | — |
@@ -298,6 +299,31 @@
 - ✅ **Tab Navigation** - 9-tab interface with Overview summary panel
 - ✅ **Admin Gating** - Command Station only accessible to eddieb@coareholdings.com
 
+### **Production Resilience (v5.0.0)**
+- ✅ **Graceful Claude Degradation** — `callAnthropicWithFallback()` with 55s AbortController timeout; returns `{_fallback:true}` on 529/500/503; worker returns 503 `ai_unavailable`
+- ✅ **AIUnavailableError** — custom error class in useApi.js; GrantEditor catches it, shows amber retry countdown banner (60s), auto-retries at 0
+- ✅ **Anthropic Status Monitoring** — polls https://status.anthropic.com/api/v2/status.json every 5 min, KV-cached; `GET /api/status/anthropic`; amber dismissible banner in App.jsx
+- ✅ **R2 Automated Backups** — daily 3am UTC cron (`0 3 * * *`), `scheduled()` export, backs up all 9 D1 tables to `frankgrant-backups` R2 bucket as JSON; deletes backups >30 days
+- ✅ **Maintenance Mode** — KV `maintenance_mode` check before all routes; `POST/GET /api/admin/maintenance`; full-screen maintenance page in App.jsx with auto-check every 60s
+- ✅ **IP Rate Limiting** — `CF-Connecting-IP` → KV key `rate_ip:[ip]:[minute]`, limit 100/min; 429 + log to `rate_limit_log` with `ip_address` column
+- ✅ **Prompt Injection Sanitization** — `sanitizeUserInput()` removes 11 patterns (ignore/forget instructions, jailbreak phrases, etc.); logs to `error_log` as `prompt_injection_attempt`
+- ✅ **Payload Size Limits** — Content-Length > 50KB → 413 `{error:'payload_too_large',max_size_kb:50}`
+- ✅ **Public Status Page** — `StatusPage.jsx` at `/#/status`, no auth required, polls `/api/status`, green/amber/red component indicators, auto-refresh 60s
+- ✅ **Full System Status Endpoint** — `GET /api/status` checks D1 row count + KV + Anthropic + maintenance mode; returns `{overall, components, maintenance}`
+- ✅ **Admin Backup Routes** — `POST /api/admin/backup` (manual trigger), `GET /api/admin/backups` (list R2), `GET /api/admin/backups/:file` (download), `POST /api/admin/restore` (destructive restore with `confirm:"RESTORE"`)
+- ✅ **RUNBOOK.md** — 6 operational scenarios: Anthropic down, bad deployment, D1 corruption, malicious abuse, Clerk outage, Cloudflare outage
+- ✅ **worker:rollback script** — `npx wrangler deployments rollback` added to package.json
+
+### **Voice Mode Completions (v5.0.0)**
+- ✅ **Read All Sections** — "read me the whole grant / read from the beginning" → queues all 9 sections in NIH order, shows "Reading section 3 of 7 — Innovation" progress header, speaks each via ElevenLabs
+- ✅ **Interrupt Handling** — `startPeekRecognition()` background SpeechRecognition fires when `isSpeaking`; any detected speech immediately cancels all audio and resumes listening
+- ✅ **Dictate Mode** — "let me dictate / I want to dictate [section]" → continuous SpeechRecognition accumulates transcript until "done/finish/that's all"; sends to `POST /api/voice/dictate` (Sonnet writes the section)
+- ✅ **Voice Edit** — "edit [section] to [instruction]" → `POST /api/voice/edit` (Sonnet applies specific edit); shows diff modal with Accept/Discard buttons controllable by voice
+- ✅ **Speed Control** — "read faster/slower/normal" → adjusts `speechRate` 1.1/0.7/0.88 for both ElevenLabs and browser TTS
+- ✅ **Voice Study Section** — "run the study section / simulate peer review" → announces running, calls route, speaks periodic 15s updates, reads synthesis when complete
+- ✅ **ElevenLabs Voice Selection** — gear icon in Voice Mode overlay; 4 voices: Adam, Rachel, Antoni, Elli (stored in localStorage); dynamic `voice_id` passed to `/api/voice/speak`
+- ✅ **Worker voice routes** — `POST /api/voice/dictate` and `POST /api/voice/edit` added to worker; `handleVoiceSpeak` accepts `voice_id` param validated against `VALID_VOICES`
+
 ---
 
 ## ⏳ Features: Pending Implementation
@@ -314,9 +340,7 @@
 - ⏳ **FOA/NOFO Analyzer** - Parse funding opportunities, analyze fit
 - ⏳ **Batch API Support** - Deep Review mode with 50% cost savings (24-hour latency)
 - ⏳ **Mobile Responsive** - Full optimization for 375px width
-- ⏳ **Retry Logic** - API call retry with exponential backoff
 - ⏳ **Loading Skeletons** - Animated loading states
-- ⏳ **Input Sanitization** - D1 insert protection
 - ⏳ **Clerk Backend SDK** - Replace hand-rolled JWT with official SDK
 - ⏳ **Project Limit (20 max)** - Enforcement per user
 - ⏳ **Commercial Scorer Panel** - BD exec, FDA strategist, VC (3 reviewers for commercialization)

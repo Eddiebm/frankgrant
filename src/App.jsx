@@ -1,21 +1,118 @@
+import { useState, useEffect } from 'react'
 import { SignedIn, SignedOut, SignIn } from '@clerk/clerk-react'
 import Dashboard from './components/Dashboard'
 import ErrorBoundary from './components/ErrorBoundary'
 import FeedbackButton from './components/FeedbackButton'
+import StatusPage from './components/StatusPage'
+
+const API_BASE = import.meta.env.VITE_WORKER_URL || '/api'
+
+function MaintenancePage({ message, eta }) {
+  const [checking, setChecking] = useState(false)
+  async function checkStatus() {
+    setChecking(true)
+    try {
+      const res = await fetch(`${API_BASE}/health`)
+      if (res.ok) { const d = await res.json(); if (d.status === 'ok') window.location.reload() }
+    } catch {}
+    setChecking(false)
+  }
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/health`)
+        if (res.ok) { const d = await res.json(); if (d.status === 'ok') window.location.reload() }
+      } catch {}
+    }, 60000)
+    return () => clearInterval(interval)
+  }, [])
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1.5rem', padding: '2rem', background: '#0f172a', color: '#e2e8f0' }}>
+      <div style={{ fontSize: 40 }}>🔧</div>
+      <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Scheduled Maintenance</h1>
+      <p style={{ fontSize: 15, color: '#94a3b8', textAlign: 'center', maxWidth: 400, margin: 0, lineHeight: 1.6 }}>
+        {message || 'FrankGrant is performing scheduled maintenance. Your work is saved and will be available shortly.'}
+      </p>
+      {eta && <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>Expected completion: {eta}</p>}
+      <button onClick={checkStatus} disabled={checking} style={{ padding: '10px 24px', background: '#6366f1', border: 'none', borderRadius: 8, color: '#fff', cursor: checking ? 'not-allowed' : 'pointer', fontSize: 14, fontWeight: 500, opacity: checking ? 0.7 : 1 }}>
+        {checking ? 'Checking…' : 'Check Status'}
+      </button>
+      <p style={{ fontSize: 12, color: '#475569', margin: 0 }}>Auto-checking every 60 seconds</p>
+    </div>
+  )
+}
+
+function AnthropicStatusBanner({ onDismiss }) {
+  return (
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, background: '#451a03', borderBottom: '1px solid #92400e', padding: '10px 20px', display: 'flex', alignItems: 'center', gap: 12, zIndex: 9999, fontSize: 13, color: '#fde68a' }}>
+      <span>⚠️</span>
+      <span style={{ flex: 1 }}>AI generation is currently experiencing delays due to a third-party service issue. Your saved work is unaffected.</span>
+      <button onClick={onDismiss} style={{ background: 'none', border: 'none', color: '#fde68a', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>×</button>
+    </div>
+  )
+}
 
 export default function App() {
+  const [maintenanceData, setMaintenanceData] = useState(null)
+  const [anthropicDegraded, setAnthropicDegraded] = useState(false)
+  const [bannerDismissed, setBannerDismissed] = useState(false)
+  const [bannerDismissedAt, setBannerDismissedAt] = useState(null)
+
+  // Check if we're on the status page
+  const isStatusPage = window.location.hash === '#/status' || window.location.hash.startsWith('#/status')
+
+  useEffect(() => {
+    if (isStatusPage) return
+    async function checkHealth() {
+      try {
+        const res = await fetch(`${API_BASE}/health`)
+        if (res.status === 503) {
+          const data = await res.json()
+          if (data.error === 'maintenance') setMaintenanceData(data)
+        } else {
+          setMaintenanceData(null)
+        }
+      } catch {}
+    }
+    async function checkAnthropicStatus() {
+      try {
+        const res = await fetch(`${API_BASE}/status/anthropic`)
+        if (res.ok) {
+          const data = await res.json()
+          const degraded = data.indicator && data.indicator !== 'none' && data.indicator !== 'operational'
+          setAnthropicDegraded(degraded)
+        }
+      } catch {}
+    }
+    checkHealth()
+    checkAnthropicStatus()
+    const healthInterval = setInterval(checkHealth, 60000)
+    const anthropicInterval = setInterval(checkAnthropicStatus, 5 * 60 * 1000)
+    return () => { clearInterval(healthInterval); clearInterval(anthropicInterval) }
+  }, [isStatusPage])
+
+  // Re-show banner every 10 minutes if still down
+  useEffect(() => {
+    if (!bannerDismissedAt) return
+    const timer = setTimeout(() => {
+      if (anthropicDegraded) setBannerDismissed(false)
+    }, 10 * 60 * 1000)
+    return () => clearTimeout(timer)
+  }, [bannerDismissedAt, anthropicDegraded])
+
+  if (isStatusPage) return <StatusPage />
+
+  if (maintenanceData) {
+    return <MaintenancePage message={maintenanceData.message} eta={maintenanceData.eta} />
+  }
+
   return (
     <ErrorBoundary>
+      {anthropicDegraded && !bannerDismissed && (
+        <AnthropicStatusBanner onDismiss={() => { setBannerDismissed(true); setBannerDismissedAt(Date.now()) }} />
+      )}
       <SignedOut>
-        <div style={{
-          minHeight: '100vh',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '1.5rem',
-          padding: '2rem',
-        }}>
+        <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1.5rem', padding: '2rem', marginTop: anthropicDegraded && !bannerDismissed ? 44 : 0 }}>
           <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
             <h1 style={{ fontSize: '28px', fontWeight: '500', marginBottom: '6px' }}>FrankGrant</h1>
             <p style={{ fontSize: '14px', color: '#666' }}>NIH grant writing & scoring · COARE Holdings</p>
@@ -24,8 +121,10 @@ export default function App() {
         </div>
       </SignedOut>
       <SignedIn>
-        <Dashboard />
-        <FeedbackButton />
+        <div style={{ marginTop: anthropicDegraded && !bannerDismissed ? 44 : 0 }}>
+          <Dashboard />
+          <FeedbackButton />
+        </div>
       </SignedIn>
     </ErrorBoundary>
   )
