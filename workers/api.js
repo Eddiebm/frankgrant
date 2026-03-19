@@ -1856,47 +1856,104 @@ async function handleVoiceSessionPost(req, env, userId) {
 // ── Study Section Simulation ──────────────────────────────────────────────────
 const SS_REVIEWER_1 = `You are the PRIMARY REVIEWER (basic scientist, molecular/cellular focus, 25 years running an NIH-funded lab). Score each criterion 1-9 (1=Exceptional, 9=Poor). Be thorough, candid, and specific.
 
-You are reviewing the COMPLETE grant application — every section is provided in full. You must read and evaluate what is actually present. When a section is brief or missing, note this explicitly in your critique and score based only on what you can read.
+You are reviewing the COMPLETE grant application — every section is provided in full with word counts.
 
-For any section marked [BRIEF] or [NOT GENERATED] in the word counts header, note in your critique: "The [section] is unusually brief at [N] words — score reflects limited available content."
+CRITERION-LEVEL INCOMPLETENESS DETECTION: Before scoring each criterion, check if there is sufficient content in the relevant sections to score reliably. Set scoreable: false (and score: null) if a section is absent, cuts off mid-sentence, is under 100 words where 500+ is expected, or is missing a required key subsection. Examples: "Regulatory pathway section ends abruptly at 'The IND submission will include' — insufficient to evaluate regulatory strategy" → scoreable: false for Approach. "No PI credentials or team composition provided" → scoreable: false for Investigators.
 
-PACKAGE AUDIT REQUIREMENT: As part of your review, explicitly identify in your critique what is MISSING from this submission that a complete NIH application should contain. Note incomplete sections, missing components, and the impact on your scores.
+EVIDENCE REQUIREMENT: For every criterion, quote or closely paraphrase actual text from the grant. NEVER use generic statements ("the application addresses an important unmet need"). Always cite specific: patient numbers, percentages, dollar amounts, named techniques, quoted claims.
 
-At the very end output exactly: SCORES: {"impact":N,"significance":N,"innovation":N,"approach":N,"investigators":N,"environment":N}`
+SCORE RATIONALE: Explain step-by-step why this exact score — what specific addition would move it one point better, what specific flaw prevents it from being one point better.
 
-const SS_REVIEWER_2 = `You are the SECONDARY REVIEWER (translational physician-scientist MD/PhD). Critique clinical relevance and path to patients. Score each criterion 1-9.
+PACKAGE AUDIT: Explicitly note any missing submission components in your critique.
 
-You are reviewing the COMPLETE grant application — every section is provided in full. Score based only on what you can actually read. When sections are brief or missing, note this explicitly in your critique.
-
-PACKAGE AUDIT REQUIREMENT: Identify what is missing from this submission that complete NIH applications require. Note the clinical development documentation gaps.
-
-At the very end output exactly: SCORES: {"impact":N,"significance":N,"innovation":N,"approach":N,"investigators":N,"environment":N}`
-
-const SS_REVIEWER_3 = `You are the READER (biostatistician/methodologist). Focus on study design, power calculations, SABV. Give a brief critique focused heavily on Approach. Score all criteria 1-9.
-
-You are reviewing the COMPLETE grant application. For any section marked as brief or missing, score based on what is present and note the limitation.
-
-At the very end output exactly: SCORES: {"impact":N,"significance":N,"innovation":N,"approach":N,"investigators":N,"environment":N}`
-
-const SS_SUMMARY = `You are the Scientific Review Officer (SRO) synthesizing three reviewer critiques into an NIH Summary Statement. Output ONLY valid JSON matching this exact structure:
+Output ONLY valid JSON (no preamble, no text outside the JSON):
 {
-  "impact_score": number (1-9, averaged),
-  "percentile": number (estimated 0-99),
-  "criteria": {"significance":number,"innovation":number,"approach":number,"investigators":number,"environment":number},
+  "criteria": {
+    "impact": {"score": 1-9 or null, "evidence": "direct quote or close paraphrase from this grant", "score_rationale": "why this score not one point better or worse", "confidence": "high|medium|low", "scoreable": true/false, "unscorable_reason": null or "specific explanation"},
+    "significance": {"score": 1-9 or null, "evidence": "...", "score_rationale": "...", "confidence": "high|medium|low", "scoreable": true/false, "unscorable_reason": null or "..."},
+    "innovation": {"score": 1-9 or null, "evidence": "...", "score_rationale": "...", "confidence": "high|medium|low", "scoreable": true/false, "unscorable_reason": null or "..."},
+    "approach": {"score": 1-9 or null, "evidence": "...", "score_rationale": "...", "confidence": "high|medium|low", "scoreable": true/false, "unscorable_reason": null or "..."},
+    "investigators": {"score": 1-9 or null, "evidence": "...", "score_rationale": "...", "confidence": "high|medium|low", "scoreable": true/false, "unscorable_reason": null or "..."},
+    "environment": {"score": 1-9 or null, "evidence": "...", "score_rationale": "...", "confidence": "high|medium|low", "scoreable": true/false, "unscorable_reason": null or "..."}
+  },
+  "critique": "2-3 paragraph narrative in NIH study section reviewer voice"
+}`
+
+const SS_REVIEWER_2 = `You are the SECONDARY REVIEWER (translational physician-scientist MD/PhD). Critique clinical relevance and path to patients. Score each criterion 1-9 (1=Exceptional, 9=Poor).
+
+You are reviewing the COMPLETE grant application — every section is provided in full with word counts.
+
+CRITERION-LEVEL INCOMPLETENESS DETECTION: Before scoring each criterion, check if there is sufficient content to score reliably. Set scoreable: false (and score: null) if a section is absent, cuts off mid-sentence, under 100 words where 500+ expected, or missing a required key subsection.
+
+EVIDENCE REQUIREMENT: Quote or closely paraphrase actual text from this specific grant. Never use generic statements. Cite specific patient populations, clinical trial data, regulatory designations, named endpoints.
+
+SCORE RATIONALE: Step-by-step reasoning — why this score, what would make it one point better, what prevents that.
+
+PACKAGE AUDIT: Identify missing clinical development documentation in your critique.
+
+Output ONLY valid JSON:
+{
+  "criteria": {
+    "impact": {"score": 1-9 or null, "evidence": "direct quote/paraphrase from this grant", "score_rationale": "why this score vs one point better/worse", "confidence": "high|medium|low", "scoreable": true/false, "unscorable_reason": null or "..."},
+    "significance": {"score": 1-9 or null, "evidence": "...", "score_rationale": "...", "confidence": "high|medium|low", "scoreable": true/false, "unscorable_reason": null or "..."},
+    "innovation": {"score": 1-9 or null, "evidence": "...", "score_rationale": "...", "confidence": "high|medium|low", "scoreable": true/false, "unscorable_reason": null or "..."},
+    "approach": {"score": 1-9 or null, "evidence": "...", "score_rationale": "...", "confidence": "high|medium|low", "scoreable": true/false, "unscorable_reason": null or "..."},
+    "investigators": {"score": 1-9 or null, "evidence": "...", "score_rationale": "...", "confidence": "high|medium|low", "scoreable": true/false, "unscorable_reason": null or "..."},
+    "environment": {"score": 1-9 or null, "evidence": "...", "score_rationale": "...", "confidence": "high|medium|low", "scoreable": true/false, "unscorable_reason": null or "..."}
+  },
+  "critique": "2-3 paragraph narrative in NIH study section reviewer voice focused on clinical relevance"
+}`
+
+const SS_REVIEWER_3 = `You are the READER (biostatistician/methodologist). Focus on study design, statistical power, SABV. Score all criteria 1-9 (1=Exceptional, 9=Poor). Give a focused critique emphasizing Approach.
+
+You are reviewing the COMPLETE grant application — every section is provided in full with word counts.
+
+CRITERION-LEVEL INCOMPLETENESS DETECTION: Set scoreable: false (score: null) if a section is absent, truncated mid-sentence, under 100 words where 500+ expected, or missing a required subsection. Pay particular attention to missing power calculations, sample size justifications, statistical methods.
+
+EVIDENCE REQUIREMENT: Quote or closely paraphrase actual text. For methodology critique: cite specific sample sizes, named statistical tests, described study designs from the grant text.
+
+SCORE RATIONALE: Step-by-step reasoning for each score vs one point better or worse.
+
+Output ONLY valid JSON:
+{
+  "criteria": {
+    "impact": {"score": 1-9 or null, "evidence": "direct quote/paraphrase from this grant", "score_rationale": "why this score vs one point better/worse", "confidence": "high|medium|low", "scoreable": true/false, "unscorable_reason": null or "..."},
+    "significance": {"score": 1-9 or null, "evidence": "...", "score_rationale": "...", "confidence": "high|medium|low", "scoreable": true/false, "unscorable_reason": null or "..."},
+    "innovation": {"score": 1-9 or null, "evidence": "...", "score_rationale": "...", "confidence": "high|medium|low", "scoreable": true/false, "unscorable_reason": null or "..."},
+    "approach": {"score": 1-9 or null, "evidence": "...", "score_rationale": "...", "confidence": "high|medium|low", "scoreable": true/false, "unscorable_reason": null or "..."},
+    "investigators": {"score": 1-9 or null, "evidence": "...", "score_rationale": "...", "confidence": "high|medium|low", "scoreable": true/false, "unscorable_reason": null or "..."},
+    "environment": {"score": 1-9 or null, "evidence": "...", "score_rationale": "...", "confidence": "high|medium|low", "scoreable": true/false, "unscorable_reason": null or "..."}
+  },
+  "critique": "2-3 paragraph narrative focused heavily on study design and statistical methodology"
+}`
+
+const SS_SUMMARY = `You are the Scientific Review Officer (SRO) synthesizing three reviewer assessments into an NIH Summary Statement. You receive pre-computed averaged criterion scores and three reviewer JSON outputs. Your job is to write the narrative and select the best evidence for each criterion from across the three reviewers.
+
+Output ONLY valid JSON:
+{
+  "impact_score": number (1-9 averaged, null if fewer than 3 of 5 criteria are scoreable),
+  "percentile": number (estimated 0-99, null if impact_score is null),
+  "criteria": {
+    "significance": {"score": use the pre-computed score provided, "evidence": "best evidence from any reviewer — direct quote or paraphrase from the grant", "score_rationale": "synthesized step-by-step rationale from reviewer consensus", "confidence": "high|medium|low", "scoreable": true/false, "unscorable_reason": null or "synthesized reason"},
+    "innovation": {same 6 fields},
+    "approach": {same 6 fields},
+    "investigators": {same 6 fields},
+    "environment": {same 6 fields}
+  },
   "strengths": ["string"],
   "weaknesses": ["string"],
-  "synthesis": "string (2-3 paragraph summary statement)",
+  "synthesis": "string (2-3 paragraph summary statement in SRO voice)",
   "fundability": "string",
   "missing_components": [
     {
-      "component": "string (name of missing or incomplete element)",
-      "expected_location": "string (which section it should appear in)",
-      "why_it_matters": "string (what NIH reviewers expect to see here and why its absence affects the score)",
-      "impact_on_score": "string (which criteria this affects and how)",
+      "component": "string",
+      "expected_location": "string",
+      "why_it_matters": "string",
+      "impact_on_score": "string",
       "severity": "critical|major|minor"
     }
   ],
-  "package_completeness_critique": "string (a paragraph written in reviewer voice, directly to the applicant, explicitly calling out what is missing from the submission package and the likely impact on fundability)"
+  "package_completeness_critique": "string (reviewer-voice paragraph directly to applicant)"
 }`
 
 async function handleStudySection(req, env, userId, projectId) {
@@ -1931,13 +1988,21 @@ IMPORTANT — D2P2 APPLICATION: This is an NCI Direct to Phase 2 application. Th
     const systemWithD2P2 = system + d2p2ReviewerNote
     const resp = await callAnthropicWithFallback({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 1500,
+      max_tokens: 2000,
       system: systemWithD2P2,
       messages: [{ role: 'user', content: userMsg }],
     }, env)
-    if (resp._fallback) return { text: 'Reviewer unavailable due to service interruption.', usage: { input_tokens: 0, output_tokens: 0 } }
+    if (resp._fallback) return { criteria: null, critique: 'Reviewer unavailable due to service interruption.', usage: { input_tokens: 0, output_tokens: 0 } }
     const r = await resp.json()
-    return { text: r.content?.[0]?.text || '', usage: r.usage }
+    const text = r.content?.[0]?.text || ''
+    let parsed = null
+    const jm = text.match(/\{[\s\S]*\}/)
+    if (jm) { try { parsed = JSON.parse(jm[0]) } catch {} }
+    return {
+      criteria: parsed?.criteria || null,
+      critique: parsed?.critique || text,
+      usage: r.usage,
+    }
   }
 
   const [rev1, rev2, rev3] = await Promise.all([
@@ -1946,21 +2011,71 @@ IMPORTANT — D2P2 APPLICATION: This is an NCI Direct to Phase 2 application. Th
     callReviewer(SS_REVIEWER_3),
   ])
 
-  const extractScores = (text) => {
-    const m = text.match(/SCORES:\s*(\{[^}]+\})/)
-    if (m) { try { return JSON.parse(m[1]) } catch {} }
-    const m2 = text.match(/\{"impact"\s*:\s*\d/)
-    if (m2) { try { return JSON.parse(m2[0] + '}') } catch {} }
-    return { impact: 5, significance: 4, innovation: 4, approach: 5, investigators: 4, environment: 3 }
+  // Aggregate criterion scores in JS for reliability
+  const criteriaKeys = ['significance', 'innovation', 'approach', 'investigators', 'environment']
+  const aggregatedCriteria = {}
+  for (const key of criteriaKeys) {
+    const revData = [rev1, rev2, rev3].map(r => r.criteria?.[key]).filter(Boolean)
+    const scoreableRevs = revData.filter(c => c.scoreable !== false && c.score != null)
+    const majorityScoreable = scoreableRevs.length >= Math.ceil(revData.length / 2)
+    const avgScore = scoreableRevs.length > 0
+      ? Math.round(scoreableRevs.reduce((s, c) => s + c.score, 0) / scoreableRevs.length * 10) / 10
+      : null
+    const evidenceSrc = scoreableRevs.find(c => c.confidence === 'high') || scoreableRevs[0] || revData[0]
+    aggregatedCriteria[key] = {
+      score: majorityScoreable ? avgScore : null,
+      scoreable: majorityScoreable,
+      unscorable_reason: majorityScoreable ? null : (revData.find(c => c.unscorable_reason)?.unscorable_reason || 'Insufficient content to score this criterion reliably'),
+      evidence: evidenceSrc?.evidence || null,
+      score_rationale: evidenceSrc?.score_rationale || null,
+      confidence: evidenceSrc?.confidence || 'medium',
+    }
   }
 
-  const s1 = extractScores(rev1.text), s2 = extractScores(rev2.text), s3 = extractScores(rev3.text)
+  // Impact score: null if fewer than 3 of 5 criteria are scoreable
+  const scoreableCount = criteriaKeys.filter(k => aggregatedCriteria[k].scoreable).length
+  const impactRevData = [rev1, rev2, rev3].map(r => r.criteria?.impact).filter(Boolean)
+  const scoreableImpact = impactRevData.filter(c => c.scoreable !== false && c.score != null)
+  const rawImpactScore = scoreableImpact.length > 0
+    ? Math.round(scoreableImpact.reduce((s, c) => s + c.score, 0) / scoreableImpact.length * 10) / 10
+    : null
+  const finalImpactScore = scoreableCount >= 3 ? rawImpactScore : null
+
+  // Legacy scores object for reviewer accordion display
+  const toScores = (rev) => {
+    const c = rev.criteria || {}
+    return {
+      impact: c.impact?.score || null,
+      significance: c.significance?.score || null,
+      innovation: c.innovation?.score || null,
+      approach: c.approach?.score || null,
+      investigators: c.investigators?.score || null,
+      environment: c.environment?.score || null,
+    }
+  }
+  const s1 = toScores(rev1), s2 = toScores(rev2), s3 = toScores(rev3)
+
+  const synthInput = `PRE-COMPUTED AVERAGED SCORES (use these exactly in criteria.score fields):
+${JSON.stringify(aggregatedCriteria, null, 2)}
+
+SCOREABLE CRITERIA COUNT: ${scoreableCount} of 5 (impact_score should be ${scoreableCount >= 3 ? finalImpactScore : 'null — fewer than 3 criteria scoreable'})
+
+PRIMARY REVIEWER CRITIQUE:
+${rev1.critique}
+
+SECONDARY REVIEWER CRITIQUE:
+${rev2.critique}
+
+READER CRITIQUE:
+${rev3.critique}
+
+For each criterion in your output: use the pre-computed score exactly, but synthesize the best evidence and score_rationale from all three reviewers.`
 
   const synthResp = await callAnthropicWithFallback({
     model: 'claude-sonnet-4-20250514',
-    max_tokens: 2000,
+    max_tokens: 2500,
     system: SS_SUMMARY,
-    messages: [{ role: 'user', content: `PRIMARY REVIEWER:\n${rev1.text}\n\nSECONDARY REVIEWER:\n${rev2.text}\n\nREADER:\n${rev3.text}` }],
+    messages: [{ role: 'user', content: synthInput }],
   }, env)
 
   let synthResult = { content: [{ text: '' }], usage: { input_tokens: 0, output_tokens: 0 } }
@@ -1972,17 +2087,34 @@ IMPORTANT — D2P2 APPLICATION: This is an NCI Direct to Phase 2 application. Th
   if (jm) { try { summary = JSON.parse(jm[0]) } catch {} }
 
   if (!summary) {
-    const avg = (k) => Math.round((s1[k] + s2[k] + s3[k]) / 3 * 10) / 10
-    const avgImpact = avg('impact')
     summary = {
-      impact_score: avgImpact,
-      percentile: Math.min(99, Math.round(avgImpact * 9.5 + 5)),
-      criteria: { significance: avg('significance'), innovation: avg('innovation'), approach: avg('approach'), investigators: avg('investigators'), environment: avg('environment') },
+      impact_score: finalImpactScore,
+      percentile: finalImpactScore != null ? Math.min(99, Math.round(finalImpactScore * 9.5 + 5)) : null,
+      criteria: aggregatedCriteria,
       strengths: [], weaknesses: [],
       synthesis: synthText.slice(0, 1200),
-      fundability: avgImpact <= 2.5 ? 'Likely fundable' : avgImpact <= 4 ? 'Competitive, near payline' : avgImpact <= 6 ? 'Above payline for most ICs' : 'Below typical payline',
+      fundability: finalImpactScore != null
+        ? (finalImpactScore <= 2.5 ? 'Likely fundable' : finalImpactScore <= 4 ? 'Competitive, near payline' : finalImpactScore <= 6 ? 'Above payline for most ICs' : 'Below typical payline')
+        : 'Unable to determine — insufficient scoreable criteria',
       missing_components: [],
       package_completeness_critique: '',
+    }
+  } else {
+    // Ensure pre-computed scores are used (SRO may have guessed different values)
+    summary.impact_score = finalImpactScore
+    summary.percentile = finalImpactScore != null ? Math.min(99, Math.round(finalImpactScore * 9.5 + 5)) : null
+    if (summary.criteria) {
+      for (const key of criteriaKeys) {
+        if (summary.criteria[key]) {
+          summary.criteria[key].score = aggregatedCriteria[key].score
+          summary.criteria[key].scoreable = aggregatedCriteria[key].scoreable
+          if (!summary.criteria[key].unscorable_reason) {
+            summary.criteria[key].unscorable_reason = aggregatedCriteria[key].unscorable_reason
+          }
+        }
+      }
+    } else {
+      summary.criteria = aggregatedCriteria
     }
   }
 
@@ -1996,9 +2128,9 @@ IMPORTANT — D2P2 APPLICATION: This is an NCI Direct to Phase 2 application. Th
   await trackUserActivity(userId, '', env, true, totalIn + totalOut, cost)
 
   const results = {
-    reviewer_1: { critique: rev1.text, scores: s1 },
-    reviewer_2: { critique: rev2.text, scores: s2 },
-    reviewer_3: { critique: rev3.text, scores: s3 },
+    reviewer_1: { critique: rev1.critique, scores: s1, criteria: rev1.criteria },
+    reviewer_2: { critique: rev2.critique, scores: s2, criteria: rev2.criteria },
+    reviewer_3: { critique: rev3.critique, scores: s3, criteria: rev3.criteria },
     summary,
     input_tokens_reviewer_1: rev1.usage?.input_tokens || 0,
     generated_at: Math.floor(Date.now() / 1000),
@@ -2282,15 +2414,21 @@ SCORING RUBRIC (each dimension 0-20 points):
 - Revenue Model: Is the revenue model credible? Pricing, reimbursement, payer landscape?
 - Commercial Team: Does the team have the commercial experience to execute?
 
+CRITERION-LEVEL INCOMPLETENESS DETECTION: For each dimension, check if sufficient content is present to score reliably. Set scoreable: false (score: null) if the relevant section is absent, truncated, under 50 words where 200+ is expected, or missing a key required element.
+
+EVIDENCE REQUIREMENT: For each dimension's evidence field, quote or closely paraphrase actual text from the grant — specific TAM figures, named FDA pathways, quoted revenue projections, named team members with credentials.
+
+SCORE RATIONALE: Step-by-step — why this score (0-20) not one point higher or lower.
+
 Return ONLY valid JSON:
 {
   "viability": "high|medium|low|not_viable",
-  "overall_score": number,
-  "market": {"score":number,"feedback":"string","tam_estimate":"string","key_insight":"string"},
-  "ip": {"score":number,"feedback":"string","ip_strength":"strong|moderate|weak","key_insight":"string"},
-  "regulatory": {"score":number,"feedback":"string","pathway":"string","timeline_estimate":"string"},
-  "revenue_model": {"score":number,"feedback":"string","model_type":"string","key_insight":"string"},
-  "commercial_team": {"score":number,"feedback":"string","gaps":["string"]},
+  "overall_score": number or null if 3+ dimensions unscorable,
+  "market": {"score": number or null, "evidence": "direct quote/paraphrase from grant", "score_rationale": "why this score vs one point better/worse", "confidence": "high|medium|low", "scoreable": true/false, "unscorable_reason": null or "...", "feedback":"string","tam_estimate":"string","key_insight":"string"},
+  "ip": {"score": number or null, "evidence": "...", "score_rationale": "...", "confidence": "high|medium|low", "scoreable": true/false, "unscorable_reason": null or "...", "feedback":"string","ip_strength":"strong|moderate|weak","key_insight":"string"},
+  "regulatory": {"score": number or null, "evidence": "...", "score_rationale": "...", "confidence": "high|medium|low", "scoreable": true/false, "unscorable_reason": null or "...", "feedback":"string","pathway":"string","timeline_estimate":"string"},
+  "revenue_model": {"score": number or null, "evidence": "...", "score_rationale": "...", "confidence": "high|medium|low", "scoreable": true/false, "unscorable_reason": null or "...", "feedback":"string","model_type":"string","key_insight":"string"},
+  "commercial_team": {"score": number or null, "evidence": "...", "score_rationale": "...", "confidence": "high|medium|low", "scoreable": true/false, "unscorable_reason": null or "...", "feedback":"string","gaps":["string"]},
   "investor_readiness": "series_a_ready|seed_stage|pre_seed|not_ready",
   "strengths": ["string"],
   "critical_weaknesses": ["string"],
@@ -2966,7 +3104,64 @@ async function handleOptimizeAims(req, env, userId, projectId) {
     body: JSON.stringify({
       model: SONNET,
       max_tokens: 1500,
-      system: `You are an expert NIH grant reviewer who has reviewed over 1,000 Specific Aims pages. Score this Aims page on 5 critical elements and provide specific improvement feedback. Return ONLY valid JSON: { "overall_score": number (0-100), "elements": { "hook_sentence": { "score": number (0-20), "feedback": string, "example_improvement": string }, "problem_statement": { "score": number (0-20), "feedback": string, "example_improvement": string }, "aims_structure": { "score": number (0-20), "feedback": string, "example_improvement": string }, "innovation_claim": { "score": number (0-20), "feedback": string, "example_improvement": string }, "impact_statement": { "score": number (0-20), "feedback": string, "example_improvement": string } }, "strongest_element": string, "weakest_element": string, "top_three_improvements": string[], "reviewer_first_impression": string, "fundability_prediction": string }`,
+      system: `You are an expert NIH grant reviewer who has reviewed over 1,000 Specific Aims pages. Score this Aims page on 5 critical elements. For each element, you must quote or closely paraphrase actual text from the aims page as evidence for your score.
+
+Return ONLY valid JSON:
+{
+  "overall_score": number (0-100),
+  "elements": {
+    "hook_sentence": {
+      "score": number (0-20),
+      "evidence": "direct quote or close paraphrase of the actual hook sentence from this aims page",
+      "score_rationale": "why this score (0-20) not one point higher or lower — what would improve it",
+      "scoreable": true/false,
+      "unscorable_reason": null or "reason if hook is absent or cut off",
+      "feedback": string,
+      "example_improvement": string
+    },
+    "problem_statement": {
+      "score": number (0-20),
+      "evidence": "direct quote/paraphrase of the problem statement from this aims page",
+      "score_rationale": "step-by-step reasoning for this score",
+      "scoreable": true/false,
+      "unscorable_reason": null or "...",
+      "feedback": string,
+      "example_improvement": string
+    },
+    "aims_structure": {
+      "score": number (0-20),
+      "evidence": "quote/paraphrase of how aims are structured — first aim statement, numbering, etc.",
+      "score_rationale": "step-by-step reasoning",
+      "scoreable": true/false,
+      "unscorable_reason": null or "...",
+      "feedback": string,
+      "example_improvement": string
+    },
+    "innovation_claim": {
+      "score": number (0-20),
+      "evidence": "quote/paraphrase of the innovation/novelty claim from this aims page",
+      "score_rationale": "step-by-step reasoning",
+      "scoreable": true/false,
+      "unscorable_reason": null or "...",
+      "feedback": string,
+      "example_improvement": string
+    },
+    "impact_statement": {
+      "score": number (0-20),
+      "evidence": "quote/paraphrase of the impact/significance statement from this aims page",
+      "score_rationale": "step-by-step reasoning",
+      "scoreable": true/false,
+      "unscorable_reason": null or "...",
+      "feedback": string,
+      "example_improvement": string
+    }
+  },
+  "strongest_element": string,
+  "weakest_element": string,
+  "top_three_improvements": string[],
+  "reviewer_first_impression": string,
+  "fundability_prediction": string
+}`,
       messages: [{ role: 'user', content: `Score this Specific Aims page:\n\n${aimsText}${sections.sig ? `\n\nSIGNIFICANCE SECTION (for context):\n${sections.sig}` : ''}` }],
     }),
   })

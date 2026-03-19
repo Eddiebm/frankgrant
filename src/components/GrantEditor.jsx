@@ -470,7 +470,7 @@ export default function GrantEditor({ project, onSave, onBack }) {
       const result = await api.callAI({
         model: HAIKU,
         max_tokens: 600,
-        system: `You are an expert NIH grant reviewer. Score this section on the NIH 1-9 scale (1=best). Return ONLY valid JSON: {"score":2,"descriptor":"Outstanding","strengths":["..."],"weaknesses":["..."],"narrative":"..."}`,
+        system: `You are an expert NIH grant reviewer. Score this section on the NIH 1-9 scale (1=best). Quote or closely paraphrase actual text from the section as evidence. Return ONLY valid JSON: {"score":2,"descriptor":"Outstanding","evidence":"direct quote or paraphrase from this section supporting the score","score_rationale":"why this score not one point better or worse","confidence":"high|medium|low","scoreable":true,"unscorable_reason":null,"strengths":["..."],"weaknesses":["..."],"narrative":"..."}`,
         messages: [{ role: 'user', content: `Section: ${sec.label}\nMechanism: ${mech}\n\n${text.slice(0, 6000)}\n\nScore this section. Return only JSON.` }],
       }, 'score_section')
       const raw = result.content.map(b => b.text || '').join('').replace(/```json|```/g, '').trim()
@@ -2253,19 +2253,58 @@ function ComplianceBar({ compliance }) {
 }
 
 function ScoreBar({ score, label, loading, onRescore }) {
+  const [showEvidence, setShowEvidence] = React.useState(false)
+  const s = score.score
+  const scoreable = score.scoreable !== false
+  const confColor = { high: '#16a34a', medium: '#d97706', low: '#dc2626' }[score.confidence] || '#6b7280'
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 14px', background: '#f8f8f8', borderRadius: 8, marginBottom: 8 }}>
-      <div style={{ fontSize: 24, fontWeight: 500, minWidth: 28 }}>{loading ? '↻' : score.score}</div>
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 11, color: '#888' }}>{label} · live score</div>
-        <div style={{ fontSize: 13, fontWeight: 500 }}>{score.descriptor || getDescriptor(score.score)}</div>
-        {score.narrative && <div style={{ fontSize: 12, color: '#555', marginTop: 4, lineHeight: 1.6 }}>{score.narrative}</div>}
-        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 5 }}>
-          {(score.strengths || []).slice(0, 2).map((s, i) => <span key={i} style={pill}>✓ {s.slice(0, 45)}</span>)}
-          {(score.weaknesses || []).slice(0, 2).map((w, i) => <span key={i} style={pill}>△ {w.slice(0, 45)}</span>)}
+    <div style={{ border: '0.5px solid #e5e5e5', borderRadius: 8, marginBottom: 8, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 14px', background: scoreable ? '#f8f8f8' : '#f9fafb' }}>
+        <div style={{ fontSize: 24, fontWeight: 500, minWidth: 28, color: scoreable ? (s <= 3 ? '#16a34a' : s <= 5 ? '#2563eb' : '#dc2626') : '#9ca3af' }}>
+          {loading ? '↻' : scoreable ? s : '—'}
         </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 11, color: '#888' }}>{label} · live score</div>
+          {scoreable ? (
+            <>
+              <div style={{ fontSize: 13, fontWeight: 500 }}>{score.descriptor || getDescriptor(s)}</div>
+              {score.confidence && <span style={{ fontSize: 10, color: confColor, fontWeight: 600 }}>{score.confidence.toUpperCase()} CONFIDENCE</span>}
+              {score.narrative && <div style={{ fontSize: 12, color: '#555', marginTop: 4, lineHeight: 1.6 }}>{score.narrative}</div>}
+              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 5 }}>
+                {(score.strengths || []).slice(0, 2).map((str, i) => <span key={i} style={pill}>✓ {str.slice(0, 45)}</span>)}
+                {(score.weaknesses || []).slice(0, 2).map((w, i) => <span key={i} style={pill}>△ {w.slice(0, 45)}</span>)}
+              </div>
+              {(score.evidence || score.score_rationale) && (
+                <button onClick={() => setShowEvidence(v => !v)} style={{ ...ghostBtn, fontSize: 10, marginTop: 6, padding: '2px 8px' }}>
+                  {showEvidence ? '▲ Hide' : '▼ Why this score'}
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>⚠ Unscorable — complete this section to receive a score</div>
+              {score.unscorable_reason && <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 3, fontStyle: 'italic' }}>{score.unscorable_reason}</div>}
+            </>
+          )}
+        </div>
+        <button onClick={onRescore} disabled={loading} style={{ ...ghostBtn, fontSize: 11 }}>Re-score</button>
       </div>
-      <button onClick={onRescore} disabled={loading} style={{ ...ghostBtn, fontSize: 11 }}>Re-score</button>
+      {showEvidence && scoreable && (score.evidence || score.score_rationale) && (
+        <div style={{ padding: '10px 14px', background: '#fff', borderTop: '0.5px solid #e5e5e5', fontSize: 12 }}>
+          {score.evidence && (
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontWeight: 600, color: '#374151', marginBottom: 3 }}>Evidence from grant:</div>
+              <div style={{ color: '#374151', lineHeight: 1.6, fontStyle: 'italic', borderLeft: '2px solid #d1d5db', paddingLeft: 10 }}>{score.evidence}</div>
+            </div>
+          )}
+          {score.score_rationale && (
+            <div>
+              <div style={{ fontWeight: 600, color: '#374151', marginBottom: 3 }}>Score rationale:</div>
+              <div style={{ color: '#555', lineHeight: 1.6 }}>{score.score_rationale}</div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -2599,6 +2638,100 @@ function StudySectionProgressModal({ step }) {
   )
 }
 
+// ── NIHScoreCard — evidence-based criterion display ───────────────────────────
+function NIHScoreCard({ criteria, impact }) {
+  const [expandedKey, setExpandedKey] = React.useState(null)
+  const CRITERION_KEYS = ['significance', 'innovation', 'approach', 'investigators', 'environment']
+  const CRITERION_LABELS = { significance: 'Significance', innovation: 'Innovation', approach: 'Approach', investigators: 'Investigators', environment: 'Environment' }
+
+  // Normalise: old format is {significance: 4, ...}, new is {significance: {score, evidence, ...}}
+  const normaliseCriterion = (k, v) => {
+    if (typeof v === 'number') return { score: v, scoreable: true, evidence: null, score_rationale: null, confidence: null, unscorable_reason: null }
+    return v || { score: null, scoreable: false, evidence: null, score_rationale: null, confidence: null, unscorable_reason: 'No data' }
+  }
+
+  const normCriteria = {}
+  for (const k of CRITERION_KEYS) normCriteria[k] = normaliseCriterion(k, criteria[k])
+
+  const scoreableCount = CRITERION_KEYS.filter(k => normCriteria[k].scoreable !== false).length
+  const bannerConfig = scoreableCount === 5
+    ? { bg: '#f0fdf4', border: '#86efac', text: '#166534', icon: '✅', msg: 'All 5 criteria fully scored' }
+    : scoreableCount >= 3
+    ? { bg: '#fffbeb', border: '#fcd34d', text: '#92400e', icon: '⚠️', msg: `${scoreableCount} of 5 criteria scored — ${5 - scoreableCount} require more content` }
+    : { bg: '#fef2f2', border: '#fca5a5', text: '#991b1b', icon: '❌', msg: `Only ${scoreableCount} of 5 criteria scoreable — overall impact score suspended` }
+
+  const scoreColor = (s) => s == null ? '#9ca3af' : s <= 3 ? '#16a34a' : s <= 5 ? '#2563eb' : s <= 7 ? '#d97706' : '#dc2626'
+  const confColor = { high: '#16a34a', medium: '#d97706', low: '#dc2626' }
+
+  return (
+    <div style={{ marginBottom: 20 }}>
+      {/* Completeness banner */}
+      <div style={{ padding: '8px 12px', background: bannerConfig.bg, border: `0.5px solid ${bannerConfig.border}`, borderRadius: 8, marginBottom: 10, fontSize: 12, color: bannerConfig.text, fontWeight: 500 }}>
+        {bannerConfig.icon} {bannerConfig.msg}
+      </div>
+
+      {/* Criterion cards */}
+      <div style={{ fontSize: 12, fontWeight: 600, color: '#555', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>Criterion Scores (1 = Exceptional, 9 = Poor)</div>
+      {CRITERION_KEYS.map(k => {
+        const c = normCriteria[k]
+        const isExpanded = expandedKey === k
+        const scoreable = c.scoreable !== false
+        return (
+          <div key={k} style={{ border: '0.5px solid #e5e5e5', borderRadius: 8, marginBottom: 6, overflow: 'hidden' }}>
+            <div
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: scoreable ? '#f8f8f8' : '#f9fafb', cursor: (c.evidence || c.score_rationale || c.unscorable_reason) ? 'pointer' : 'default' }}
+              onClick={() => (c.evidence || c.score_rationale || c.unscorable_reason) && setExpandedKey(isExpanded ? null : k)}
+            >
+              <div style={{ fontSize: 22, fontWeight: 700, minWidth: 32, color: scoreable ? scoreColor(c.score) : '#9ca3af' }}>
+                {scoreable ? (c.score ?? '—') : '—'}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 500, textTransform: 'capitalize' }}>{CRITERION_LABELS[k]}</div>
+                {!scoreable && c.unscorable_reason && (
+                  <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>⚠ {c.unscorable_reason.slice(0, 80)}{c.unscorable_reason.length > 80 ? '…' : ''}</div>
+                )}
+                {scoreable && c.confidence && (
+                  <span style={{ fontSize: 10, color: confColor[c.confidence] || '#6b7280', fontWeight: 600 }}>{c.confidence.toUpperCase()} CONFIDENCE</span>
+                )}
+              </div>
+              {!scoreable ? (
+                <span style={{ fontSize: 11, color: '#6b7280', background: '#f3f4f6', padding: '2px 8px', borderRadius: 10 }}>Complete to score</span>
+              ) : (c.evidence || c.score_rationale) ? (
+                <span style={{ color: '#9ca3af', fontSize: 11 }}>{isExpanded ? '▲' : '▼ Why'}</span>
+              ) : null}
+            </div>
+            {isExpanded && (
+              <div style={{ padding: '10px 14px', background: '#fff', borderTop: '0.5px solid #e5e5e5', fontSize: 12 }}>
+                {!scoreable ? (
+                  <div style={{ padding: '8px 12px', background: '#f9fafb', border: '0.5px solid #e5e5e5', borderRadius: 6, color: '#6b7280' }}>
+                    <div style={{ fontWeight: 600, marginBottom: 4 }}>⚠ Complete this section to receive a score</div>
+                    <div style={{ fontStyle: 'italic' }}>{c.unscorable_reason}</div>
+                  </div>
+                ) : (
+                  <>
+                    {c.evidence && (
+                      <div style={{ marginBottom: 10 }}>
+                        <div style={{ fontWeight: 600, color: '#374151', marginBottom: 4 }}>Evidence from grant</div>
+                        <div style={{ color: '#374151', lineHeight: 1.7, fontStyle: 'italic', borderLeft: '2px solid #d1d5db', paddingLeft: 10 }}>{c.evidence}</div>
+                      </div>
+                    )}
+                    {c.score_rationale && (
+                      <div>
+                        <div style={{ fontWeight: 600, color: '#374151', marginBottom: 4 }}>Score rationale</div>
+                        <div style={{ color: '#555', lineHeight: 1.7 }}>{c.score_rationale}</div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ── Study Section Results Modal ──────────────────────────────────────────────
 function StudySectionResultsModal({ results, onClose, onRerun }) {
   const [activeReviewer, setActiveReviewer] = useState(null)
@@ -2637,18 +2770,8 @@ function StudySectionResultsModal({ results, onClose, onRerun }) {
         </div>
 
         <div style={{ overflowY: 'auto', flex: 1, padding: '1.25rem 1.5rem' }}>
-          {/* Criteria table */}
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: '#555', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>Criterion Scores (1 = Exceptional, 9 = Poor)</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 6 }}>
-              {Object.entries(criteria).map(([k, v]) => (
-                <div key={k} style={{ padding: '8px 10px', background: '#f8f8f8', borderRadius: 8, textAlign: 'center' }}>
-                  <div style={{ fontSize: 20, fontWeight: 600, color: v <= 3 ? '#16a34a' : v <= 5 ? '#2563eb' : '#dc2626' }}>{v}</div>
-                  <div style={{ fontSize: 10, color: '#888', textTransform: 'capitalize' }}>{k}</div>
-                </div>
-              ))}
-            </div>
-          </div>
+          {/* NIHScoreCard — Completeness Banner + Criterion Cards */}
+          <NIHScoreCard criteria={criteria} impact={impact} />
 
           {/* Strengths + Weaknesses */}
           {(sum.strengths?.length > 0 || sum.weaknesses?.length > 0) && (
@@ -2699,8 +2822,8 @@ function StudySectionResultsModal({ results, onClose, onRerun }) {
                     <div style={{ fontSize: 13, fontWeight: 500 }}>{r.label}</div>
                     <div style={{ fontSize: 11, color: '#888' }}>{r.role}</div>
                   </div>
-                  <div style={{ fontSize: 18, fontWeight: 600, color: (scores.impact || 5) <= 3 ? '#16a34a' : (scores.impact || 5) <= 5 ? '#2563eb' : '#dc2626' }}>
-                    {scores.impact || '—'}
+                  <div style={{ fontSize: 18, fontWeight: 600, color: scores.impact == null ? '#9ca3af' : scores.impact <= 3 ? '#16a34a' : scores.impact <= 5 ? '#2563eb' : '#dc2626' }}>
+                    {scores.impact ?? '—'}
                   </div>
                   <span style={{ color: '#888', fontSize: 12 }}>{activeReviewer === r.key ? '▲' : '▼'}</span>
                 </div>
@@ -2787,20 +2910,54 @@ function CommercialReviewModal({ results, onClose, onRerun }) {
   const inv = invConfig[results.investor_readiness] || { label: results.investor_readiness || 'Unknown', color: '#6b7280' }
 
   function ScoreDimension({ label, dim }) {
+    const [showEvidence, setShowEvidence] = React.useState(false)
     if (!dim) return null
-    const pct = ((dim.score || 0) / 20) * 100
+    const scoreable = dim.scoreable !== false
+    const pct = scoreable && dim.score != null ? (dim.score / 20) * 100 : 0
     const color = pct >= 70 ? '#16a34a' : pct >= 40 ? '#d97706' : '#dc2626'
+    const confColor = { high: '#16a34a', medium: '#d97706', low: '#dc2626' }[dim.confidence] || '#6b7280'
     return (
       <div style={{ marginBottom: 14 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 13 }}>
           <span style={{ fontWeight: 600 }}>{label}</span>
-          <span style={{ fontWeight: 700, color }}>{dim.score}/20</span>
+          <span style={{ fontWeight: 700, color: scoreable ? color : '#9ca3af' }}>{scoreable && dim.score != null ? `${dim.score}/20` : '—/20'}</span>
         </div>
-        <div style={{ height: 6, background: '#e5e7eb', borderRadius: 3, marginBottom: 8 }}>
-          <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 3 }} />
-        </div>
-        <div style={{ fontSize: 12, color: '#374151', lineHeight: 1.5 }}>{dim.feedback}</div>
-        {dim.key_insight && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 4, fontStyle: 'italic' }}>{dim.key_insight}</div>}
+        {scoreable ? (
+          <>
+            <div style={{ height: 6, background: '#e5e7eb', borderRadius: 3, marginBottom: 8 }}>
+              <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 3 }} />
+            </div>
+            {dim.confidence && <div style={{ fontSize: 10, color: confColor, fontWeight: 600, marginBottom: 4 }}>{dim.confidence.toUpperCase()} CONFIDENCE</div>}
+            <div style={{ fontSize: 12, color: '#374151', lineHeight: 1.5 }}>{dim.feedback}</div>
+            {dim.key_insight && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 4, fontStyle: 'italic' }}>{dim.key_insight}</div>}
+            {(dim.evidence || dim.score_rationale) && (
+              <button onClick={() => setShowEvidence(v => !v)} style={{ ...ghostBtn, fontSize: 10, marginTop: 6, padding: '2px 8px' }}>
+                {showEvidence ? '▲ Hide' : '▼ Why this score'}
+              </button>
+            )}
+            {showEvidence && (
+              <div style={{ marginTop: 8, padding: '10px 12px', background: '#f9fafb', borderRadius: 6, fontSize: 12 }}>
+                {dim.evidence && (
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={{ fontWeight: 600, color: '#374151', marginBottom: 3 }}>Evidence from grant</div>
+                    <div style={{ color: '#374151', lineHeight: 1.6, fontStyle: 'italic', borderLeft: '2px solid #d1d5db', paddingLeft: 10 }}>{dim.evidence}</div>
+                  </div>
+                )}
+                {dim.score_rationale && (
+                  <div>
+                    <div style={{ fontWeight: 600, color: '#374151', marginBottom: 3 }}>Score rationale</div>
+                    <div style={{ color: '#555', lineHeight: 1.6 }}>{dim.score_rationale}</div>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        ) : (
+          <div style={{ padding: '8px 12px', background: '#f9fafb', border: '0.5px solid #e5e5e5', borderRadius: 6, marginBottom: 4 }}>
+            <div style={{ fontSize: 12, color: '#6b7280', fontWeight: 500 }}>⚠ Complete this section to receive a score</div>
+            {dim.unscorable_reason && <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 3, fontStyle: 'italic' }}>{dim.unscorable_reason}</div>}
+          </div>
+        )}
       </div>
     )
   }
