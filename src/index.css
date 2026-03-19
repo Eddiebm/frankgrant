@@ -11,12 +11,21 @@ a { color: inherit; }
   button, input, select, textarea,
   .no-print { display: none !important; }
 
-  body { background: #fff; font-size: 12pt; font-family: Georgia, serif; color: #000; }
+  body { background: #fff; font-size: 11pt; font-family: Georgia, serif; color: #000; line-height: 1.4; }
+
+  @page { margin: 0.5in; size: letter; }
 
   /* Show the full grant text */
-  .print-content { display: block !important; }
+  .print-content { display: block !important; white-space: pre-wrap; orphans: 3; widows: 3; }
+
+  .print-section-heading { font-size: 12pt; font-weight: bold; margin-top: 24pt; margin-bottom: 6pt; page-break-after: avoid; }
+  .print-section-break { page-break-before: always; }
 
   h1, h2, h3 { page-break-after: avoid; }
   p, pre { orphans: 3; widows: 3; }
   pre { white-space: pre-wrap; }
+
+  /* When print-grant-content is present, hide everything else */
+  body > *:not(#print-grant-content) { display: none !important; }
+  #print-grant-content { display: block !important; }
 }

@@ -4,6 +4,7 @@ import Dashboard from './components/Dashboard'
 import ErrorBoundary from './components/ErrorBoundary'
 import FeedbackButton from './components/FeedbackButton'
 import StatusPage from './components/StatusPage'
+import SharedGrantView from './components/SharedGrantView'
 
 const API_BASE = import.meta.env.VITE_WORKER_URL || '/api'
 
@@ -61,8 +62,12 @@ export default function App() {
   // Check if we're on the status page
   const isStatusPage = window.location.hash === '#/status' || window.location.hash.startsWith('#/status')
 
+  // Check if we're on a shared grant page (public, no auth)
+  const sharedMatch = window.location.hash.match(/^#\/shared\/([a-f0-9]+)$/)
+  const sharedToken = sharedMatch?.[1] || null
+
   useEffect(() => {
-    if (isStatusPage) return
+    if (isStatusPage || sharedToken) return
     async function checkHealth() {
       try {
         const res = await fetch(`${API_BASE}/health`)
@@ -101,6 +106,7 @@ export default function App() {
   }, [bannerDismissedAt, anthropicDegraded])
 
   if (isStatusPage) return <StatusPage />
+  if (sharedToken) return <SharedGrantView token={sharedToken} />
 
   if (maintenanceData) {
     return <MaintenancePage message={maintenanceData.message} eta={maintenanceData.eta} />

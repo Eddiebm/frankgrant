@@ -137,6 +137,21 @@ export default function GrantEditor({ project, onSave, onBack }) {
   const [checklistData, setChecklistData] = useState(null)
   const [checklistLoading, setChecklistLoading] = useState(false)
 
+  // Email Grant (v5.7.0)
+  const [emailGrant_loading, setEmailGrantLoading] = useState(false)
+  const [emailGrant_selfStatus, setEmailGrantSelfStatus] = useState(null) // null | 'ok' | 'err'
+  const [emailGrant_selfMsg, setEmailGrantSelfMsg] = useState('')
+  const [showEmailColleagueModal, setShowEmailColleagueModal] = useState(false)
+  const [emailColleague_to, setEmailColleagueTo] = useState('')
+  const [emailColleague_sending, setEmailColleagueSending] = useState(false)
+  const [emailColleague_sentList, setEmailColleagueSentList] = useState([])
+  const [emailColleague_status, setEmailColleagueStatus] = useState(null)
+
+  // Share Token (v5.7.0)
+  const [showShareModal, setShowShareModal] = useState(false)
+  const [shareInfo, setShareInfo] = useState(null) // null | { enabled, share_url, expires_at }
+  const [shareLoading, setShareLoading] = useState(false)
+
   // AI unavailable / retry state
   const [aiUnavailable, setAiUnavailable] = useState(null) // { sectionId, retryAfter, countdown }
   const retryTimerRef = useRef(null)
@@ -625,7 +640,111 @@ export default function GrantEditor({ project, onSave, onBack }) {
 
   function handlePrint() {
     setShowExportDropdown(false)
+    const sectionOrder = [
+      { key: 'project_summary', label: 'PROJECT SUMMARY' },
+      { key: 'project_narrative', label: 'PROJECT NARRATIVE' },
+      { key: 'aims', label: 'SPECIFIC AIMS' },
+      { key: 'sig', label: 'SIGNIFICANCE' },
+      { key: 'innov', label: 'INNOVATION' },
+      { key: 'approach', label: 'APPROACH' },
+      { key: 'commercial', label: 'COMMERCIALIZATION PLAN' },
+      { key: 'data_mgmt', label: 'DATA MANAGEMENT AND SHARING PLAN' },
+      { key: 'facilities', label: 'FACILITIES AND RESOURCES' },
+    ]
+    const piName = setup.pi || ''
+    const institution = setup.partner || ''
+    let html = `<div style="text-align:center;margin-bottom:48pt;font-family:Georgia,serif;">
+      <h1 style="font-size:14pt;font-weight:bold;">${title || 'Untitled Grant'}</h1>
+      <p style="font-size:11pt;">${piName}${piName && mech ? ' | ' : ''}${mech}${mech && project.institute ? ' | ' : ''}${project.institute || ''}</p>
+      ${foaNumber ? `<p style="font-size:10pt;">FOA: ${foaNumber}</p>` : ''}
+    </div>`
+    let first = true
+    for (const { key, label } of sectionOrder) {
+      if (sections[key]) {
+        html += `<div class="${first ? '' : 'print-section-break'}">
+          <h2 class="print-section-heading">${label}</h2>
+          <div class="print-content">${sections[key].replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+        </div>`
+        first = false
+      }
+    }
+    html += `<div style="margin-top:48pt;font-size:9pt;font-style:italic;color:#666;border-top:1px solid #ccc;padding-top:12pt;">
+      Prepared by FrankGrant Grant Writing Services. Scientific content owned by ${piName || 'the applicant'}${institution ? ', ' + institution : ''}. The applicant is solely responsible for verifying all content before submission.
+    </div>`
+    const printDiv = document.createElement('div')
+    printDiv.id = 'print-grant-content'
+    printDiv.innerHTML = html
+    document.body.appendChild(printDiv)
     window.print()
+    document.body.removeChild(printDiv)
+  }
+
+  async function docxToBase64() {
+    const fullProject = { ...getProject(), id: project.id }
+    const buffer = await generateGrantDOCX(fullProject, sections, scores, getBibliography())
+    const bytes = new Uint8Array(buffer)
+    let bin = ''
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i])
+    return btoa(bin)
+  }
+
+  async function handleEmailSelf() {
+    const userEmail = user?.primaryEmailAddress?.emailAddress
+    if (!userEmail) { setEmailGrantSelfMsg('Could not get your email from your account.'); setEmailGrantSelfStatus('err'); return }
+    setShowExportDropdown(false)
+    setEmailGrantLoading(true)
+    setEmailGrantSelfStatus(null)
+    try {
+      const docxB64 = await docxToBase64()
+      const result = await api.emailGrant(project.id, userEmail, docxB64)
+      if (result.ok) { setEmailGrantSelfStatus('ok'); setEmailGrantSelfMsg(`Sent to ${userEmail}`) }
+      else if (result.error === 'email_not_configured') { setEmailGrantSelfStatus('err'); setEmailGrantSelfMsg('Email not configured — download DOCX instead.') }
+      else { setEmailGrantSelfStatus('err'); setEmailGrantSelfMsg(result.message || 'Failed to send email.') }
+    } catch (e) { setEmailGrantSelfStatus('err'); setEmailGrantSelfMsg(e.message) }
+    setEmailGrantLoading(false)
+  }
+
+  async function handleEmailColleague() {
+    if (!emailColleague_to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailColleague_to)) {
+      setEmailColleagueStatus({ ok: false, msg: 'Enter a valid email address.' }); return
+    }
+    setEmailColleagueSending(true)
+    setEmailColleagueStatus(null)
+    try {
+      const docxB64 = await docxToBase64()
+      const result = await api.emailGrant(project.id, emailColleague_to, docxB64)
+      if (result.ok) {
+        setEmailColleagueSentList(l => [...l, emailColleague_to])
+        setEmailColleagueStatus({ ok: true, msg: `Sent to ${emailColleague_to}` })
+        setEmailColleagueTo('')
+      } else if (result.error === 'email_not_configured') {
+        setEmailColleagueStatus({ ok: false, msg: 'Email not configured — download DOCX instead.' })
+      } else {
+        setEmailColleagueStatus({ ok: false, msg: result.message || 'Failed to send.' })
+      }
+    } catch (e) { setEmailColleagueStatus({ ok: false, msg: e.message }) }
+    setEmailColleagueSending(false)
+  }
+
+  async function handleOpenShareModal() {
+    setShowExportDropdown(false)
+    setShowShareModal(true)
+    if (shareInfo !== null) return
+    setShareLoading(true)
+    try { setShareInfo(await api.getShare(project.id)) } catch { setShareInfo({ enabled: false }) }
+    setShareLoading(false)
+  }
+
+  async function handleCreateShare() {
+    setShareLoading(true)
+    try { setShareInfo(await api.createShare(project.id, 30)) } catch (e) { alert('Failed to create share link: ' + e.message) }
+    setShareLoading(false)
+  }
+
+  async function handleRevokeShare() {
+    setShareLoading(true)
+    try { await api.deleteShare(project.id); setShareInfo({ enabled: false }) } catch (e) { alert('Failed to revoke: ' + e.message) }
+    setShareLoading(false)
   }
 
   // ── Aims Optimizer ────────────────────────────────────────────────────────────
@@ -953,16 +1072,29 @@ export default function GrantEditor({ project, onSave, onBack }) {
               {exportingDocx ? '⟳ Exporting…' : exportingPackage ? '⟳ Packaging…' : '📄 Export ▾'}
             </button>
             {showExportDropdown && (
-              <div style={{ position: 'absolute', top: '100%', right: 0, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 100, minWidth: 200, padding: '4px 0' }}>
+              <div style={{ position: 'absolute', top: '100%', right: 0, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 100, minWidth: 220, padding: '4px 0' }}>
                 <button onClick={handleExportDOCX} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#111' }}>
                   📄 Combined Document (.docx)
                 </button>
                 <button onClick={handleExportPackage} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#111' }}>
                   📦 NIH Submission Package (.zip)
                 </button>
-                <button onClick={handlePrint} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#111' }}>
-                  🖨️ Print / PDF
+                <button onClick={handlePrint} title="Opens print dialog — select Save as PDF as destination" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#111' }}>
+                  🖨️ Save as PDF
                 </button>
+                <div style={{ borderTop: '1px solid #f3f4f6', margin: '4px 0' }} />
+                <button onClick={handleEmailSelf} disabled={emailGrant_loading} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 14px', background: 'none', border: 'none', cursor: emailGrant_loading ? 'not-allowed' : 'pointer', fontSize: 13, color: '#111' }}>
+                  {emailGrant_loading ? '⟳ Sending…' : '📧 Email to myself'}
+                </button>
+                <button onClick={() => { setShowExportDropdown(false); setShowEmailColleagueModal(true) }} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#111' }}>
+                  📧 Email to colleague
+                </button>
+                <button onClick={handleOpenShareModal} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#111' }}>
+                  🔗 Get shareable link
+                </button>
+                {emailGrant_selfStatus && (
+                  <div style={{ padding: '6px 14px', fontSize: 12, color: emailGrant_selfStatus === 'ok' ? '#15803d' : '#dc2626' }}>{emailGrant_selfMsg}</div>
+                )}
               </div>
             )}
           </div>
@@ -1907,6 +2039,85 @@ export default function GrantEditor({ project, onSave, onBack }) {
           onEmail={() => api.emailChecklist(project.id)}
           projectId={project.id}
         />
+      )}
+
+      {/* Email to Colleague Modal (v5.7.0) */}
+      {showEmailColleagueModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
+          <div style={{ background: '#fff', borderRadius: 12, padding: 24, width: '100%', maxWidth: 440, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div style={{ fontWeight: 700, fontSize: 15 }}>📧 Email Grant to Colleague</div>
+              <button onClick={() => { setShowEmailColleagueModal(false); setEmailColleagueStatus(null); setEmailColleagueTo('') }} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#6b7280' }}>✕</button>
+            </div>
+            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 14 }}>Send the combined DOCX as an email attachment.</div>
+            <input
+              type="email"
+              placeholder="colleague@university.edu"
+              value={emailColleague_to}
+              onChange={e => setEmailColleagueTo(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleEmailColleague()}
+              style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, marginBottom: 10, boxSizing: 'border-box' }}
+            />
+            {emailColleague_status && (
+              <div style={{ fontSize: 12, color: emailColleague_status.ok ? '#15803d' : '#dc2626', marginBottom: 8 }}>{emailColleague_status.msg}</div>
+            )}
+            {emailColleague_sentList.length > 0 && (
+              <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 10 }}>Sent this session: {emailColleague_sentList.join(', ')}</div>
+            )}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => { setShowEmailColleagueModal(false); setEmailColleagueStatus(null); setEmailColleagueTo('') }} style={{ padding: '8px 14px', border: '1px solid #d1d5db', borderRadius: 6, background: '#fff', cursor: 'pointer', fontSize: 13 }}>Close</button>
+              <button onClick={handleEmailColleague} disabled={emailColleague_sending} style={{ padding: '8px 16px', background: emailColleague_sending ? '#e5e7eb' : '#0e7490', color: emailColleague_sending ? '#9ca3af' : '#fff', border: 'none', borderRadius: 6, cursor: emailColleague_sending ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600 }}>
+                {emailColleague_sending ? '⟳ Sending…' : 'Send Grant'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Share Link Modal (v5.7.0) */}
+      {showShareModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
+          <div style={{ background: '#fff', borderRadius: 12, padding: 24, width: '100%', maxWidth: 480, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div style={{ fontWeight: 700, fontSize: 15 }}>🔗 Shareable Read-Only Link</div>
+              <button onClick={() => setShowShareModal(false)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#6b7280' }}>✕</button>
+            </div>
+            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 14 }}>⚠️ Anyone with this link can view your grant in read-only mode.</div>
+            {shareLoading && <div style={{ fontSize: 13, color: '#6b7280' }}>Loading…</div>}
+            {!shareLoading && shareInfo && !shareInfo.enabled && (
+              <div>
+                <div style={{ fontSize: 13, color: '#374151', marginBottom: 14 }}>No active share link. Create one below (30-day expiry).</div>
+                <button onClick={handleCreateShare} style={{ padding: '8px 16px', background: '#0e7490', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Create Share Link</button>
+              </div>
+            )}
+            {!shareLoading && shareInfo && shareInfo.enabled && (
+              <div>
+                <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 6, padding: '8px 10px', fontSize: 12, color: '#374151', wordBreak: 'break-all', marginBottom: 8 }}>
+                  {shareInfo.share_url}
+                </div>
+                {shareInfo.expires_at && (
+                  <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 12 }}>
+                    Expires: {new Date(shareInfo.expires_at * 1000).toLocaleDateString()}
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(shareInfo.share_url).catch(() => {}); }}
+                    style={{ padding: '8px 14px', background: '#0e7490', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+                  >📋 Copy Link</button>
+                  <button
+                    onClick={handleRevokeShare}
+                    disabled={shareLoading}
+                    style={{ padding: '8px 14px', background: '#fff', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}
+                  >Revoke</button>
+                </div>
+              </div>
+            )}
+            <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end' }}>
+              <button onClick={() => setShowShareModal(false)} style={{ padding: '8px 14px', border: '1px solid #d1d5db', borderRadius: 6, background: '#fff', cursor: 'pointer', fontSize: 13 }}>Close</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

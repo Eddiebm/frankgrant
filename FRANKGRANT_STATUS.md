@@ -1,7 +1,7 @@
 # FrankGrant Status Document
 
 **Last Updated:** 2026-03-19
-**Version:** 5.6.0
+**Version:** 5.7.0
 **Status:** Production (Internal COARE Tool)
 
 ---
@@ -23,6 +23,19 @@
 ---
 
 ## ✅ Features: Built & Deployed
+
+### **Email Grant, Shareable Read-Only Link, PDF Export (v5.7.0)**
+- ✅ **POST /api/projects/:id/email** — sends combined DOCX as Resend attachment to any email; graceful fallback if RESEND_API_KEY not set; logs to usage_log
+- ✅ **📧 Email to myself** — one-click in Export dropdown using Clerk user email; generates DOCX in browser → base64 → worker → Resend
+- ✅ **📧 Email to colleague** — opens modal with To field; sends DOCX; shows list of recipients sent this session
+- ✅ **POST /api/projects/:id/share** — creates share token (UUID, 30-day expiry), stores in DB; returns share URL
+- ✅ **GET /api/shared/:token** — PUBLIC endpoint (no auth); returns title, mechanism, pi_name, institution, sections, scores; 404 if revoked, 410 if expired
+- ✅ **DELETE /api/projects/:id/share** — revokes share link (clears share_token, sets share_enabled = 0)
+- ✅ **🔗 Get shareable link** — Export dropdown option; modal shows URL with Copy button, expiry date, Revoke button
+- ✅ **SharedGrantView.jsx** — public read-only page at `/#/shared/:token`; sidebar section nav; teal view-only banner; ownership footer; expired/invalid states
+- ✅ **App.jsx routing** — `#/shared/:token` renders SharedGrantView without Clerk auth; skips health/maintenance checks
+- ✅ **D1 migration** — `share_token TEXT`, `share_enabled INTEGER DEFAULT 0`, `share_expires_at INTEGER` added to projects table
+- ✅ **🖨️ Save as PDF** — improved `handlePrint()` builds a dedicated print div with formatted grant content (section headings, page breaks, ownership footer); `@media print` CSS updated with `#print-grant-content` isolation
 
 ### **Submission Checklist Generator + Ownership Disclaimer on All Exports (v5.6.0)**
 - ✅ **GET /api/projects/:id/submission-checklist** — generates full checklist object with frankgrant_prepared, researcher_scientific, letters_required, administrative, important_notes, and ownership_statement sections

@@ -180,6 +180,14 @@ export function useApi() {
   async function getSubmissionChecklist(projectId) { return request('GET', `/projects/${projectId}/submission-checklist`) }
   async function emailChecklist(projectId) { return request('POST', `/projects/${projectId}/email-checklist`, {}) }
 
+  // Email Grant (v5.7.0)
+  async function emailGrant(projectId, toEmail, docxB64) { return request('POST', `/projects/${projectId}/email`, { to_email: toEmail, docx_b64: docxB64 }) }
+
+  // Share Token (v5.7.0)
+  async function getShare(projectId) { return request('GET', `/projects/${projectId}/share`) }
+  async function createShare(projectId, expiresDays = 30) { return request('POST', `/projects/${projectId}/share`, { expires_days: expiresDays }) }
+  async function deleteShare(projectId) { return request('DELETE', `/projects/${projectId}/share`) }
+
   return {
     callAI, listProjects, createProject, getProject, updateProject, deleteProject, getUsage,
     parseFOA, searchGrants, analyzeGrant, saveReference, getCompliance, getToken,
@@ -195,5 +203,6 @@ export function useApi() {
     getSubmissionPackage, activateSubmissionPackage, rewriteGrant, verifyReferences,
     runQualityAll, runQualityPass1, runQualityPass2, runQualityPass3,
     getSubmissionChecklist, emailChecklist,
+    emailGrant, getShare, createShare, deleteShare,
   }
 }

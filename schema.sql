@@ -231,3 +231,8 @@ ALTER TABLE projects ADD COLUMN quality_pass3_at INTEGER;
 ALTER TABLE projects ADD COLUMN quality_certified INTEGER DEFAULT 0;
 ALTER TABLE projects ADD COLUMN quality_certified_at INTEGER;
 ALTER TABLE projects ADD COLUMN delivery_ready INTEGER DEFAULT 0;
+
+-- ─── SHARE TOKENS (v5.7.0) ──────────────────────────────────────────────────
+ALTER TABLE projects ADD COLUMN share_token TEXT;
+ALTER TABLE projects ADD COLUMN share_enabled INTEGER DEFAULT 0;
+ALTER TABLE projects ADD COLUMN share_expires_at INTEGER;

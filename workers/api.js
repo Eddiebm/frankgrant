@@ -4406,6 +4406,87 @@ async function handleVerifyReferences(req, env, userId, projectId) {
   return json(sectionResults)
 }
 
+// ── Email Grant (v5.7.0) ─────────────────────────────────────────────────────
+async function sendGrantEmail(to, projectTitle, docxB64, filename, env) {
+  if (!env.RESEND_API_KEY) return { ok: false, error: 'email_not_configured' }
+  const fromEmail = env.FROM_EMAIL || 'onboarding@resend.dev'
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: `FrankGrant <${fromEmail}>`,
+      to: [to],
+      subject: `Your NIH Grant Application: ${projectTitle}`,
+      html: `
+        <div style="font-family: Georgia, serif; max-width: 600px; margin: 0 auto; padding: 24px;">
+          <h2 style="color: #0d9488;">FrankGrant</h2>
+          <p>Your grant application <strong>${projectTitle}</strong> is attached as a Word document.</p>
+          <p>The document includes all generated sections formatted for NIH submission.</p>
+          <p style="color: #6b7280; font-size: 13px; margin-top: 8px;">Scientific content owned by the applicant. Prepared by FrankGrant Grant Writing Services.</p>
+          <hr style="border: 1px solid #e5e7eb; margin: 24px 0;">
+          <p>To continue working on this grant: <a href="https://frankgrant.pages.dev">frankgrant.pages.dev</a></p>
+          <p style="color: #6b7280; font-size: 12px;">Sent from FrankGrant — NIH Grant Writing Platform</p>
+        </div>
+      `,
+      attachments: [{ filename: filename || 'grant.docx', content: docxB64, content_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }],
+    }),
+  })
+  if (!response.ok) { const e = await response.text(); throw new Error(`Email failed: ${e}`) }
+  return { ok: true }
+}
+
+async function handleEmailGrant(req, env, userId, projectId) {
+  const project = await env.DB.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').bind(projectId, userId).first()
+  if (!project) return err('Project not found', 404)
+  const body = await req.json()
+  const { to_email, docx_b64 } = body
+  if (!to_email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to_email)) return err('Invalid email address', 400)
+  if (!env.RESEND_API_KEY) return json({ ok: false, error: 'email_not_configured', message: 'Email sending is not configured. Download the DOCX instead.' })
+  const filename = `${(project.title || 'grant').replace(/[^a-z0-9]/gi, '-')}-grant.docx`
+  await sendGrantEmail(to_email, project.title, docx_b64, filename, env)
+  const now = Math.floor(Date.now() / 1000)
+  await env.DB.prepare("INSERT INTO usage_log (id, user_id, project_id, action, model, input_tokens, output_tokens, created_at) VALUES (?, ?, ?, 'email_grant', 'none', 0, 0, ?)").bind(crypto.randomUUID(), userId, projectId, now).run().catch(() => {})
+  return json({ ok: true, sent_to: to_email })
+}
+
+// ── Share Token (v5.7.0) ──────────────────────────────────────────────────────
+async function handleShareGet(req, env, userId, projectId) {
+  const project = await env.DB.prepare('SELECT share_token, share_enabled, share_expires_at FROM projects WHERE id = ? AND user_id = ?').bind(projectId, userId).first()
+  if (!project) return err('Project not found', 404)
+  if (!project.share_enabled || !project.share_token) return json({ enabled: false })
+  return json({ enabled: true, share_url: `https://frankgrant.pages.dev/#/shared/${project.share_token}`, expires_at: project.share_expires_at })
+}
+
+async function handleShareCreate(req, env, userId, projectId) {
+  const project = await env.DB.prepare('SELECT id FROM projects WHERE id = ? AND user_id = ?').bind(projectId, userId).first()
+  if (!project) return err('Project not found', 404)
+  const body = await req.json().catch(() => ({}))
+  const expiresDays = body.expires_days || 30
+  const token = crypto.randomUUID().replace(/-/g, '')
+  const expiresAt = Math.floor(Date.now() / 1000) + expiresDays * 86400
+  await env.DB.prepare('UPDATE projects SET share_token = ?, share_enabled = 1, share_expires_at = ? WHERE id = ?').bind(token, expiresAt, projectId).run()
+  return json({ share_url: `https://frankgrant.pages.dev/#/shared/${token}`, token, expires_at: expiresAt })
+}
+
+async function handleShareDelete(req, env, userId, projectId) {
+  const project = await env.DB.prepare('SELECT id FROM projects WHERE id = ? AND user_id = ?').bind(projectId, userId).first()
+  if (!project) return err('Project not found', 404)
+  await env.DB.prepare('UPDATE projects SET share_enabled = 0, share_token = NULL WHERE id = ?').bind(projectId).run()
+  return json({ ok: true })
+}
+
+async function handleSharedGrant(req, env, token) {
+  const project = await env.DB.prepare('SELECT * FROM projects WHERE share_token = ? AND share_enabled = 1').bind(token).first()
+  if (!project) return err('Link is invalid or has been revoked', 404)
+  const now = Math.floor(Date.now() / 1000)
+  if (project.share_expires_at && project.share_expires_at < now) return json({ error: 'expired', message: 'This shared link has expired.' }, 410)
+  let sections = {}, setup = {}, scores = {}
+  try { sections = JSON.parse(project.sections || '{}') } catch {}
+  try { setup = JSON.parse(project.setup || '{}') } catch {}
+  try { scores = JSON.parse(project.scores || '{}') } catch {}
+  return json({ title: project.title, mechanism: project.mechanism, pi_name: setup.pi || setup.pi_name || '', institution: setup.partner || setup.institution || '', sections, scores, expires_at: project.share_expires_at })
+}
+
 // ── Main fetch handler ────────────────────────────────────────────────────────
 export default {
   async fetch(req, env, ctx) {
@@ -4433,6 +4514,10 @@ export default {
       if (path === '/api/status' && req.method === 'GET') {
         return handleAppStatus(req, env)
       }
+
+      // Public shared grant endpoint (no auth required) (v5.7.0)
+      const sharedGrantMatch = path.match(/^\/api\/shared\/([a-f0-9]+)$/)
+      if (sharedGrantMatch && req.method === 'GET') return handleSharedGrant(req, env, sharedGrantMatch[1])
 
       if (path === '/api/health' && req.method === 'GET') {
         const response = await handleHealth(req, env)
@@ -4917,6 +5002,18 @@ export default {
       // Email Checklist (v5.6.0)
       const emailChecklistMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/email-checklist$/)
       if (emailChecklistMatch && req.method === 'POST') return handleEmailChecklist(req, env, userId, emailChecklistMatch[1])
+
+      // Email Grant (v5.7.0)
+      const emailGrantMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/email$/)
+      if (emailGrantMatch && req.method === 'POST') return handleEmailGrant(req, env, userId, emailGrantMatch[1])
+
+      // Share Token (v5.7.0)
+      const shareMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/share$/)
+      if (shareMatch) {
+        if (req.method === 'GET') return handleShareGet(req, env, userId, shareMatch[1])
+        if (req.method === 'POST') return handleShareCreate(req, env, userId, shareMatch[1])
+        if (req.method === 'DELETE') return handleShareDelete(req, env, userId, shareMatch[1])
+      }
 
       // Feedback (for trial requests)
       if (path === '/api/feedback' && req.method === 'POST') {
