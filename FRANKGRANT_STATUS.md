@@ -1,7 +1,7 @@
 # FrankGrant Status Document
 
 **Last Updated:** 2026-03-19
-**Version:** 5.1.1
+**Version:** 5.2.0
 **Status:** Production (Internal COARE Tool)
 
 ---
@@ -11,7 +11,7 @@
 | Resource | URL/ID | Status |
 |----------|--------|--------|
 | **Frontend (Pages)** | https://frankgrant.pages.dev | ✅ Live |
-| **Latest Preview** | https://ad25947f.frankgrant.pages.dev | ✅ Live |
+| **Latest Preview** | https://e8309c3f.frankgrant.pages.dev | ✅ Live |
 | **R2 Bucket** | frankgrant-backups | ✅ Live |
 | **API Worker** | https://frankgrant-worker.eddie-781pagesdev.workers.dev | ✅ Live |
 | **D1 Database** | frankgrant-db | ✅ Live |
@@ -23,6 +23,16 @@
 ---
 
 ## ✅ Features: Built & Deployed
+
+### **Navigation & Shell (v5.2.0)**
+- ✅ **AppShell** - Desktop sidebar (220px expanded / 48px collapsed), mobile bottom tabs (56px)
+- ✅ **Sidebar nav** - My Grants, New Grant, Letters, Biosketch, Pipeline, Settings, Command Station (admin-gated)
+- ✅ **Mobile tabs** - Grants, New, Letters, Pipeline, More (bottom sheet with Biosketch/Settings/Sign Out)
+- ✅ **Auto-collapse** - Sidebar collapses automatically when editor is open
+- ✅ **Breadcrumbs** - Full path shown on all views
+- ✅ **Single-return architecture** - All views wrapped in AppShell, no duplicate layout code
+- ✅ **Pipeline view** - Dedicated route for kanban board / calendar / list with view toggle
+- ✅ **Projects view** - 4-card stats bar, improved empty state with wizard CTA, cleaner toolbar
 
 ### **Core Grant Writing**
 - ✅ **Grant Wizard** - Single-textarea study description → auto-extract fields → sequential section generation
