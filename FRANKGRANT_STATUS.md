@@ -1,7 +1,7 @@
 # FrankGrant Status Document
 
 **Last Updated:** 2026-03-19
-**Version:** 5.5.0
+**Version:** 5.6.0
 **Status:** Production (Internal COARE Tool)
 
 ---
@@ -23,6 +23,16 @@
 ---
 
 ## ✅ Features: Built & Deployed
+
+### **Submission Checklist Generator + Ownership Disclaimer on All Exports (v5.6.0)**
+- ✅ **GET /api/projects/:id/submission-checklist** — generates full checklist object with frankgrant_prepared, researcher_scientific, letters_required, administrative, important_notes, and ownership_statement sections
+- ✅ **POST /api/projects/:id/email-checklist** — sends formatted HTML email via MailChannels with full checklist content
+- ✅ **📋 Checklist button** in GrantEditor toolbar — loads checklist modal on demand
+- ✅ **ChecklistModal** — full-screen modal with ownership box (teal), due date alert (red if ≤14 days), 5 sections with interactive checkboxes, email + DOCX download buttons
+- ✅ **Ownership disclaimer** added as final paragraph of every combined DOCX (9pt italic Georgia): PI Name, Institution own all content; FrankGrant makes no accuracy representation
+- ✅ **Submission checklist page** added as last page of combined DOCX export
+- ✅ **submission_checklist.docx** added to ZIP submission package
+- ✅ **SharedGrantView footer** — "Prepared by FrankGrant Grant Writing Services. Scientific content owned by [PI Name], [Institution]. View only — no login required." (inline in ChecklistModal)
 
 ### **Three-Pass Quality Review + Five-Database Reference Verification + Delivery Gate (v5.5.0)**
 - ✅ **Five-database reference verification** - PubMed, CrossRef, Semantic Scholar, OpenAlex, Europe PMC checked in parallel via Promise.allSettled; 200ms delay between citations; verified/likely_real/not_found/needs_manual_check statuses with confidence scores

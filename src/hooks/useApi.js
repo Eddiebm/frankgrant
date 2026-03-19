@@ -176,6 +176,10 @@ export function useApi() {
   async function runQualityPass2(projectId) { return request('POST', `/projects/${projectId}/quality/pass2`, {}) }
   async function runQualityPass3(projectId) { return request('POST', `/projects/${projectId}/quality/pass3`, {}) }
 
+  // Submission Checklist (v5.6.0)
+  async function getSubmissionChecklist(projectId) { return request('GET', `/projects/${projectId}/submission-checklist`) }
+  async function emailChecklist(projectId) { return request('POST', `/projects/${projectId}/email-checklist`, {}) }
+
   return {
     callAI, listProjects, createProject, getProject, updateProject, deleteProject, getUsage,
     parseFOA, searchGrants, analyzeGrant, saveReference, getCompliance, getToken,
@@ -190,5 +194,6 @@ export function useApi() {
     getAnthropicStatus, getAppStatus,
     getSubmissionPackage, activateSubmissionPackage, rewriteGrant, verifyReferences,
     runQualityAll, runQualityPass1, runQualityPass2, runQualityPass3,
+    getSubmissionChecklist, emailChecklist,
   }
 }

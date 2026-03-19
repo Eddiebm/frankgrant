@@ -89,6 +89,90 @@ async function makeSingleDoc(title, headingText, children) {
   return Packer.toBuffer(doc)
 }
 
+function disclaimerParagraph(piName, institution) {
+  return new Paragraph({
+    spacing: { before: 480, after: 0 },
+    children: [new TextRun({
+      text: `This document was prepared by FrankGrant Grant Writing Services based on scientific information provided by the applicant. ${piName || 'The Principal Investigator'} and ${institution || 'the Institution'} own all scientific content, preliminary data, research hypotheses, and intellectual property contained herein. FrankGrant makes no representation regarding the accuracy of scientific claims. The applicant is solely responsible for verifying all content before submission to NIH.`,
+      font: FONT, size: 18, italics: true, color: '555555',
+    })],
+  })
+}
+
+function checklistItem(symbol, text, bold = false) {
+  return new Paragraph({
+    spacing: { before: 40, after: 40 },
+    children: [
+      new TextRun({ text: `${symbol}  `, font: FONT, size: BODY_PT }),
+      new TextRun({ text, font: FONT, size: BODY_PT, bold }),
+    ],
+  })
+}
+
+function generateChecklistContent(project, setup) {
+  const mech = project.mechanism || ''
+  const isSTTR = mech.includes('STTR')
+  const isSBIR = mech.includes('SBIR') || isSTTR
+  const isPhase2 = mech.includes('Phase II') || mech.includes('Phase 2') || mech.includes('Fast Track') || mech.includes('FAST-TRACK') || mech.includes('-II')
+  const piName = setup.pi || setup.pi_name || 'Principal Investigator'
+  const institution = setup.partner || setup.institution || 'Institution'
+
+  const items = []
+  items.push(new Paragraph({ spacing: { before: 0, after: 240 }, children: [new TextRun({ text: 'SUBMISSION CHECKLIST', font: FONT, size: HEAD_PT, bold: true })] }))
+  items.push(new Paragraph({
+    spacing: { before: 0, after: 240 },
+    children: [new TextRun({
+      text: `Ownership: Scientific content, preliminary data, research hypotheses, and intellectual property are owned by ${piName} and ${institution}. This document was prepared by FrankGrant Grant Writing Services.`,
+      font: FONT, size: 18, italics: true, color: '0e7490',
+    })],
+  }))
+
+  items.push(sectionHeading('FrankGrant Prepared'))
+  items.push(checklistItem('✅', 'Specific Aims'))
+  items.push(checklistItem('✅', 'Significance'))
+  items.push(checklistItem('✅', 'Innovation'))
+  items.push(checklistItem('✅', 'Approach'))
+  if (isSBIR) items.push(checklistItem('✅', isPhase2 ? 'Commercialization Plan (12 pages)' : 'Commercialization Potential (2 pages)'))
+  items.push(checklistItem('✅', 'Data Management and Sharing Plan'))
+  items.push(checklistItem('✅', 'Facilities and Resources'))
+
+  items.push(sectionHeading('Your Scientific Documents — Required'))
+  items.push(checklistItem('☐', 'Biosketches for all key personnel (5 pages each, NIH SF424 format)', true))
+  items.push(checklistItem('☐', 'Bibliography and References (verify all citations are accurate)', true))
+  items.push(checklistItem('☐', 'Authentication of Key Biological Resources', true))
+  if (setup.human_subjects_involved) items.push(checklistItem('☐', 'Human Subjects section (IRB approval required)', true))
+  if (setup.vert_animals_involved) items.push(checklistItem('☐', 'Vertebrate Animals section (IACUC approval required)', true))
+
+  items.push(sectionHeading('Letters Required'))
+  items.push(checklistItem('☐', 'Collaborator support letters (one per named collaborator)', true))
+  items.push(checklistItem('☐', 'Consultant letters (one per paid consultant)', true))
+  items.push(checklistItem('☐', 'Key Personnel commitment letters', true))
+  if (isSTTR) items.push(checklistItem('☐', 'STTR Research Institution Partner letter (confirms 40% Phase I / 30% Phase II work allocation)', true))
+  if (setup.human_subjects_involved) items.push(checklistItem('☐', 'IRB approval letter', true))
+  if (setup.vert_animals_involved) items.push(checklistItem('☐', 'IACUC approval letter', true))
+  if (project.is_resubmission) items.push(checklistItem('☐', 'Introduction to Revised Application (1 page max)', true))
+
+  items.push(sectionHeading('Administrative Requirements'))
+  items.push(checklistItem('☐', 'SF424 forms completed in NIH ASSIST or Grants.gov', true))
+  items.push(checklistItem('☐', 'Budget and Budget Justification narrative', true))
+  items.push(checklistItem('☐', 'Project Summary/Abstract (30-line limit in ASSIST)', true))
+  items.push(checklistItem('☐', 'Project Narrative (2-3 sentences, plain language)', true))
+  items.push(checklistItem('☐', 'Institutional signing official approval', true))
+  items.push(checklistItem('☐', 'SAM.gov registration current', true))
+  items.push(checklistItem('☐', 'eRA Commons accounts active for all PIs', true))
+  items.push(checklistItem('☐', 'DUNS/UEI number registered and active', true))
+
+  items.push(sectionHeading('Important Notes'))
+  items.push(checklistItem('•', 'Your science, your data, and your intellectual property remain 100% yours.'))
+  items.push(checklistItem('•', 'FrankGrant prepared the written sections only. You are responsible for all scientific content accuracy.'))
+  items.push(checklistItem('•', 'Do not submit the grant until all required items above are complete.'))
+  if (isPhase2) items.push(checklistItem('•', 'Phase II applications must reference Phase I results in the Approach section.'))
+  if (isSTTR) items.push(checklistItem('•', 'STTR applications require a formal IP agreement between your company and the research institution before submission.'))
+
+  items.push(disclaimerParagraph(piName, institution))
+  return items
+}
+
 export async function generateSubmissionPackage(project, sections, citations) {
   const zip = new JSZip()
   const title = project.title || 'Untitled Grant'
@@ -214,6 +298,20 @@ export async function generateSubmissionPackage(project, sections, citations) {
   // 10. Cover Letter
   if (sections.cover_letter) {
     await addDoc('cover_letter.docx', 'COVER LETTER', textToParagraphs(sections.cover_letter))
+  }
+
+  // 11. Submission Checklist
+  const checklist = generateChecklistContent(project, setup)
+  if (checklist.length > 0) {
+    const clDoc = new Document({
+      sections: [{
+        properties: { page: { margin: { top: 720, right: 720, bottom: 720, left: 720 }, size: { width: 12240, height: 15840 } } },
+        headers: { default: makeHeader(title) },
+        footers: { default: makeFooter() },
+        children: checklist,
+      }],
+    })
+    zip.file('submission_checklist.docx', await Packer.toBuffer(clDoc))
   }
 
   const outputType = typeof window !== 'undefined' ? 'blob' : 'nodebuffer'

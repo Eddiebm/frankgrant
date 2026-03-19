@@ -4207,6 +4207,156 @@ async function handleQualityPass3(req, env, userId, projectId) {
   return json(pass3Results)
 }
 
+// ── Submission Checklist (v5.6.0) ─────────────────────────────────────────
+
+function generateChecklist(project, setup, sections) {
+  const mech = project.mechanism || ''
+  const isSTTR = mech.includes('STTR')
+  const isSBIR = mech.includes('SBIR') || isSTTR
+  const isPhase2 = mech.includes('Phase II') || mech.includes('Phase 2') || mech.includes('Fast Track') || mech.includes('FAST-TRACK') || mech.includes('-II')
+
+  let dueDate = null
+  try {
+    const rules = project.foa_rules ? JSON.parse(project.foa_rules) : null
+    dueDate = rules?.due_dates?.[0]?.date || null
+  } catch {}
+
+  const piName = setup.pi || setup.pi_name || 'Principal Investigator'
+  const institution = setup.partner || setup.institution || 'Institution'
+
+  return {
+    project_title: project.title,
+    mechanism: project.mechanism,
+    institute: setup.institute || project.institute,
+    pi_name: piName,
+    institution,
+    foa_number: project.foa_number,
+    due_date: dueDate,
+    ownership_statement: `Scientific content, preliminary data, research hypotheses, and intellectual property in this application are owned by ${piName} and ${institution}. This document was prepared by FrankGrant Grant Writing Services.`,
+    frankgrant_prepared: [
+      { item: 'Specific Aims', status: sections.aims ? 'complete' : 'pending', words: sections.aims?.split(' ').length || 0 },
+      { item: 'Significance', status: sections.sig ? 'complete' : 'pending', words: sections.sig?.split(' ').length || 0 },
+      { item: 'Innovation', status: sections.innov ? 'complete' : 'pending', words: sections.innov?.split(' ').length || 0 },
+      { item: 'Approach', status: sections.approach ? 'complete' : 'pending', words: sections.approach?.split(' ').length || 0 },
+      isSBIR && isPhase2 ? { item: 'Commercialization Plan (12 pages)', status: sections.commercial ? 'complete' : 'pending', words: sections.commercial?.split(' ').length || 0 } : null,
+      isSBIR && !isPhase2 ? { item: 'Commercialization Potential (2 pages)', status: sections.commercial ? 'complete' : 'pending', words: sections.commercial?.split(' ').length || 0 } : null,
+      { item: 'Data Management and Sharing Plan', status: sections.data_mgmt ? 'complete' : 'pending', words: sections.data_mgmt?.split(' ').length || 0 },
+      { item: 'Facilities and Resources', status: sections.facilities ? 'complete' : 'pending', words: sections.facilities?.split(' ').length || 0 },
+    ].filter(Boolean),
+    researcher_scientific: [
+      { item: 'Biosketches for all key personnel (5 pages each, NIH SF424 format)', required: true },
+      { item: 'Bibliography and References (verify all citations are accurate)', required: true },
+      { item: 'Authentication of Key Biological Resources', required: true },
+      setup.human_subjects_involved ? { item: 'Human Subjects section (IRB approval required before submission)', required: true } : null,
+      setup.vert_animals_involved ? { item: 'Vertebrate Animals section (IACUC approval required)', required: true } : null,
+      { item: 'Resource Sharing Plan (if generating shared resources or data)', required: false },
+    ].filter(Boolean),
+    letters_required: [
+      { item: 'Collaborator support letters (one per named collaborator)', required: true },
+      { item: 'Consultant letters (one per paid consultant)', required: true },
+      { item: 'Key Personnel commitment letters', required: true },
+      isSTTR ? { item: 'STTR Research Institution Partner letter (confirms 40% Phase I or 30% Phase II work allocation)', required: true } : null,
+      setup.human_subjects_involved ? { item: 'IRB approval letter', required: true } : null,
+      setup.vert_animals_involved ? { item: 'IACUC approval letter', required: true } : null,
+      project.is_resubmission ? { item: 'Introduction to Revised Application (1 page max)', required: true } : null,
+    ].filter(Boolean),
+    administrative: [
+      { item: 'SF424 forms completed in NIH ASSIST or Grants.gov', required: true },
+      { item: 'Budget and Budget Justification narrative', required: true },
+      { item: 'Project Summary/Abstract (30-line limit in ASSIST)', required: true },
+      { item: 'Project Narrative (2-3 sentences, plain language)', required: true },
+      { item: 'Cover Letter to Scientific Review Officer', required: false },
+      { item: 'Institutional signing official approval', required: true },
+      { item: 'SAM.gov registration current', required: true },
+      { item: 'eRA Commons accounts active for all PIs', required: true },
+      { item: 'DUNS/UEI number registered and active', required: true },
+    ],
+    important_notes: [
+      'Your science, your data, and your intellectual property remain 100% yours.',
+      'FrankGrant prepared the written sections only. You are responsible for all scientific content accuracy.',
+      'Do not submit the grant until all required items above are complete.',
+      isPhase2 ? 'Phase II applications must reference Phase I results in the Approach section.' : null,
+      isSTTR ? 'STTR applications require a formal IP agreement between your company and the research institution before submission.' : null,
+    ].filter(Boolean),
+  }
+}
+
+async function handleSubmissionChecklist(req, env, userId, projectId) {
+  const project = await env.DB.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').bind(projectId, userId).first()
+  if (!project) return err('Project not found', 404)
+  let setup = {}, sections = {}
+  try { setup = JSON.parse(project.setup || '{}') } catch {}
+  try { sections = JSON.parse(project.sections || '{}') } catch {}
+  const checklist = generateChecklist(project, setup, sections)
+  return json(checklist)
+}
+
+async function handleEmailChecklist(req, env, userId, projectId) {
+  const project = await env.DB.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').bind(projectId, userId).first()
+  if (!project) return err('Project not found', 404)
+  // Get user email from clerk token (stored in trackUserActivity)
+  const userMeta = await env.DB.prepare('SELECT email FROM users_meta WHERE id = ?').bind(userId).first()
+  const userEmail = userMeta?.email
+  if (!userEmail) return err('User email not found', 400)
+
+  let setup = {}, sections = {}
+  try { setup = JSON.parse(project.setup || '{}') } catch {}
+  try { sections = JSON.parse(project.sections || '{}') } catch {}
+  const checklist = generateChecklist(project, setup, sections)
+
+  // Send via MailChannels (Cloudflare's built-in email)
+  const emailBody = buildChecklistEmailHTML(checklist)
+  try {
+    const resp = await fetch('https://api.mailchannels.net/tx/v1/send', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        personalizations: [{ to: [{ email: userEmail }] }],
+        from: { email: 'noreply@frankgrant.app', name: 'FrankGrant' },
+        subject: `Submission Checklist: ${project.title}`,
+        content: [{ type: 'text/html', value: emailBody }],
+      }),
+    })
+    if (!resp.ok) {
+      const errText = await resp.text()
+      return json({ ok: false, message: 'Email service unavailable. Use Download Checklist instead.', detail: errText })
+    }
+    return json({ ok: true, sent_to: userEmail })
+  } catch (e) {
+    return json({ ok: false, message: 'Email service unavailable. Use Download Checklist instead.' })
+  }
+}
+
+function buildChecklistEmailHTML(cl) {
+  const rows = (items, showRequired = false) => items.map(it => {
+    const status = it.status === 'complete' ? '✅' : it.status === 'pending' ? '⏳' : (it.required ? '☐' : '☐')
+    const req = showRequired && it.required === false ? ' <em style="color:#888">(optional)</em>' : ''
+    const words = it.words ? ` <span style="color:#888;font-size:12px">${it.words} words</span>` : ''
+    return `<tr><td style="padding:4px 8px">${status}</td><td style="padding:4px 8px">${it.item}${words}${req}</td></tr>`
+  }).join('')
+
+  return `<!DOCTYPE html><html><body style="font-family:Georgia,serif;max-width:700px;margin:auto;padding:24px">
+<h1 style="font-size:18px;color:#111">${cl.project_title}</h1>
+<p style="font-size:12px;color:#888">${cl.mechanism} · ${cl.pi_name} · ${cl.institution}</p>
+<div style="background:#e0f2fe;border-radius:8px;padding:14px;margin:16px 0;font-size:13px;color:#0c4a6e">
+  <strong>Ownership:</strong> ${cl.ownership_statement}
+</div>
+${cl.due_date ? `<p style="color:#dc2626;font-weight:bold">Submission deadline: ${cl.due_date}</p>` : ''}
+<h2 style="font-size:15px;border-bottom:1px solid #e5e7eb;padding-bottom:4px">FrankGrant Prepared</h2>
+<table style="width:100%;border-collapse:collapse">${rows(cl.frankgrant_prepared)}</table>
+<h2 style="font-size:15px;border-bottom:1px solid #e5e7eb;padding-bottom:4px;margin-top:20px">Your Scientific Documents</h2>
+<table style="width:100%;border-collapse:collapse">${rows(cl.researcher_scientific, true)}</table>
+<h2 style="font-size:15px;border-bottom:1px solid #e5e7eb;padding-bottom:4px;margin-top:20px">Letters Required</h2>
+<table style="width:100%;border-collapse:collapse">${rows(cl.letters_required, true)}</table>
+<h2 style="font-size:15px;border-bottom:1px solid #e5e7eb;padding-bottom:4px;margin-top:20px">Administrative Requirements</h2>
+<table style="width:100%;border-collapse:collapse">${rows(cl.administrative, true)}</table>
+<h2 style="font-size:15px;border-bottom:1px solid #e5e7eb;padding-bottom:4px;margin-top:20px">Important Notes</h2>
+<ul style="font-size:13px;color:#374151">${cl.important_notes.map(n => `<li>${n}</li>`).join('')}</ul>
+<p style="margin-top:24px;font-size:11px;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:12px">
+Prepared by FrankGrant Grant Writing Services. Scientific content owned by ${cl.pi_name}, ${cl.institution}.
+</p></body></html>`
+}
+
 async function handleQualityRunAll(req, env, userId, projectId) {
   const project = await env.DB.prepare('SELECT id FROM projects WHERE id = ? AND user_id = ?').bind(projectId, userId).first()
   if (!project) return err('Project not found', 404)
@@ -4759,6 +4909,14 @@ export default {
       if (qualityPass2Match && req.method === 'POST') return handleQualityPass2(req, env, userId, qualityPass2Match[1])
       const qualityPass3Match = path.match(/^\/api\/projects\/([a-f0-9-]+)\/quality\/pass3$/)
       if (qualityPass3Match && req.method === 'POST') return handleQualityPass3(req, env, userId, qualityPass3Match[1])
+
+      // Submission Checklist (v5.6.0)
+      const checklistMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/submission-checklist$/)
+      if (checklistMatch && req.method === 'GET') return handleSubmissionChecklist(req, env, userId, checklistMatch[1])
+
+      // Email Checklist (v5.6.0)
+      const emailChecklistMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/email-checklist$/)
+      if (emailChecklistMatch && req.method === 'POST') return handleEmailChecklist(req, env, userId, emailChecklistMatch[1])
 
       // Feedback (for trial requests)
       if (path === '/api/feedback' && req.method === 'POST') {

@@ -288,6 +288,16 @@ export async function generateGrantDOCX(project, sections, scores, citations) {
     contentChildren.push(emptyPara())
   }
 
+  // Ownership Disclaimer (always last, before bibliography)
+  contentChildren.push(pageBreakPara())
+  contentChildren.push(new Paragraph({
+    spacing: { before: 240, after: 120 },
+    children: [new TextRun({
+      text: `This document was prepared by FrankGrant Grant Writing Services based on scientific information provided by the applicant. ${setup.pi || 'The Principal Investigator'} and ${setup.partner || 'the Institution'} own all scientific content, preliminary data, research hypotheses, and intellectual property contained herein. FrankGrant makes no representation regarding the accuracy of scientific claims. The applicant is solely responsible for verifying all content before submission to NIH.`,
+      font: FONT, size: 18, italics: true, color: '555555',
+    })],
+  }))
+
   // Bibliography Appendix
   if (citations && citations.length > 0) {
     contentChildren.push(pageBreakPara())
@@ -308,6 +318,26 @@ export async function generateGrantDOCX(project, sections, scores, citations) {
       }))
     })
   }
+
+  // Submission Checklist (last page of combined doc)
+  const isSTTR = mech.includes('STTR')
+  const isSBIR = mech.includes('SBIR') || isSTTR
+  const isPhase2 = isPhaseII
+  const piName = setup.pi || 'Principal Investigator'
+  const institution = setup.partner || 'Institution'
+
+  contentChildren.push(pageBreakPara())
+  contentChildren.push(new Paragraph({ spacing: { before: 0, after: 240 }, children: [new TextRun({ text: 'SUBMISSION CHECKLIST', font: FONT, size: HEAD_PT, bold: true })] }))
+  contentChildren.push(new Paragraph({ spacing: { before: 0, after: 200 }, children: [new TextRun({ text: `Ownership: Scientific content, preliminary data, research hypotheses, and intellectual property are owned by ${piName} and ${institution}. This document was prepared by FrankGrant Grant Writing Services.`, font: FONT, size: 18, italics: true, color: '0e7490' })] }))
+  const clItem = (sym, text) => new Paragraph({ spacing: { before: 40, after: 40 }, children: [new TextRun({ text: `${sym}  ${text}`, font: FONT, size: BODY_PT })] })
+  contentChildren.push(sectionHeading('FrankGrant Prepared'))
+  ;['Specific Aims', 'Significance', 'Innovation', 'Approach', ...(isSBIR ? [isPhase2 ? 'Commercialization Plan' : 'Commercialization Potential'] : []), 'Data Management and Sharing Plan', 'Facilities and Resources'].forEach(s => contentChildren.push(clItem('✅', s)))
+  contentChildren.push(sectionHeading('Your Scientific Documents — Required'))
+  ;['Biosketches for all key personnel (5 pages each, NIH SF424 format)', 'Bibliography and References (verify all citations are accurate)', 'Authentication of Key Biological Resources', ...(setup.human_subjects_involved ? ['Human Subjects section (IRB approval required)'] : []), ...(setup.vert_animals_involved ? ['Vertebrate Animals section (IACUC approval required)'] : [])].forEach(s => contentChildren.push(clItem('☐', s)))
+  contentChildren.push(sectionHeading('Letters Required'))
+  ;['Collaborator support letters', 'Consultant letters', 'Key Personnel commitment letters', ...(isSTTR ? ['STTR Research Institution Partner letter'] : [])].forEach(s => contentChildren.push(clItem('☐', s)))
+  contentChildren.push(sectionHeading('Administrative Requirements'))
+  ;['SF424 forms completed in NIH ASSIST', 'Budget and Budget Justification', 'Project Summary/Abstract', 'Institutional signing official approval', 'SAM.gov registration current', 'eRA Commons accounts active', 'DUNS/UEI number registered'].forEach(s => contentChildren.push(clItem('☐', s)))
 
   const doc = new Document({
     sections: [

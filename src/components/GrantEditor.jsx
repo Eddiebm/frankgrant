@@ -10,6 +10,7 @@ import TrackChangesViewer from './TrackChangesViewer'
 import SubmissionPackageModal from './SubmissionPackageModal'
 import ReferenceVerifier from './ReferenceVerifier'
 import QualityReviewPanel from './QualityReviewPanel'
+import ChecklistModal from './ChecklistModal'
 import { generateGrantDOCX } from '../lib/docxExport'
 import { generateSubmissionPackage } from '../lib/docxExportPackage'
 import {
@@ -130,6 +131,11 @@ export default function GrantEditor({ project, onSave, onBack }) {
   const [showPackageModal, setShowPackageModal] = useState(false)
   const [pkgCyclesRemaining, setPkgCyclesRemaining] = useState(project.rewrite_cycles_remaining || 0)
   const [refCheckResults, setRefCheckResults] = useState(project.reference_check_results || {})
+
+  // Submission Checklist (v5.6.0)
+  const [showChecklist, setShowChecklist] = useState(false)
+  const [checklistData, setChecklistData] = useState(null)
+  const [checklistLoading, setChecklistLoading] = useState(false)
 
   // AI unavailable / retry state
   const [aiUnavailable, setAiUnavailable] = useState(null) // { sectionId, retryAfter, countdown }
@@ -1008,6 +1014,23 @@ export default function GrantEditor({ project, onSave, onBack }) {
             📚 Bibliography
           </button>
           <button
+            onClick={async () => {
+              if (checklistData) { setShowChecklist(true); return }
+              setChecklistLoading(true)
+              try {
+                const cl = await api.getSubmissionChecklist(project.id)
+                setChecklistData(cl)
+                setShowChecklist(true)
+              } catch (e) { alert('Failed to load checklist: ' + e.message) }
+              setChecklistLoading(false)
+            }}
+            disabled={checklistLoading}
+            style={{ ...ghostBtn, fontSize: 12 }}
+            title="View submission checklist with ownership statement"
+          >
+            {checklistLoading ? '⟳' : '📋'} Checklist
+          </button>
+          <button
             onClick={() => setShowVoiceMode(true)}
             style={{ ...ghostBtn, fontSize: 12, background: '#0e7490', color: '#fff', borderColor: '#0e7490' }}
             title="Talk to your grant with AI voice assistant"
@@ -1873,6 +1896,16 @@ export default function GrantEditor({ project, onSave, onBack }) {
             setSections(prev => ({ ...prev, [sectionId]: newText }))
           }}
           onClose={() => setShowVoiceMode(false)}
+        />
+      )}
+
+      {/* Submission Checklist Modal (v5.6.0) */}
+      {showChecklist && checklistData && (
+        <ChecklistModal
+          checklist={checklistData}
+          onClose={() => setShowChecklist(false)}
+          onEmail={() => api.emailChecklist(project.id)}
+          projectId={project.id}
         />
       )}
     </div>
