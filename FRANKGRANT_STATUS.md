@@ -1,7 +1,7 @@
 # FrankGrant Status Document
 
-**Last Updated:** 2026-03-18
-**Version:** 5.0.5
+**Last Updated:** 2026-03-19
+**Version:** 5.1.1
 **Status:** Production (Internal COARE Tool)
 
 ---
@@ -11,7 +11,7 @@
 | Resource | URL/ID | Status |
 |----------|--------|--------|
 | **Frontend (Pages)** | https://frankgrant.pages.dev | ✅ Live |
-| **Latest Preview** | https://ce3514aa.frankgrant.pages.dev | ✅ Live |
+| **Latest Preview** | https://ad25947f.frankgrant.pages.dev | ✅ Live |
 | **R2 Bucket** | frankgrant-backups | ✅ Live |
 | **API Worker** | https://frankgrant-worker.eddie-781pagesdev.workers.dev | ✅ Live |
 | **D1 Database** | frankgrant-db | ✅ Live |
@@ -298,6 +298,19 @@
 - ✅ **Feedback Management Panel** - All feedback with type badges, resolved status, admin notes, mark resolved button
 - ✅ **Tab Navigation** - 9-tab interface with Overview summary panel
 - ✅ **Admin Gating** - Command Station only accessible to eddieb@coareholdings.com
+
+### **Evidence-Based Scoring + Criterion-Level Incompleteness (v5.1.1)**
+- ✅ **Reviewer JSON output** — All 3 Study Section reviewers now output structured JSON per criterion (previously free text + `SCORES:` line)
+- ✅ **Per-criterion fields** — Every criterion score includes: `evidence` (direct quote/paraphrase from grant), `score_rationale` (why this score not one point better/worse), `confidence` (high/medium/low), `scoreable` (bool), `unscorable_reason` (string or null)
+- ✅ **Criterion-level incompleteness detection** — Reviewers set `scoreable: false` when section is absent, truncated mid-sentence, under 100 words where 500+ expected, or missing a required subsection
+- ✅ **JS-side score aggregation** — Scores averaged in handler code (not by AI) using majority-vote scoreability logic across 3 reviewers; reliable math, no hallucination
+- ✅ **Impact score suspension** — `impact_score: null` + `percentile: null` when fewer than 3 of 5 criteria are scoreable; SRO instructed to pass this through
+- ✅ **NIHScoreCard component** — New expandable criterion cards replacing flat score grid: completeness banner (green/amber/red), scoreable criteria show "Why this score" with evidence + rationale, unscorable criteria show gray box with ⚠ + unscorable_reason + "Complete to score" CTA
+- ✅ **ScoreBar updated** — Per-section auto-scorer shows confidence badge, expandable evidence/rationale panel, unscorable state with ⚠
+- ✅ **Commercial Review dimensions** — market/ip/regulatory/revenue_model/commercial_team all include evidence, score_rationale, confidence, scoreable, unscorable_reason; ScoreDimension component shows expandable "Why this score" + unscorable gray box
+- ✅ **Aims Optimizer** — Each of 5 elements includes evidence, score_rationale, scoreable, unscorable_reason
+- ✅ **Backwards compatible** — NIHScoreCard handles old number-only criteria format for previously saved results
+- ✅ **Token budget increase** — Reviewers 1500→2000, SRO synthesis 2000→2500
 
 ### **Full Document Scoring — No Truncation (v5.0.5)**
 - ✅ **`buildFullGrantContext()` helper** — generates complete grant context string with all sections in full, section word counts, [BRIEF]/[NOT GENERATED] flags for thin sections
