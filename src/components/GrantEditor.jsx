@@ -6,6 +6,9 @@ import VoiceMode from './VoiceMode'
 import CollaborationPanel from './CollaborationPanel'
 import { CommercialChartsPanel } from './CommercialCharts'
 import BibliographyManager from './BibliographyManager'
+import TrackChangesViewer from './TrackChangesViewer'
+import SubmissionPackageModal from './SubmissionPackageModal'
+import ReferenceVerifier from './ReferenceVerifier'
 import { generateGrantDOCX } from '../lib/docxExport'
 import { generateSubmissionPackage } from '../lib/docxExportPackage'
 import {
@@ -117,6 +120,15 @@ export default function GrantEditor({ project, onSave, onBack }) {
   // Completeness gate modal
   const [completenessModal, setCompletenessModal] = useState(null) // null | { reviewType, items, onProceed }
 
+
+  // Post-Review Rewrite
+  const [rewriteConfirmModal, setRewriteConfirmModal] = useState(null) // null | { source, results, cyclesRemaining }
+  const [rewriteProgress, setRewriteProgress] = useState(null) // null | { steps }
+  const [rewriteResults, setRewriteResults] = useState(project.rewrite_results || {}) // { sectionId: { original, rewritten } }
+  const [showTrackChanges, setShowTrackChanges] = useState({}) // { sectionId: boolean }
+  const [showPackageModal, setShowPackageModal] = useState(false)
+  const [pkgCyclesRemaining, setPkgCyclesRemaining] = useState(project.rewrite_cycles_remaining || 0)
+  const [refCheckResults, setRefCheckResults] = useState(project.reference_check_results || {})
 
   // AI unavailable / retry state
   const [aiUnavailable, setAiUnavailable] = useState(null) // { sectionId, retryAfter, countdown }
@@ -739,6 +751,87 @@ export default function GrantEditor({ project, onSave, onBack }) {
     }
   }
 
+  // ── Post-Review Rewrite ───────────────────────────────────────────────────────
+  async function handleInitiateRewrite(source, sourceResults) {
+    // Check package status first
+    try {
+      const pkg = await api.getSubmissionPackage(project.id)
+      if (!pkg.has_package && pkg.package_credits === 0) {
+        setShowPackageModal(true)
+        return
+      }
+      setPkgCyclesRemaining(pkg.cycles_remaining)
+      setRewriteConfirmModal({ source, results: sourceResults, cyclesRemaining: pkg.cycles_remaining })
+    } catch (e) {
+      setShowPackageModal(true)
+    }
+  }
+
+  async function handleExecuteRewrite() {
+    if (!rewriteConfirmModal) return
+    const { source, results } = rewriteConfirmModal
+    setRewriteConfirmModal(null)
+    setRewriteProgress({ steps: ['Saving current version…', 'Analyzing feedback…', 'Rewriting sections…', 'Verifying references…'], current: 0 })
+
+    try {
+      setRewriteProgress(p => ({ ...p, current: 1 }))
+      await new Promise(r => setTimeout(r, 500))
+      setRewriteProgress(p => ({ ...p, current: 2 }))
+      const response = await api.rewriteGrant(project.id, source, results)
+      setRewriteProgress(p => ({ ...p, current: 3 }))
+      await new Promise(r => setTimeout(r, 600))
+
+      // Update local rewrite results
+      const newResults = { ...rewriteResults }
+      for (const [secId, rewritten] of Object.entries(response.rewritten_sections || {})) {
+        newResults[secId] = { original: response.original_sections?.[secId] || sections[secId] || '', rewritten, cycle: response.cycle_number, source }
+      }
+      setRewriteResults(newResults)
+      setPkgCyclesRemaining(response.cycles_remaining)
+
+      // Show track changes for all rewritten sections
+      const newShow = { ...showTrackChanges }
+      for (const secId of response.sections_rewritten || []) {
+        newShow[secId] = true
+      }
+      setShowTrackChanges(newShow)
+    } catch (e) {
+      if (e.message === 'submission_package_required') {
+        setShowPackageModal(true)
+      } else {
+        alert('Rewrite failed: ' + e.message)
+      }
+    }
+    setRewriteProgress(null)
+  }
+
+  async function handleVerifyRefs(sectionId) {
+    const content = sections[sectionId]
+    if (!content) return
+    try {
+      const result = await api.verifyReferences(project.id, sectionId, content)
+      setRefCheckResults(prev => ({ ...prev, [sectionId]: result }))
+    } catch (e) {
+      alert('Reference check failed: ' + e.message)
+    }
+  }
+
+  function handleAcceptRewrite(sectionId, finalText) {
+    const updated = updateSection(sectionId, finalText)
+    save(updated, scores)
+    setShowTrackChanges(prev => ({ ...prev, [sectionId]: false }))
+    const newResults = { ...rewriteResults }
+    delete newResults[sectionId]
+    setRewriteResults(newResults)
+  }
+
+  function handleRejectRewrite(sectionId) {
+    setShowTrackChanges(prev => ({ ...prev, [sectionId]: false }))
+    const newResults = { ...rewriteResults }
+    delete newResults[sectionId]
+    setRewriteResults(newResults)
+  }
+
   // ── Commercial Charts ─────────────────────────────────────────────────────────
   async function handleGenerateCharts() {
     setGeneratingCharts(true)
@@ -1290,12 +1383,35 @@ export default function GrantEditor({ project, onSave, onBack }) {
                           {resubRevising[sec.id] ? '⟳ Revising…' : '🔄 Revise for A1'}
                         </button>
                       )}
+                      <button
+                        onClick={() => handleVerifyRefs(sec.id)}
+                        style={{ ...ghostBtn, fontSize: 11, padding: '4px 10px', borderColor: '#7c3aed', color: '#7c3aed' }}
+                        title="Check citations against PubMed"
+                      >
+                        🔍 Verify Refs
+                      </button>
                     </div>
                     {citationSection === sec.id && citationResults[sec.id] && (
                       <CitationsPanel
                         citations={citationResults[sec.id]}
                         onInsert={(cite) => handleInsertCitation(sec.id, cite)}
                         onRefresh={() => handleFindCitations(sec.id)}
+                      />
+                    )}
+                    {/* Reference Verifier */}
+                    {refCheckResults[sec.id] && (
+                      <ReferenceVerifier results={refCheckResults[sec.id]} />
+                    )}
+                    {/* Track Changes Viewer */}
+                    {showTrackChanges[sec.id] && rewriteResults[sec.id] && (
+                      <TrackChangesViewer
+                        originalText={rewriteResults[sec.id].original}
+                        rewrittenText={rewriteResults[sec.id].rewritten}
+                        sectionName={sec.label}
+                        cyclesRemaining={pkgCyclesRemaining}
+                        onAcceptAll={(finalText) => handleAcceptRewrite(sec.id, finalText)}
+                        onRejectAll={() => handleRejectRewrite(sec.id)}
+                        onClose={() => handleRejectRewrite(sec.id)}
                       />
                     )}
                   </div>
@@ -1545,6 +1661,7 @@ export default function GrantEditor({ project, onSave, onBack }) {
           onGenerateAlts={handleGenerateAlternatives}
           onClose={() => setAimsOptModal(null)}
           onRerun={handleOptimizeAims}
+          onRewrite={() => { setAimsOptModal(null); handleInitiateRewrite('aims_optimizer', aimsOptData) }}
         />
       )}
 
@@ -1580,6 +1697,7 @@ export default function GrantEditor({ project, onSave, onBack }) {
           results={studySectionResults}
           onClose={() => setStudySectionModal(null)}
           onRerun={handleRunStudySection}
+          onRewrite={() => { setStudySectionModal(null); handleInitiateRewrite('study_section', studySectionResults) }}
         />
       )}
 
@@ -1605,6 +1723,7 @@ export default function GrantEditor({ project, onSave, onBack }) {
           results={pdReviewResults}
           onClose={() => setPdReviewModal(null)}
           onRerun={handleRunPDReview}
+          onRewrite={() => { setPdReviewModal(null); handleInitiateRewrite('pd_review', pdReviewResults) }}
         />
       )}
 
@@ -1619,6 +1738,7 @@ export default function GrantEditor({ project, onSave, onBack }) {
           results={councilResults}
           onClose={() => setCouncilModal(null)}
           onRerun={handleRunAdvisoryCouncil}
+          onRewrite={() => { setCouncilModal(null); handleInitiateRewrite('advisory_council', councilResults) }}
         />
       )}
 
@@ -1639,7 +1759,56 @@ export default function GrantEditor({ project, onSave, onBack }) {
           results={commercialReviewResults}
           onClose={() => setCommercialReviewModal(null)}
           onRerun={handleRunCommercialReview}
+          onRewrite={() => { setCommercialReviewModal(null); handleInitiateRewrite('commercial_review', commercialReviewResults) }}
         />
+      )}
+
+      {/* Submission Package Modal */}
+      {showPackageModal && (
+        <SubmissionPackageModal
+          projectId={project.id}
+          cyclesRemaining={pkgCyclesRemaining}
+          onClose={() => setShowPackageModal(false)}
+          onActivated={() => { setShowPackageModal(false) }}
+        />
+      )}
+
+      {/* Rewrite Confirm Modal */}
+      {rewriteConfirmModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: '#fff', borderRadius: 14, padding: 32, maxWidth: 480, width: '100%', boxShadow: '0 20px 50px rgba(0,0,0,0.2)' }}>
+            <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 12 }}>✍️ Rewrite Grant to Address Feedback</div>
+            <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.6, marginBottom: 20 }}>
+              I'll rewrite your grant sections to address the reviewer concerns from <strong>{rewriteConfirmModal.source.replace(/_/g, ' ')}</strong>.
+              Your current version will be saved automatically first.
+            </div>
+            <div style={{ padding: '12px 16px', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 8, fontSize: 13, color: '#92400e', marginBottom: 24 }}>
+              This uses <strong>1</strong> of your <strong>{rewriteConfirmModal.cyclesRemaining}</strong> remaining rewrite cycle{rewriteConfirmModal.cyclesRemaining !== 1 ? 's' : ''}.
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setRewriteConfirmModal(null)} style={{ flex: 1, padding: '11px', fontSize: 14, border: '1px solid #e5e7eb', borderRadius: 8, cursor: 'pointer', background: '#fff', color: '#374151' }}>Cancel</button>
+              <button onClick={handleExecuteRewrite} style={{ flex: 2, padding: '11px', fontSize: 14, fontWeight: 600, border: 'none', borderRadius: 8, cursor: 'pointer', background: '#0e7490', color: '#fff' }}>Proceed with Rewrite</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rewrite Progress Modal */}
+      {rewriteProgress && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: '#fff', borderRadius: 14, padding: 32, maxWidth: 400, width: '100%', textAlign: 'center' }}>
+            <div style={{ fontSize: 28, marginBottom: 12 }}>✍️</div>
+            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 20 }}>Rewriting your grant…</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {rewriteProgress.steps.map((step, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: i <= rewriteProgress.current ? '#f0fdf4' : '#f9fafb', borderRadius: 8, fontSize: 13, color: i <= rewriteProgress.current ? '#15803d' : '#9ca3af' }}>
+                  <span>{i < rewriteProgress.current ? '✅' : i === rewriteProgress.current ? '⏳' : '○'}</span>
+                  {step}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Bibliography Drawer */}
@@ -1699,7 +1868,7 @@ export default function GrantEditor({ project, onSave, onBack }) {
 }
 
 // ── Aims Optimizer Modal ─────────────────────────────────────────────────────
-function AimsOptimizerModal({ data, altLoading, onGenerateAlts, onClose, onRerun }) {
+function AimsOptimizerModal({ data, altLoading, onGenerateAlts, onClose, onRerun, onRewrite }) {
   const [expanded, setExpanded] = useState({})
   const score = data.overall_score || 0
   const scoreColor = score >= 80 ? '#16a34a' : score >= 60 ? '#d97706' : '#dc2626'
@@ -1796,6 +1965,14 @@ function AimsOptimizerModal({ data, altLoading, onGenerateAlts, onClose, onRerun
         >
           {altLoading ? '⟳ Generating 3 Alternative Structures…' : '✨ Generate Alternative Aims Structures'}
         </button>
+        {onRewrite && (
+          <button
+            onClick={onRewrite}
+            style={{ width: '100%', marginTop: 10, padding: '10px', background: '#0e7490', color: '#fff', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
+          >
+            ✍️ Rewrite Grant to Address This Feedback
+          </button>
+        )}
       </div>
     </div>
   )
@@ -2391,7 +2568,7 @@ function PDReviewLoadingModal() {
 }
 
 // ── PD Review Results Modal ───────────────────────────────────────────────────
-function PDReviewResultsModal({ results, onClose, onRerun }) {
+function PDReviewResultsModal({ results, onClose, onRerun, onRewrite }) {
   const fundColors = { fund_now: { bg: '#f0fdf4', border: '#86efac', text: '#166534', label: '✅ Fund Now' }, revise_and_resubmit: { bg: '#fffbeb', border: '#fcd34d', text: '#92400e', label: '🔄 Revise & Resubmit' }, do_not_fund: { bg: '#fef2f2', border: '#fca5a5', text: '#991b1b', label: '❌ Do Not Fund' } }
   const fc = fundColors[results.fundability] || fundColors.revise_and_resubmit
 
@@ -2488,9 +2665,10 @@ function PDReviewResultsModal({ results, onClose, onRerun }) {
 
           <MissingComponentsPanel missingComponents={results.missing_components} packageCritique={results.package_completeness_critique} />
         </div>
-        <div style={{ padding: '1rem 1.5rem', borderTop: '0.5px solid #e5e5e5', display: 'flex', gap: 8 }}>
+        <div style={{ padding: '1rem 1.5rem', borderTop: '0.5px solid #e5e5e5', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button onClick={copyMemo} style={ghostBtn}>Copy memo</button>
           <button onClick={onRerun} style={ghostBtn}>Re-run</button>
+          {onRewrite && <button onClick={onRewrite} style={{ ...ghostBtn, borderColor: '#0e7490', color: '#0e7490', fontWeight: 600 }}>✍️ Rewrite Grant to Address This Feedback</button>}
           <button onClick={onClose} style={{ ...ghostBtn, marginLeft: 'auto' }}>Close</button>
         </div>
       </div>
@@ -2512,7 +2690,7 @@ function CouncilLoadingModal() {
 }
 
 // ── Advisory Council Results Modal ────────────────────────────────────────────
-function AdvisoryCouncilModal({ results, onClose, onRerun }) {
+function AdvisoryCouncilModal({ results, onClose, onRerun, onRewrite }) {
   const decisionColors = {
     fund: { bg: '#f0fdf4', border: '#86efac', text: '#166534', label: '✅ Fund' },
     fund_with_conditions: { bg: '#fffbeb', border: '#fcd34d', text: '#92400e', label: '🔄 Fund with Conditions' },
@@ -2596,8 +2774,9 @@ function AdvisoryCouncilModal({ results, onClose, onRerun }) {
 
           <MissingComponentsPanel missingComponents={results.missing_components} packageCritique={results.package_completeness_critique} />
         </div>
-        <div style={{ padding: '1rem 1.5rem', borderTop: '0.5px solid #e5e5e5', display: 'flex', gap: 8 }}>
+        <div style={{ padding: '1rem 1.5rem', borderTop: '0.5px solid #e5e5e5', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button onClick={onRerun} style={ghostBtn}>Re-run</button>
+          {onRewrite && <button onClick={onRewrite} style={{ ...ghostBtn, borderColor: '#0e7490', color: '#0e7490', fontWeight: 600 }}>✍️ Rewrite Grant to Address This Feedback</button>}
           <button onClick={onClose} style={{ ...ghostBtn, marginLeft: 'auto' }}>Close</button>
         </div>
       </div>
@@ -2733,7 +2912,7 @@ function NIHScoreCard({ criteria, impact }) {
 }
 
 // ── Study Section Results Modal ──────────────────────────────────────────────
-function StudySectionResultsModal({ results, onClose, onRerun }) {
+function StudySectionResultsModal({ results, onClose, onRerun, onRewrite }) {
   const [activeReviewer, setActiveReviewer] = useState(null)
   const sum = results.summary || {}
   const impact = sum.impact_score || 0
@@ -2839,8 +3018,9 @@ function StudySectionResultsModal({ results, onClose, onRerun }) {
           <MissingComponentsPanel missingComponents={results.summary?.missing_components} packageCritique={results.summary?.package_completeness_critique} />
         </div>
 
-        <div style={{ padding: '1rem 1.5rem', borderTop: '0.5px solid #e5e5e5', display: 'flex', gap: 8 }}>
+        <div style={{ padding: '1rem 1.5rem', borderTop: '0.5px solid #e5e5e5', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button onClick={onRerun} style={ghostBtn}>Re-run</button>
+          {onRewrite && <button onClick={onRewrite} style={{ ...ghostBtn, borderColor: '#0e7490', color: '#0e7490', fontWeight: 600 }}>✍️ Rewrite Grant to Address This Feedback</button>}
           <button onClick={onClose} style={{ ...ghostBtn, marginLeft: 'auto' }}>Close</button>
         </div>
       </div>
@@ -2898,7 +3078,7 @@ function downloadTxt(secs, sections, title, mech) {
 }
 
 // ── Commercial Review Modal ────────────────────────────────────────────────────
-function CommercialReviewModal({ results, onClose, onRerun }) {
+function CommercialReviewModal({ results, onClose, onRerun, onRewrite }) {
   const viabilityConfig = {
     high: { bg: '#dcfce7', border: '#86efac', text: '#15803d', label: '✅ HIGH VIABILITY' },
     medium: { bg: '#fef9c3', border: '#fde047', text: '#854d0e', label: '⚠️ MEDIUM VIABILITY' },
@@ -3051,8 +3231,16 @@ function CommercialReviewModal({ results, onClose, onRerun }) {
 
           <MissingComponentsPanel missingComponents={results.missing_components} packageCritique={results.package_completeness_critique} />
         </div>
-        <div style={{ padding: '1rem 1.5rem', borderTop: '0.5px solid #e5e5e5', display: 'flex', gap: 8 }}>
+        <div style={{ padding: '1rem 1.5rem', borderTop: '0.5px solid #e5e5e5', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <button onClick={onRerun} style={ghostBtn}>Re-run</button>
+          {onRewrite && (
+            <button
+              onClick={onRewrite}
+              style={{ padding: '7px 14px', fontSize: 13, fontWeight: 600, background: '#0e7490', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}
+            >
+              ✍️ Rewrite Grant to Address This Feedback
+            </button>
+          )}
           <button onClick={onClose} style={{ ...ghostBtn, marginLeft: 'auto' }}>Close</button>
         </div>
       </div>

@@ -195,3 +195,28 @@ ALTER TABLE users_meta ADD COLUMN voice_tier TEXT DEFAULT null;
 -- ─── PD REVIEW & ADVISORY COUNCIL (v4.5.0) ───────────────────────────────────
 -- ALTER TABLE projects ADD COLUMN pd_review_results TEXT;
 -- ALTER TABLE projects ADD COLUMN advisory_council_results TEXT;
+
+-- ─── POST-REVIEW REWRITE & REFERENCE CHECK (v5.4.0) ──────────────────────────
+ALTER TABLE projects ADD COLUMN rewrite_results TEXT;
+ALTER TABLE projects ADD COLUMN rewrite_source TEXT;
+ALTER TABLE projects ADD COLUMN rewrite_cycles_used INTEGER DEFAULT 0;
+ALTER TABLE projects ADD COLUMN rewrite_cycles_remaining INTEGER DEFAULT 0;
+ALTER TABLE projects ADD COLUMN reference_check_results TEXT;
+
+ALTER TABLE users_meta ADD COLUMN total_submission_packages INTEGER DEFAULT 0;
+ALTER TABLE users_meta ADD COLUMN package_credits INTEGER DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS submission_packages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  project_id TEXT NOT NULL,
+  purchased_at INTEGER DEFAULT (unixepoch()),
+  cycles_total INTEGER DEFAULT 5,
+  cycles_used INTEGER DEFAULT 0,
+  cycles_remaining INTEGER DEFAULT 5,
+  status TEXT DEFAULT 'active',
+  amount_paid REAL DEFAULT 199.00
+);
+
+CREATE INDEX IF NOT EXISTS idx_submission_packages_user ON submission_packages(user_id);
+CREATE INDEX IF NOT EXISTS idx_submission_packages_project ON submission_packages(project_id);

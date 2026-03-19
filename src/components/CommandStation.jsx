@@ -251,6 +251,24 @@ function UsersPanel({ data, api, onRefresh }) {
     }
   }
 
+  async function grantPackage(userId) {
+    if (!confirm(`Grant a submission package credit to this user? This allows them to run 5 rewrite cycles on one grant at no charge.`)) return
+    try {
+      await fetch(`${import.meta.env.VITE_WORKER_URL}/command/users/${userId}/grant-package`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${await api.getToken()}`
+        },
+        body: JSON.stringify({})
+      })
+      alert('Submission package credit granted successfully.')
+      onRefresh()
+    } catch (e) {
+      alert('Failed to grant package: ' + e.message)
+    }
+  }
+
   async function toggleVoice(userId, enabled) {
     try {
       await fetch(`${import.meta.env.VITE_WORKER_URL}/command/users/${userId}`, {
@@ -387,7 +405,13 @@ function UsersPanel({ data, api, onRefresh }) {
               </button>
             </div>
           </div>
-          <div style={{ marginTop: '2rem' }}>
+          <div style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <button
+              onClick={() => grantPackage(selectedUser.id)}
+              style={{ ...btnStyle, background: '#0e7490' }}
+            >
+              📦 Grant Submission Package
+            </button>
             {selectedUser.suspended === 1 ? (
               <button onClick={() => suspendUser(selectedUser.id, false)} style={btnStyle}>
                 Unsuspend User
@@ -559,6 +583,18 @@ function AICostsPanel({ data }) {
             <StatCard label="Voice Tokens" value={`${((data.voice.total_tokens || 0) / 1000).toFixed(1)}K`} />
             <StatCard label="Voice Cost" value={`$${(data.voice.total_cost || 0).toFixed(2)}`} />
             <StatCard label="Avg Session Cost" value={`$${(data.voice.avg_session_cost || 0).toFixed(3)}`} />
+          </div>
+        </Section>
+      )}
+
+      {data.submission_packages && (
+        <Section title="📦 Submission Packages">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
+            <StatCard label="Total Sold" value={data.submission_packages.total_sold || 0} />
+            <StatCard label="Total Revenue" value={`$${((data.submission_packages.total_sold || 0) * 199).toLocaleString()}`} />
+            <StatCard label="Avg Cycles Used" value={(data.submission_packages.avg_cycles_used || 0).toFixed(1)} />
+            <StatCard label="Active Packages" value={data.submission_packages.active_count || 0} />
+            <StatCard label="Exhausted" value={data.submission_packages.exhausted_count || 0} />
           </div>
         </Section>
       )}

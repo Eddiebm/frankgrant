@@ -554,6 +554,10 @@ async function handleGetProject(req, env, userId, projectId) {
   row.shared_with = row.shared_with ? (() => { try { return JSON.parse(row.shared_with) } catch { return [] } })() : []
   row.section_assignments = row.section_assignments ? (() => { try { return JSON.parse(row.section_assignments) } catch { return {} } })() : {}
   row.current_version = row.current_version || 1
+  row.rewrite_results = row.rewrite_results ? (() => { try { return JSON.parse(row.rewrite_results) } catch { return {} } })() : {}
+  row.reference_check_results = row.reference_check_results ? (() => { try { return JSON.parse(row.reference_check_results) } catch { return {} } })() : {}
+  row.rewrite_cycles_used = row.rewrite_cycles_used || 0
+  row.rewrite_cycles_remaining = row.rewrite_cycles_remaining || 0
   return json(row)
 }
 
@@ -1282,7 +1286,17 @@ async function handleCommandAICosts(req, env) {
     avg_session_cost: voiceRow?.sessions > 0 ? voiceCost / voiceRow.sessions : 0
   }
 
-  return json({ today_spend: todaySpend, month_spend: monthSpend, by_feature: featureCosts, by_model: modelCosts, by_user: byUser.results, voice: voiceStats })
+  // Submission packages stats
+  const pkgStats = await env.DB.prepare('SELECT COUNT(*) as total, SUM(cycles_used) as total_cycles_used, COUNT(CASE WHEN cycles_remaining > 0 THEN 1 END) as active_packages, COUNT(CASE WHEN cycles_remaining = 0 THEN 1 END) as exhausted_packages FROM submission_packages').first()
+  const submissionPackages = {
+    total_sold: pkgStats?.total || 0,
+    total_revenue: (pkgStats?.total || 0) * 199,
+    avg_cycles_used: pkgStats?.total > 0 ? Math.round((pkgStats.total_cycles_used || 0) / pkgStats.total * 10) / 10 : 0,
+    active_packages: pkgStats?.active_packages || 0,
+    exhausted_packages: pkgStats?.exhausted_packages || 0,
+  }
+
+  return json({ today_spend: todaySpend, month_spend: monthSpend, by_feature: featureCosts, by_model: modelCosts, by_user: byUser.results, voice: voiceStats, submission_packages: submissionPackages })
 }
 
 async function handleCommandGrants(req, env) {
@@ -3467,6 +3481,329 @@ async function handleVoiceEdit(req, env, userId) {
   return json({ edited, section_id })
 }
 
+// ── Submission Package helpers ────────────────────────────────────────────────
+
+async function checkSubmissionPackage(projectId, userId, env) {
+  const pkg = await env.DB.prepare(
+    'SELECT * FROM submission_packages WHERE project_id = ? AND user_id = ? AND status = ? AND cycles_remaining > 0 ORDER BY purchased_at DESC LIMIT 1'
+  ).bind(projectId, userId, 'active').first()
+  if (pkg) {
+    return { has_package: true, cycles_remaining: pkg.cycles_remaining, cycles_used: pkg.cycles_used, package_id: pkg.id }
+  }
+  // Check for package credits (admin-granted)
+  const meta = await env.DB.prepare('SELECT package_credits FROM users_meta WHERE id = ?').bind(userId).first()
+  return { has_package: false, cycles_remaining: 0, cycles_used: 0, package_credits: meta?.package_credits || 0 }
+}
+
+async function handleActivateSubmissionPackage(req, env, userId, projectId) {
+  const body = await req.json()
+  const now = Math.floor(Date.now() / 1000)
+
+  // Check if project belongs to user
+  const project = await env.DB.prepare('SELECT id FROM projects WHERE id = ? AND user_id = ?').bind(projectId, userId).first()
+  if (!project) return err('Project not found', 404)
+
+  // If admin override, activate immediately
+  if (body.admin_override) {
+    const payload = await requireAuth(req, env)
+    const email = payload?.email || payload?.['email_address'] || ''
+    if (!ADMIN_EMAILS.includes(email)) return err('Admin access required', 403)
+  } else {
+    // Check for package credit
+    const meta = await env.DB.prepare('SELECT package_credits FROM users_meta WHERE id = ?').bind(userId).first()
+    if (!meta || meta.package_credits < 1) {
+      return json({ error: 'submission_package_required', message: 'No package credits available' }, 402)
+    }
+    await env.DB.prepare('UPDATE users_meta SET package_credits = package_credits - 1, total_submission_packages = total_submission_packages + 1 WHERE id = ?').bind(userId).run()
+  }
+
+  // Create package
+  await env.DB.prepare(
+    'INSERT INTO submission_packages (user_id, project_id, purchased_at, cycles_total, cycles_used, cycles_remaining, status) VALUES (?, ?, ?, 5, 0, 5, ?)'
+  ).bind(userId, projectId, now, 'active').run()
+
+  await env.DB.prepare('UPDATE projects SET rewrite_cycles_remaining = 5, rewrite_cycles_used = 0 WHERE id = ? AND user_id = ?').bind(projectId, userId).run()
+
+  return json({ ok: true, cycles_remaining: 5 })
+}
+
+// ── Post-Review Rewrite ───────────────────────────────────────────────────────
+
+async function handleRewrite(req, env, userId, projectId, ctx) {
+  const body = await req.json()
+  const { source, source_results } = body
+  const now = Math.floor(Date.now() / 1000)
+
+  // Check project ownership
+  const project = await env.DB.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').bind(projectId, userId).first()
+  if (!project) return err('Project not found', 404)
+
+  // Check submission package — auto-activate from credits if available
+  let pkg = await checkSubmissionPackage(projectId, userId, env)
+  if (!pkg.has_package && pkg.package_credits > 0) {
+    // Auto-activate from credit
+    await env.DB.prepare('UPDATE users_meta SET package_credits = package_credits - 1, total_submission_packages = total_submission_packages + 1 WHERE id = ?').bind(userId).run()
+    await env.DB.prepare('INSERT INTO submission_packages (user_id, project_id, purchased_at, cycles_total, cycles_used, cycles_remaining, status) VALUES (?, ?, ?, 5, 0, 5, ?)').bind(userId, projectId, now, 'active').run()
+    await env.DB.prepare('UPDATE projects SET rewrite_cycles_remaining = 5, rewrite_cycles_used = 0 WHERE id = ? AND user_id = ?').bind(projectId, userId).run()
+    pkg = await checkSubmissionPackage(projectId, userId, env)
+  }
+
+  if (!pkg.has_package) {
+    return json({ error: 'submission_package_required', message: 'Post-review rewriting requires a Submission Package ($199 per grant). Includes 5 rewrite cycles, reference verification, and compliance certification.' }, 402)
+  }
+  if (pkg.cycles_remaining <= 0) {
+    return json({ error: 'no_cycles_remaining', message: 'You have used all 5 rewrite cycles for this grant.' }, 402)
+  }
+
+  const sections = JSON.parse(project.sections || '{}')
+  const cycleNum = (project.rewrite_cycles_used || 0) + 1
+
+  // Auto-snapshot before rewrite
+  try {
+    const latestVer = await env.DB.prepare('SELECT MAX(version_number) as max_ver FROM project_versions WHERE project_id = ?').bind(projectId).first()
+    const nextVer = (latestVer?.max_ver || 0) + 1
+    await env.DB.prepare('INSERT INTO project_versions (project_id, user_id, version_number, sections_snapshot, change_summary, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .bind(projectId, userId, nextVer, project.sections || '{}', `Pre-rewrite snapshot — ${source} cycle ${cycleNum}`, now).run()
+  } catch (e) { console.error('Snapshot failed:', e) }
+
+  // Decrement cycles
+  await env.DB.prepare('UPDATE submission_packages SET cycles_remaining = cycles_remaining - 1, cycles_used = cycles_used + 1 WHERE id = ?').bind(pkg.package_id).run()
+  await env.DB.prepare('UPDATE projects SET rewrite_cycles_remaining = rewrite_cycles_remaining - 1, rewrite_cycles_used = rewrite_cycles_used + 1, rewrite_source = ? WHERE id = ? AND user_id = ?')
+    .bind(source, projectId, userId).run()
+
+  // Extract feedback from source_results based on source type
+  function extractFeedback(source, results) {
+    const feedback = { general: [], bySection: {} }
+    if (!results) return feedback
+
+    const addToSection = (sectionId, text) => {
+      if (!text) return
+      if (!feedback.bySection[sectionId]) feedback.bySection[sectionId] = []
+      feedback.bySection[sectionId].push(text)
+    }
+
+    if (source === 'study_section') {
+      // Weaknesses from each reviewer and missing components
+      const reviewers = [results.reviewer1, results.reviewer2, results.reviewer3].filter(Boolean)
+      reviewers.forEach(r => {
+        if (r.weaknesses) r.weaknesses.forEach(w => feedback.general.push(w))
+        if (r.priority_revisions) r.priority_revisions.forEach(p => feedback.general.push(p))
+        if (r.concerns) r.concerns.forEach(c => feedback.general.push(c))
+        if (r.criteria) {
+          if (r.criteria.approach?.weaknesses) addToSection('approach', r.criteria.approach.weaknesses.join('; '))
+          if (r.criteria.significance?.weaknesses) addToSection('sig', r.criteria.significance.weaknesses.join('; '))
+          if (r.criteria.innovation?.weaknesses) addToSection('innov', r.criteria.innovation.weaknesses.join('; '))
+        }
+      })
+      if (results.weaknesses) results.weaknesses.forEach(w => feedback.general.push(w))
+      if (results.missing_components) results.missing_components.forEach(m => feedback.general.push(`Missing: ${m}`))
+    } else if (source === 'pd_review') {
+      if (results.concerns) results.concerns.forEach(c => feedback.general.push(c))
+      if (results.recommended_actions) results.recommended_actions.forEach(a => feedback.general.push(a))
+    } else if (source === 'advisory_council') {
+      if (results.conditions) results.conditions.forEach(c => feedback.general.push(c))
+      if (results.rationale) feedback.general.push(results.rationale)
+    } else if (source === 'commercial_review') {
+      const reviewers = [results.reviewer1, results.reviewer2, results.reviewer3].filter(Boolean)
+      reviewers.forEach(r => {
+        if (r.critical_gaps) r.critical_gaps.forEach(g => feedback.general.push(g))
+        if (r.concerns) r.concerns.forEach(c => feedback.general.push(c))
+      })
+      if (results.critical_gaps) results.critical_gaps.forEach(g => feedback.general.push(g))
+      addToSection('commercial', feedback.general.join('; '))
+    } else if (source === 'aims_optimizer') {
+      if (results.elements) {
+        results.elements.filter(e => (e.score || 10) < 7).forEach(e => {
+          addToSection('aims', `${e.name}: ${e.issue || e.feedback || ''}`)
+        })
+      }
+      if (results.top_three_improvements) results.top_three_improvements.forEach(i => {
+        addToSection('aims', i)
+        feedback.general.push(i)
+      })
+    } else if (source === 'compliance') {
+      if (results.issues) {
+        results.issues.filter(i => ['critical', 'warning'].includes(i.severity)).forEach(i => {
+          addToSection(i.section_id || 'aims', `${i.severity.toUpperCase()}: ${i.message}`)
+          feedback.general.push(`${i.section_id}: ${i.message}`)
+        })
+      }
+    }
+
+    return feedback
+  }
+
+  const feedback = extractFeedback(source, source_results)
+
+  // Sections to potentially rewrite
+  const REWRITEABLE = ['aims', 'sig', 'innov', 'approach', 'summary', 'narrative', 'commercial']
+  const rewrittenSections = {}
+  const originalSections = {}
+  const sectionsRewritten = []
+
+  // Gather all concerns for each section
+  const sectionsWithFeedback = new Set([...Object.keys(feedback.bySection)])
+  if (feedback.general.length > 0) {
+    REWRITEABLE.forEach(s => { if (sections[s] && sections[s].length > 100) sectionsWithFeedback.add(s) })
+  }
+
+  const rewritePromises = []
+  for (const sectionId of sectionsWithFeedback) {
+    if (!sections[sectionId] || sections[sectionId].length < 50) continue
+    const concerns = [...(feedback.bySection[sectionId] || []), ...feedback.general].slice(0, 20)
+    if (concerns.length === 0) continue
+
+    const sectionContent = sections[sectionId]
+    originalSections[sectionId] = sectionContent
+
+    const rewritePromise = callAnthropicWithFallback({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 2500,
+      system: `You are an elite NIH grant writer performing a targeted rewrite of a grant section to address specific reviewer concerns. Rewrite it to directly address each concern while preserving scientific content and strengthening weak areas. Return only the rewritten section text with no commentary or preamble.`,
+      messages: [{
+        role: 'user',
+        content: `REVIEWER CONCERNS TO ADDRESS:\n${concerns.map((c, i) => `${i + 1}. ${c}`).join('\n')}\n\nCURRENT SECTION:\n${sectionContent.slice(0, 8000)}`
+      }]
+    }, env).then(r => {
+      if (r._fallback) return { sectionId, rewritten: sectionContent }
+      const text = r.content?.[0]?.text || sectionContent
+      return { sectionId, rewritten: text }
+    })
+    rewritePromises.push(rewritePromise)
+  }
+
+  const rewriteResults = await Promise.all(rewritePromises)
+  for (const { sectionId, rewritten } of rewriteResults) {
+    rewrittenSections[sectionId] = rewritten
+    sectionsRewritten.push(sectionId)
+  }
+
+  // Store rewrite results
+  const existingRewriteResults = project.rewrite_results ? (() => { try { return JSON.parse(project.rewrite_results) } catch { return {} } })() : {}
+  const newRewriteResults = { ...existingRewriteResults }
+  for (const sectionId of sectionsRewritten) {
+    newRewriteResults[sectionId] = { original: originalSections[sectionId], rewritten: rewrittenSections[sectionId], cycle: cycleNum, source }
+  }
+  await env.DB.prepare('UPDATE projects SET rewrite_results = ? WHERE id = ? AND user_id = ?').bind(JSON.stringify(newRewriteResults), projectId, userId).run()
+
+  // Get updated cycles
+  const updatedPkg = await checkSubmissionPackage(projectId, userId, env)
+
+  // Fire reference verification for rewritten sections via waitUntil
+  if (ctx && sectionsRewritten.length > 0) {
+    ctx.waitUntil((async () => {
+      const verifyPromises = sectionsRewritten.slice(0, 3).map(sectionId =>
+        runReferenceVerification(projectId, sectionId, rewrittenSections[sectionId], userId, env).catch(e => console.error('Ref verify failed:', e))
+      )
+      await Promise.all(verifyPromises)
+    })())
+  }
+
+  return json({
+    rewritten_sections: rewrittenSections,
+    original_sections: originalSections,
+    sections_rewritten: sectionsRewritten,
+    feedback_addressed: feedback.general.length + Object.values(feedback.bySection).flat().length,
+    cycles_remaining: updatedPkg.cycles_remaining,
+    cycle_number: cycleNum,
+  })
+}
+
+// ── Reference Verification ────────────────────────────────────────────────────
+
+async function runReferenceVerification(projectId, sectionName, content, userId, env) {
+  if (!content || content.length < 100) return
+
+  // Step 1: Extract citations with Haiku
+  const extractResult = await callAnthropicWithFallback({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 600,
+    system: 'Extract every citation from this grant section. Look for author-year format like Smith et al. 2023, numbered references like [1] or [14], and any other citation patterns. Return ONLY valid JSON: { "citations": [{ "raw_text": "string", "authors": "string", "year": number, "journal": "string" }] }',
+    messages: [{ role: 'user', content: content.slice(0, 6000) }]
+  }, env)
+
+  if (extractResult._fallback) return
+
+  let citations = []
+  try {
+    const jm = (extractResult.content?.[0]?.text || '').match(/\{[\s\S]*\}/)
+    if (jm) citations = JSON.parse(jm[0]).citations || []
+  } catch { return }
+
+  citations = citations.slice(0, 15)
+
+  // Step 2: PubMed lookup for each citation
+  const results = []
+  for (const cit of citations) {
+    try {
+      const query = encodeURIComponent(`${cit.authors} ${cit.year}`.trim())
+      const searchUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${query}&retmax=3&retmode=json`
+      const searchResp = await fetch(searchUrl)
+      if (!searchResp.ok) { results.push({ ...cit, status: 'uncertain', reason: 'PubMed unavailable' }); continue }
+      const searchData = await searchResp.json()
+      const ids = searchData.esearchresult?.idlist || []
+
+      if (ids.length === 0) {
+        results.push({ ...cit, status: 'not_found', reason: 'Not found in PubMed' })
+        continue
+      }
+
+      // Fetch summary for top result
+      const summaryUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id=${ids[0]}&retmode=json`
+      const summaryResp = await fetch(summaryUrl)
+      const summaryData = await summaryResp.json()
+      const article = summaryData?.result?.[ids[0]]
+
+      if (!article) { results.push({ ...cit, status: 'uncertain', pmid: ids[0] }); continue }
+
+      // Check author overlap
+      const foundAuthors = (article.authors || []).map(a => a.name?.toLowerCase() || '')
+      const citAuthors = (cit.authors || '').toLowerCase().split(/\s+/)
+      const overlap = citAuthors.filter(a => a.length > 3 && foundAuthors.some(fa => fa.includes(a))).length
+      const overlapPct = citAuthors.length > 0 ? overlap / citAuthors.length : 0
+
+      results.push({
+        ...cit,
+        status: overlapPct >= 0.5 ? 'verified' : 'uncertain',
+        pmid: ids[0],
+        pubmed_title: article.title,
+        pubmed_authors: (article.authors || []).slice(0, 3).map(a => a.name).join(', '),
+        overlap_pct: Math.round(overlapPct * 100),
+      })
+    } catch (e) {
+      results.push({ ...cit, status: 'uncertain', reason: 'Lookup failed' })
+    }
+  }
+
+  // Store results
+  const existing = await env.DB.prepare('SELECT reference_check_results FROM projects WHERE id = ?').bind(projectId).first()
+  const allResults = existing?.reference_check_results ? (() => { try { return JSON.parse(existing.reference_check_results) } catch { return {} } })() : {}
+  allResults[sectionName] = {
+    checked_at: Math.floor(Date.now() / 1000),
+    results,
+    verified_count: results.filter(r => r.status === 'verified').length,
+    uncertain_count: results.filter(r => r.status === 'uncertain').length,
+    not_found_count: results.filter(r => r.status === 'not_found').length,
+  }
+  await env.DB.prepare('UPDATE projects SET reference_check_results = ? WHERE id = ?').bind(JSON.stringify(allResults), projectId).run()
+}
+
+async function handleVerifyReferences(req, env, userId, projectId) {
+  const body = await req.json()
+  const { section_name, content } = body
+
+  const project = await env.DB.prepare('SELECT id FROM projects WHERE id = ? AND user_id = ?').bind(projectId, userId).first()
+  if (!project) return err('Project not found', 404)
+
+  await runReferenceVerification(projectId, section_name, content, userId, env)
+
+  const updated = await env.DB.prepare('SELECT reference_check_results FROM projects WHERE id = ?').bind(projectId).first()
+  const allResults = updated?.reference_check_results ? (() => { try { return JSON.parse(updated.reference_check_results) } catch { return {} } })() : {}
+  const sectionResults = allResults[section_name] || { results: [], verified_count: 0, uncertain_count: 0, not_found_count: 0 }
+
+  return json(sectionResults)
+}
+
 // ── Main fetch handler ────────────────────────────────────────────────────────
 export default {
   async fetch(req, env, ctx) {
@@ -3931,6 +4268,46 @@ export default {
         return response
       }
 
+      // Submission Package
+      const subPkgMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/submission-package$/)
+      if (subPkgMatch) {
+        const projectId = subPkgMatch[1]
+        if (req.method === 'GET') {
+          const pkg = await checkSubmissionPackage(projectId, userId, env)
+          return json(pkg)
+        }
+        if (req.method === 'POST') {
+          const response = await handleActivateSubmissionPackage(req, env, userId, projectId)
+          return response
+        }
+      }
+
+      // Post-Review Rewrite
+      const rewriteMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/rewrite$/)
+      if (rewriteMatch && req.method === 'POST') {
+        const response = await handleRewrite(req, env, userId, rewriteMatch[1], ctx)
+        await logError(path, response.status, null, Date.now() - startTime, userId, env)
+        return response
+      }
+
+      // Reference Verification
+      const verifyRefsMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/verify-references$/)
+      if (verifyRefsMatch && req.method === 'POST') {
+        const response = await handleVerifyReferences(req, env, userId, verifyRefsMatch[1])
+        await logError(path, response.status, null, Date.now() - startTime, userId, env)
+        return response
+      }
+
+      // Feedback (for trial requests)
+      if (path === '/api/feedback' && req.method === 'POST') {
+        const body = await req.json()
+        const now = Math.floor(Date.now() / 1000)
+        await env.DB.prepare(
+          'INSERT INTO feedback_log (user_id, feedback_type, message, created_at) VALUES (?, ?, ?, ?)'
+        ).bind(userId, body.type || 'general', body.message || '', now).run()
+        return json({ ok: true })
+      }
+
       // ── Admin routes ──────────────────────────────────────────────────────
       if (path.startsWith('/api/command')) {
         const adminPayload = await requireAdmin(req, env)
@@ -3962,6 +4339,26 @@ export default {
         const backupFileMatch = path.match(/^\/api\/admin\/backups\/(.+)$/)
         if (backupFileMatch && req.method === 'GET') return handleAdminBackupFile(req, env, backupFileMatch[1])
         if (path === '/api/admin/restore' && req.method === 'POST') return handleAdminRestore(req, env)
+        // Grant package credits
+        const grantPkgMatch = path.match(/^\/api\/command\/users\/([^/]+)\/grant-package$/)
+        if (grantPkgMatch && req.method === 'POST') {
+          const targetUserId = grantPkgMatch[1]
+          const adminPayload2 = await requireAuth(req, env)
+          const adminEmail = adminPayload2?.email || adminPayload2?.['email_address'] || ''
+          const now = Math.floor(Date.now() / 1000)
+          const existing = await env.DB.prepare('SELECT package_credits FROM users_meta WHERE id = ?').bind(targetUserId).first()
+          const currentCredits = existing?.package_credits || 0
+          if (existing) {
+            await env.DB.prepare('UPDATE users_meta SET package_credits = ?, total_submission_packages = total_submission_packages + 1 WHERE id = ?')
+              .bind(currentCredits + 1, targetUserId).run()
+          } else {
+            await env.DB.prepare('INSERT INTO users_meta (id, package_credits, total_submission_packages, first_seen, last_active) VALUES (?, 1, 1, ?, ?)')
+              .bind(targetUserId, now, now).run()
+          }
+          await env.DB.prepare('INSERT INTO admin_actions (action_type, entity, entity_id, new_value, admin_user_id, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+            .bind('grant_package_credit', 'user', targetUserId, JSON.stringify({ credits_added: 1, new_total: currentCredits + 1 }), adminEmail, now).run()
+          return json({ ok: true, package_credits: currentCredits + 1 })
+        }
       }
 
       const responseTime = Date.now() - startTime

@@ -160,6 +160,16 @@ export function useApi() {
   async function getVersion(projectId, versionNumber) { return request('GET', `/projects/${projectId}/versions/${versionNumber}`) }
   async function restoreVersion(projectId, versionNumber) { return request('POST', `/projects/${projectId}/versions/${versionNumber}/restore`, { confirm: 'RESTORE' }) }
 
+  // Submission Package
+  async function getSubmissionPackage(projectId) { return request('GET', `/projects/${projectId}/submission-package`) }
+  async function activateSubmissionPackage(projectId, adminOverride = false) { return request('POST', `/projects/${projectId}/submission-package`, { admin_override: adminOverride }) }
+
+  // Post-Review Rewrite
+  async function rewriteGrant(projectId, source, sourceResults) { return request('POST', `/projects/${projectId}/rewrite`, { source, source_results: sourceResults }) }
+
+  // Reference Verification
+  async function verifyReferences(projectId, sectionName, content) { return request('POST', `/projects/${projectId}/verify-references`, { section_name: sectionName, content }) }
+
   return {
     callAI, listProjects, createProject, getProject, updateProject, deleteProject, getUsage,
     parseFOA, searchGrants, analyzeGrant, saveReference, getCompliance, getToken,
@@ -172,5 +182,6 @@ export function useApi() {
     getSharedProjects, getPendingInvitations, postComment, getComments, patchComment, deleteComment,
     assignSection, createSnapshot, getVersions, getVersion, restoreVersion,
     getAnthropicStatus, getAppStatus,
+    getSubmissionPackage, activateSubmissionPackage, rewriteGrant, verifyReferences,
   }
 }

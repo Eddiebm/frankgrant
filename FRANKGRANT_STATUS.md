@@ -1,7 +1,7 @@
 # FrankGrant Status Document
 
 **Last Updated:** 2026-03-19
-**Version:** 5.2.0
+**Version:** 5.4.0
 **Status:** Production (Internal COARE Tool)
 
 ---
@@ -11,7 +11,7 @@
 | Resource | URL/ID | Status |
 |----------|--------|--------|
 | **Frontend (Pages)** | https://frankgrant.pages.dev | ✅ Live |
-| **Latest Preview** | https://e8309c3f.frankgrant.pages.dev | ✅ Live |
+| **Latest Preview** | https://b61043ef.frankgrant.pages.dev | ✅ Live |
 | **R2 Bucket** | frankgrant-backups | ✅ Live |
 | **API Worker** | https://frankgrant-worker.eddie-781pagesdev.workers.dev | ✅ Live |
 | **D1 Database** | frankgrant-db | ✅ Live |
@@ -23,6 +23,18 @@
 ---
 
 ## ✅ Features: Built & Deployed
+
+### **Post-Review Rewrite + Track Changes + Reference Checking + Submission Package (v5.4.0)**
+- ✅ **Post-Review Rewrite** - Sonnet rewrites all grant sections based on reviewer feedback (study section, PD review, advisory council, commercial review, aims optimizer, compliance)
+- ✅ **Track Changes Viewer** - LCS word-level diff, paragraph-level accept/reject, 3 view modes (track changes / clean / side-by-side with sync scroll)
+- ✅ **Reference Hallucination Checker** - Haiku extracts citations → PubMed esearch/esummary → classified verified/uncertain/not_found with PMID links
+- ✅ **Auto-verify after rewrite** - Reference verification fires in background via ctx.waitUntil after every rewrite
+- ✅ **Submission Package gate** - $199/grant, 5 rewrite cycles, D1 tracking, admin credit system
+- ✅ **Admin: Grant Package** - Command Station user drawer "Grant Submission Package" button
+- ✅ **Admin: Package metrics** - AI Costs panel shows total sold, revenue, avg cycles used, active vs exhausted
+- ✅ **Rewrite button on all review modals** - Study Section, PD Review, Advisory Council, Commercial Review, Aims Optimizer
+- ✅ **D1 schema** - submission_packages table, rewrite_results/cycles columns on projects
+- ✅ **Worker routes** - GET/POST /submission-package, POST /rewrite, POST /verify-references, POST /command/users/:id/grant-package
 
 ### **Navigation & Shell (v5.2.0)**
 - ✅ **AppShell** - Desktop sidebar (220px expanded / 48px collapsed), mobile bottom tabs (56px)
