@@ -729,6 +729,147 @@ CONTENT:
 
 TARGET: 200-300 words. Professional, courteous, concise.`,
 
+    // ── Fast Track Phase-Specific Sections ──────────────────────────────────
+    phase1_sig: `Write the Significance section for the PHASE I component of a Fast Track (R41+R42) NIH SBIR application.
+
+PHASE I FOCUS: Feasibility and proof-of-concept. This section must establish the scientific rationale for the Phase I feasibility studies.
+TARGET: ~${Math.round(6 * 0.25 * 275)} words (approximately 25% of the 6-page Phase I Research Strategy limit)
+Go/No-Go Milestone: ${p.go_no_go_milestone || 'Not specified'}
+
+PROJECT CONTEXT:
+Title: ${p.title || 'Not specified'}
+Disease: ${p.disease || 'Not specified'}
+Biology: ${p.biology || 'Not specified'}
+Small business: ${p.pi || 'Not specified'}. Academic partner: ${p.partner || 'Not specified'}.
+${referenceContext}
+
+REQUIRED SUBSECTIONS:
+1. **Public Health Significance** — incidence, mortality, cost burden with specific data
+2. **Current Limitations and Critical Knowledge Gap** — what has been tried, why it failed, the specific gap
+3. **How Phase I Addresses the Gap** — explain the feasibility studies that will establish proof-of-concept
+
+STYLE: Active voice. No hedging. Emphasize the critical need for Phase I feasibility data to justify full Phase II development.`,
+
+    phase1_innov: `Write the Innovation section for the PHASE I component of a Fast Track (R41+R42) NIH SBIR application.
+
+PHASE I FOCUS: Emphasize innovation in the proof-of-concept approach. What is genuinely new about the Phase I feasibility approach?
+TARGET: ~${Math.round(6 * 0.15 * 275)} words (approximately 15% of the 6-page Phase I Research Strategy limit)
+Go/No-Go Milestone: ${p.go_no_go_milestone || 'Not specified'}
+
+PROJECT CONTEXT:
+Title: ${p.title || 'Not specified'}
+Biology: ${p.biology || 'Not specified'}
+Aims: ${p.aims || 'Not specified'}
+Small business: ${p.pi || 'Not specified'}. Academic partner: ${p.partner || 'Not specified'}.
+${referenceContext}
+
+WHAT TO INCLUDE:
+1. **Conceptual Innovation**: What existing paradigm are you challenging in Phase I?
+2. **Technical Innovation**: New approach, platform, or method being tested for feasibility?
+3. **Commercial Innovation**: What makes this commercially novel if Phase I succeeds?
+
+STYLE: Confident but focused on feasibility novelty. Distinguish from similar feasibility studies. Be specific.`,
+
+    phase1_approach: `Write the Approach section for the PHASE I component of a Fast Track (R41+R42) NIH SBIR application.
+
+PHASE I FOCUS: Describe feasibility and proof-of-concept studies only. Phase I aims should establish the key data needed to make the Go/No-Go decision for Phase II.
+TARGET: ~${Math.round(6 * 0.60 * 275)} words (approximately 60% of the 6-page Phase I Research Strategy limit)
+Go/No-Go Milestone: ${p.go_no_go_milestone || 'Not specified'}
+
+PROJECT CONTEXT:
+Title: ${p.title || 'Not specified'}
+Disease: ${p.disease || 'Not specified'}
+Biology: ${p.biology || 'Not specified'}
+Aims: ${p.aims || 'Not specified'}
+Small business: ${p.pi || 'Not specified'}. Academic partner: ${p.partner || 'Not specified'}.
+${referenceContext}${p.prelim_data_narrative ? `\nPRELIMINARY DATA:\n${p.prelim_data_narrative}\n` : ''}
+
+FOR EACH PHASE I AIM:
+1. **Rationale and Preliminary Data** — why this aim is critical to the go/no-go decision
+2. **Experimental Design** — specific feasibility experiments with methods, sample sizes, controls
+3. **Expected Outcomes** — what constitutes a successful Phase I result
+4. **Potential Pitfalls and Alternative Approaches** — 1-2 realistic risks with mitigation strategies
+5. **Timeline** — realistic timeline within Phase I period (typically months 1-24)
+
+CRITICAL — GO/NO-GO MILESTONE:
+End the Approach with a clearly labeled "Go/No-Go Milestone" subsection that states:
+- The specific quantitative threshold(s) that must be met to proceed to Phase II
+- The decision timeline
+- What data package will document milestone achievement
+
+Delineate small business vs. academic partner responsibilities. Show the partnership is genuinely integrated.
+
+STYLE: Hypothesis-driven, feasibility-focused. Show mastery of the approach. Inspire reviewer confidence that Phase I will succeed.`,
+
+    phase2_sig: `Write the Significance section for the PHASE II component of a Fast Track (R41+R42) NIH SBIR application.
+
+PHASE II FOCUS: Full development. This section assumes Phase I feasibility has been (or will be) demonstrated. Establish the full clinical/commercial significance of the Phase II development program.
+TARGET: ~${Math.round(12 * 0.25 * 275)} words (approximately 25% of the 12-page Phase II Research Strategy limit)
+
+PROJECT CONTEXT:
+Title: ${p.title || 'Not specified'}
+Disease: ${p.disease || 'Not specified'}
+Biology: ${p.biology || 'Not specified'}
+Small business: ${p.pi || 'Not specified'}. Academic partner: ${p.partner || 'Not specified'}.
+Phase I completion: Assumes successful completion of Phase I go/no-go milestone: ${p.go_no_go_milestone || 'not specified'}
+${referenceContext}
+
+REQUIRED SUBSECTIONS:
+1. **Public Health Significance** — broader disease burden and why Phase II scale development is necessary
+2. **Phase I Accomplishments** — briefly reference what Phase I established (proof-of-concept, feasibility milestone met)
+3. **Critical Knowledge Gap for Phase II** — what remains unknown that Phase II will definitively answer
+4. **Full-Scale Development Impact** — expected impact when Phase II completes successfully
+
+STYLE: Active voice. No hedging. Build from Phase I success to Phase II necessity. Show progression from feasibility to full development.`,
+
+    phase2_innov: `Write the Innovation section for the PHASE II component of a Fast Track (R41+R42) NIH SBIR application.
+
+PHASE II FOCUS: Innovation in full-scale development, optimization, and clinical/commercial translation. Build on Phase I novelty with Phase II-scale innovation.
+TARGET: ~${Math.round(12 * 0.15 * 275)} words (approximately 15% of the 12-page Phase II Research Strategy limit)
+
+PROJECT CONTEXT:
+Title: ${p.title || 'Not specified'}
+Biology: ${p.biology || 'Not specified'}
+Aims: ${p.aims || 'Not specified'}
+Small business: ${p.pi || 'Not specified'}. Academic partner: ${p.partner || 'Not specified'}.
+Phase I completion assumption: ${p.go_no_go_milestone || 'successful feasibility demonstration'}
+${referenceContext}
+
+WHAT TO INCLUDE:
+1. **Scale-Up Innovation**: What is novel about the Phase II development approach?
+2. **Technical Innovation**: New optimization, manufacturing, or clinical translation approach?
+3. **Commercial Innovation**: What makes this Phase II program uniquely positioned for commercialization?
+
+STYLE: Confident. Distinguish Phase II innovation from Phase I proof-of-concept. Show the Phase II program is not incremental but transformative.`,
+
+    phase2_approach: `Write the Approach section for the PHASE II component of a Fast Track (R41+R42) NIH SBIR application.
+
+PHASE II FOCUS: Full-scale development, optimization, and validation studies. Assumes Phase I go/no-go milestone has been met. This is a comprehensive development program.
+TARGET: ~${Math.round(12 * 0.60 * 275)} words (approximately 60% of the 12-page Phase II Research Strategy limit)
+
+PROJECT CONTEXT:
+Title: ${p.title || 'Not specified'}
+Disease: ${p.disease || 'Not specified'}
+Biology: ${p.biology || 'Not specified'}
+Aims: ${p.aims || 'Not specified'}
+Small business: ${p.pi || 'Not specified'}. Academic partner: ${p.partner || 'Not specified'}.
+Phase I completion assumption: ${p.go_no_go_milestone || 'successful feasibility demonstration'}
+${referenceContext}${p.prelim_data_narrative ? `\nPRELIMINARY DATA (includes Phase I results):\n${p.prelim_data_narrative}\n` : ''}
+
+FOR EACH PHASE II AIM:
+1. **Rationale and Phase I Foundation** — how Phase I data supports this Phase II aim
+2. **Experimental Design** — full-scale development experiments with specific methods, sample sizes (powered for significance), controls
+3. **Expected Outcomes and Interpretation** — quantitative benchmarks for Phase II success
+4. **Potential Pitfalls and Alternative Approaches** — 1-2 realistic challenges with specific mitigation strategies
+5. **Timeline** — realistic timeline within Phase II period (typically months 25-60)
+
+RIGOR AND REPRODUCIBILITY:
+Address throughout: biological replicates, blinding, randomization, statistical analysis plan (with specific power calculations), sex as a biological variable.
+
+Clearly delineate small business vs. academic partner responsibilities. Show integration and complementary expertise for Phase II scale.
+
+STYLE: Comprehensive, rigorous, and confident. Show mastery of Phase II development. Inspire reviewer confidence in the team's ability to complete full development.`,
+
     project_timeline: `Write a Project Timeline narrative for this NIH ${m.label} application.
 
 PROJECT CONTEXT:

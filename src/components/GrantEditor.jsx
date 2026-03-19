@@ -5,6 +5,7 @@ import VoiceMode from './VoiceMode'
 import { CommercialChartsPanel } from './CommercialCharts'
 import BibliographyManager from './BibliographyManager'
 import { generateGrantDOCX } from '../lib/docxExport'
+import { generateSubmissionPackage } from '../lib/docxExportPackage'
 import {
   MECHANISMS, SECTIONS, WORDS_PER_PAGE, INSTITUTES,
   getDescriptor, getLimitsText, getCommercialLabel, getProjectRules
@@ -64,6 +65,18 @@ export default function GrantEditor({ project, onSave, onBack }) {
 
   // DOCX export
   const [exportingDocx, setExportingDocx] = useState(false)
+  const [exportingPackage, setExportingPackage] = useState(false)
+  const [showExportDropdown, setShowExportDropdown] = useState(false)
+
+  // Fast Track
+  const [fastTrackPhase1Sections, setFastTrackPhase1Sections] = useState(() => {
+    try { return JSON.parse(project.fast_track_phase1_sections || '{}') } catch { return {} }
+  })
+  const [fastTrackPhase2Sections, setFastTrackPhase2Sections] = useState(() => {
+    try { return JSON.parse(project.fast_track_phase2_sections || '{}') } catch { return {} }
+  })
+  const [goNoGoMilestone, setGoNoGoMilestone] = useState(project.go_no_go_milestone || '')
+  const [activeFTSec, setActiveFTSec] = useState('phase1_sig')
 
   // Study Section
   const [studySectionModal, setStudySectionModal] = useState(null) // null | 'progress' | 'results'
@@ -124,13 +137,18 @@ export default function GrantEditor({ project, onSave, onBack }) {
       title, mechanism: mech, pi: setup.pi, partner: setup.partner,
       disease: setup.disease, biology: setup.biology, aims: setup.aims,
       pa: setup.pa, budget: setup.budget, commercial: setup.commercial,
+      institute: setup.institute,
+      foa_number: foaNumber || null,
       reference_grants: referenceGrants,
       prelim_data_narrative: project.prelim_data_narrative || null,
       prelim_data_gaps: project.prelim_data_gaps || null,
+      go_no_go_milestone: goNoGoMilestone,
+      fast_track_phase1_sections: fastTrackPhase1Sections,
+      fast_track_phase2_sections: fastTrackPhase2Sections,
     }
   }
 
-  async function save(updatedSections, updatedScores, updatedFoaRules) {
+  async function save(updatedSections, updatedScores, updatedFoaRules, updatedFT1, updatedFT2, updatedMilestone) {
     setSaveState('saving')
     try {
       await onSave({
@@ -141,6 +159,9 @@ export default function GrantEditor({ project, onSave, onBack }) {
         foa_rules: updatedFoaRules !== undefined ? updatedFoaRules : foaRules,
         foa_valid: foaValid ? 1 : 0,
         reference_grants: referenceGrants,
+        go_no_go_milestone: updatedMilestone !== undefined ? updatedMilestone : goNoGoMilestone,
+        fast_track_phase1_sections: updatedFT1 !== undefined ? updatedFT1 : fastTrackPhase1Sections,
+        fast_track_phase2_sections: updatedFT2 !== undefined ? updatedFT2 : fastTrackPhase2Sections,
       })
       setSaveState('saved')
     } catch {
@@ -214,6 +235,46 @@ export default function GrantEditor({ project, onSave, onBack }) {
 
       // Start compliance polling
       startCompliancePolling(secId)
+    } catch (e) {
+      alert('Generation failed: ' + e.message)
+    }
+    setGenerating(g => ({ ...g, [secId]: false }))
+  }
+
+  // ── Fast Track Section Helpers ─────────────────────────────────────────────
+  function updateFT1Section(id, text) {
+    const updated = { ...fastTrackPhase1Sections, [id]: text }
+    setFastTrackPhase1Sections(updated)
+    setSaveState('unsaved')
+    return updated
+  }
+
+  function updateFT2Section(id, text) {
+    const updated = { ...fastTrackPhase2Sections, [id]: text }
+    setFastTrackPhase2Sections(updated)
+    setSaveState('unsaved')
+    return updated
+  }
+
+  async function generateFTSection(phase, secId) {
+    setGenerating(g => ({ ...g, [secId]: true }))
+    try {
+      const result = await api.callAI({
+        model: SONNET,
+        max_tokens: secId.includes('approach') ? 2500 : 1000,
+        system: PROFESSOR_SYSTEM,
+        messages: [{ role: 'user', content: professorWritePrompt(secId, getProject(), mech) }],
+        _project_id: project.id,
+        _mechanism: mech,
+      }, `write_${secId}`)
+      const text = result.content.map(b => b.text || '').join('')
+      if (phase === 1) {
+        const updated = updateFT1Section(secId, text)
+        await save(sections, scores, foaRules, updated, fastTrackPhase2Sections, goNoGoMilestone)
+      } else {
+        const updated = updateFT2Section(secId, text)
+        await save(sections, scores, foaRules, fastTrackPhase1Sections, updated, goNoGoMilestone)
+      }
     } catch (e) {
       alert('Generation failed: ' + e.message)
     }
@@ -389,21 +450,50 @@ export default function GrantEditor({ project, onSave, onBack }) {
   }
 
   // ── DOCX Export ─────────────────────────────────────────────────────────────
+  function getBibliography() {
+    try { return JSON.parse(project.bibliography || '[]') } catch { return [] }
+  }
+
   async function handleExportDOCX() {
     setExportingDocx(true)
+    setShowExportDropdown(false)
     try {
-      const buffer = await generateGrantDOCX(getProject(), sections, scores)
+      const fullProject = { ...getProject(), id: project.id }
+      const buffer = await generateGrantDOCX(fullProject, sections, scores, getBibliography())
       const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = (title || 'grant').replace(/[^a-z0-9]/gi, '_').toLowerCase() + '.docx'
+      a.download = (title || 'grant').replace(/[^a-z0-9]/gi, '_').toLowerCase() + '_combined.docx'
       a.click()
       URL.revokeObjectURL(url)
     } catch (e) {
       alert('Export failed: ' + e.message)
     }
     setExportingDocx(false)
+  }
+
+  async function handleExportPackage() {
+    setExportingPackage(true)
+    setShowExportDropdown(false)
+    try {
+      const fullProject = { ...getProject(), id: project.id }
+      const blob = await generateSubmissionPackage(fullProject, sections, getBibliography())
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = (title || 'grant').replace(/[^a-z0-9]/gi, '_').toLowerCase() + '_submission_package.zip'
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      alert('Package export failed: ' + e.message)
+    }
+    setExportingPackage(false)
+  }
+
+  function handlePrint() {
+    setShowExportDropdown(false)
+    window.print()
   }
 
   // ── Study Section ────────────────────────────────────────────────────────────
@@ -591,14 +681,29 @@ export default function GrantEditor({ project, onSave, onBack }) {
             )}
           </button>
           <button onClick={() => save()} style={ghostBtn}>Save</button>
-          <button
-            onClick={handleExportDOCX}
-            disabled={exportingDocx}
-            style={{ ...ghostBtn, fontSize: 12 }}
-            title="Export as Word document"
-          >
-            {exportingDocx ? '⟳' : '📄'} DOCX
-          </button>
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setShowExportDropdown(d => !d)}
+              disabled={exportingDocx || exportingPackage}
+              style={{ ...ghostBtn, fontSize: 12 }}
+              title="Export options"
+            >
+              {exportingDocx ? '⟳ Exporting…' : exportingPackage ? '⟳ Packaging…' : '📄 Export ▾'}
+            </button>
+            {showExportDropdown && (
+              <div style={{ position: 'absolute', top: '100%', right: 0, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 100, minWidth: 200, padding: '4px 0' }}>
+                <button onClick={handleExportDOCX} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#111' }}>
+                  📄 Combined Document (.docx)
+                </button>
+                <button onClick={handleExportPackage} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#111' }}>
+                  📦 NIH Submission Package (.zip)
+                </button>
+                <button onClick={handlePrint} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#111' }}>
+                  🖨️ Print / PDF
+                </button>
+              </div>
+            )}
+          </div>
           <button
             onClick={() => studySectionResults ? setStudySectionModal('results') : handleRunStudySection()}
             style={{ ...ghostBtn, fontSize: 12 }}
@@ -739,6 +844,25 @@ export default function GrantEditor({ project, onSave, onBack }) {
               </div>
             </div>
 
+            {/* Fast Track: Go/No-Go Milestone */}
+            {m.is_fast_track && (
+              <div style={{ marginTop: 12, padding: '12px 16px', background: '#fffbeb', border: '0.5px solid #fbbf24', borderRadius: 8 }}>
+                <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#92400e' }}>
+                  ⚡ Fast Track Go/No-Go Milestone <span style={{ color: '#dc2626', fontSize: 11 }}>Required</span>
+                </div>
+                <div style={{ fontSize: 12, color: '#78350f', marginBottom: 8 }}>
+                  State the quantitative milestone(s) that Phase I must achieve to proceed to Phase II. This appears prominently in the Phase I Approach and DOCX export.
+                </div>
+                <textarea
+                  style={{ ...inputStyle, width: '100%', minHeight: 80, resize: 'vertical' }}
+                  value={goNoGoMilestone}
+                  onChange={e => { setGoNoGoMilestone(e.target.value); setSaveState('unsaved') }}
+                  onBlur={() => save(sections, scores, foaRules, fastTrackPhase1Sections, fastTrackPhase2Sections, goNoGoMilestone)}
+                  placeholder="e.g., Achieve ≥80% tumor regression in at least 5 of 8 treated mice in the murine xenograft model by Month 18, with <10% off-target toxicity..."
+                />
+              </div>
+            )}
+
             {/* Resubmission toggle */}
             <div style={{ marginTop: 12, padding: '12px 16px', background: setup.is_resubmission ? '#eff6ff' : '#f8f8f8', border: `0.5px solid ${setup.is_resubmission ? '#93c5fd' : '#e5e5e5'}`, borderRadius: 8 }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
@@ -771,6 +895,56 @@ export default function GrantEditor({ project, onSave, onBack }) {
         {activeTab === 'writer' && (
           <div>
             <div style={limitsBox}>{getLimitsText(mech, setup.institute)}</div>
+
+            {/* Fast Track Dual Writer */}
+            {m.is_fast_track ? (
+              <FastTrackWriter
+                project={getProject()}
+                sections={sections}
+                scores={scores}
+                ft1={fastTrackPhase1Sections}
+                ft2={fastTrackPhase2Sections}
+                goNoGo={goNoGoMilestone}
+                activeSec={activeFTSec}
+                setActiveSec={setActiveFTSec}
+                generating={generating}
+                scoring={scoring}
+                onGenerate={generateFTSection}
+                onGenerateStd={generateSection}
+                onUpdateFT1={(id, text) => { const u = updateFT1Section(id, text); save(sections, scores, foaRules, u, fastTrackPhase2Sections, goNoGoMilestone) }}
+                onUpdateFT2={(id, text) => { const u = updateFT2Section(id, text); save(sections, scores, foaRules, fastTrackPhase1Sections, u, goNoGoMilestone) }}
+                onUpdateSection={(id, text) => { const u = updateSection(id, text); save(u, scores) }}
+                onScore={scoreSection}
+                visibleSecs={visibleSecs}
+                mech={mech}
+                setup={setup}
+                inputStyle={inputStyle}
+                ghostBtn={ghostBtn}
+                mechBtn={mechBtn}
+                complianceResults={complianceResults}
+                compliancePolling={compliancePolling}
+                complianceExpanded={complianceExpanded}
+                setComplianceExpanded={setComplianceExpanded}
+                onRecheck={recheckCompliance}
+                chartData={chartData}
+                showCharts={showCharts}
+                setShowCharts={setShowCharts}
+                generatingCharts={generatingCharts}
+                onGenerateCharts={handleGenerateCharts}
+                citationSection={citationSection}
+                citationResults={citationResults}
+                citationLoading={citationLoading}
+                onFindCitations={handleFindCitations}
+                setCitationSection={setCitationSection}
+                onInsertCitation={handleInsertCitation}
+                polishing={polishing}
+                onPolish={handlePolish}
+                resubAnalysis={resubAnalysis}
+                resubRevising={resubRevising}
+                onRevise={handleReviseSection}
+              />
+            ) : (
+            <>
             <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: '1rem' }}>
               {visibleSecs.map(s => {
                 const hasText = !!sections[s.id]
@@ -894,6 +1068,8 @@ export default function GrantEditor({ project, onSave, onBack }) {
                 )}
               </div>
             ))}
+            </>
+            )}
           </div>
         )}
 
@@ -919,7 +1095,10 @@ export default function GrantEditor({ project, onSave, onBack }) {
               <button style={ghostBtn} onClick={() => copyAll(visibleSecs, sections, title, mech)}>Copy full text</button>
               <button style={ghostBtn} onClick={() => downloadTxt(visibleSecs, sections, title, mech)}>Download .txt</button>
               <button style={ghostBtn} onClick={handleExportDOCX} disabled={exportingDocx}>
-                {exportingDocx ? 'Exporting…' : '📄 Export DOCX'}
+                {exportingDocx ? 'Exporting…' : '📄 Combined DOCX'}
+              </button>
+              <button style={ghostBtn} onClick={handleExportPackage} disabled={exportingPackage}>
+                {exportingPackage ? 'Packaging…' : '📦 NIH Package (.zip)'}
               </button>
             </div>
           </div>
@@ -1213,6 +1392,194 @@ export default function GrantEditor({ project, onSave, onBack }) {
           onClose={() => setShowVoiceMode(false)}
         />
       )}
+    </div>
+  )
+}
+
+// ── Fast Track Dual Writer ──────────────────────────────────────────────────
+function FastTrackWriter({
+  project, sections, scores, ft1, ft2, goNoGo,
+  activeSec, setActiveSec,
+  generating, scoring,
+  onGenerate, onGenerateStd, onUpdateFT1, onUpdateFT2, onUpdateSection, onScore,
+  visibleSecs, mech, setup, inputStyle, ghostBtn, mechBtn,
+  complianceResults, compliancePolling, complianceExpanded, setComplianceExpanded, onRecheck,
+  chartData, showCharts, setShowCharts, generatingCharts, onGenerateCharts,
+  citationSection, citationResults, citationLoading, onFindCitations, setCitationSection, onInsertCitation,
+  polishing, onPolish, resubAnalysis, resubRevising, onRevise,
+}) {
+  const PHASE1_SECS = [
+    { id: 'phase1_sig', label: 'Phase I Significance', phase: 1 },
+    { id: 'phase1_innov', label: 'Phase I Innovation', phase: 1 },
+    { id: 'phase1_approach', label: 'Phase I Approach', phase: 1 },
+  ]
+  const PHASE2_SECS = [
+    { id: 'phase2_sig', label: 'Phase II Significance', phase: 2 },
+    { id: 'phase2_innov', label: 'Phase II Innovation', phase: 2 },
+    { id: 'phase2_approach', label: 'Phase II Approach', phase: 2 },
+  ]
+
+  // Non-research-strategy standard sections
+  const stdSecs = visibleSecs.filter(s => !['sig','innov','approach'].includes(s.id))
+
+  function getContent(secId, phase) {
+    if (phase === 1) return ft1[secId] || ''
+    if (phase === 2) return ft2[secId] || ''
+    return sections[secId] || ''
+  }
+
+  function isActiveSec(id) { return activeSec === id }
+
+  function renderSectionEditor(secId, phase, label) {
+    const content = getContent(secId, phase)
+    const isFT = phase === 1 || phase === 2
+    return (
+      <div key={secId}>
+        <button
+          disabled={generating[secId]}
+          onClick={() => isFT ? onGenerate(phase, secId) : onGenerateStd(secId)}
+          style={{ ...ghostBtn, marginBottom: 8, fontWeight: 500 }}
+        >
+          {generating[secId] ? 'Writing...' : content ? 'Regenerate ↗' : `Generate ${label} ↗`}
+        </button>
+        <textarea
+          value={content}
+          onChange={e => {
+            if (phase === 1) onUpdateFT1(secId, e.target.value)
+            else if (phase === 2) onUpdateFT2(secId, e.target.value)
+            else onUpdateSection(secId, e.target.value)
+          }}
+          style={{ ...inputStyle, minHeight: 280, resize: 'vertical', width: '100%', lineHeight: 1.8, fontFamily: 'Georgia, serif', fontSize: 13 }}
+          placeholder={`Your ${label} text will appear here.`}
+        />
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, marginBottom: 8 }}>
+          <span style={{ fontSize: 11, color: '#999' }}>
+            {content ? `${content.split(/\s+/).filter(Boolean).length} words` : ''}
+          </span>
+        </div>
+        {content && (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+            <button onClick={() => isFT ? onFindCitations(secId) : onFindCitations(secId)} disabled={citationLoading[secId]} style={{ ...ghostBtn, fontSize: 11, padding: '4px 10px' }}>
+              {citationLoading[secId] ? '⟳ Searching PubMed…' : '📚 Find Citations'}
+            </button>
+            <button onClick={() => onPolish(secId)} disabled={polishing[secId]} style={{ ...ghostBtn, fontSize: 11, padding: '4px 10px' }}>
+              {polishing[secId] ? '⟳ Polishing…' : '✨ Polish'}
+            </button>
+          </div>
+        )}
+        {citationSection === secId && citationResults[secId] && (
+          <CitationsPanel
+            citations={citationResults[secId]}
+            onInsert={(cite) => {
+              if (phase === 1) onUpdateFT1(secId, content + '\n\n' + cite)
+              else if (phase === 2) onUpdateFT2(secId, content + '\n\n' + cite)
+              else onInsertCitation(secId, cite)
+            }}
+            onRefresh={() => onFindCitations(secId)}
+          />
+        )}
+      </div>
+    )
+  }
+
+  const allSecs = [
+    ...PHASE1_SECS,
+    { id: '_gonogo', label: 'Go/No-Go', phase: 0 },
+    ...PHASE2_SECS,
+    ...stdSecs.map(s => ({ ...s, phase: 0 })),
+  ]
+
+  const activeMeta = allSecs.find(s => s.id === activeSec)
+
+  return (
+    <div>
+      {/* Phase I Group */}
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+          Phase I Research Strategy (6 pages)
+        </div>
+        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+          {PHASE1_SECS.map(s => {
+            const hasText = !!ft1[s.id]
+            return (
+              <button key={s.id} onClick={() => setActiveSec(s.id)} style={{ ...mechBtn(isActiveSec(s.id)), position: 'relative' }}>
+                {s.label}
+                {hasText && <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#4caf50', position: 'absolute', top: 4, right: 4 }} />}
+              </button>
+            )
+          })}
+        </div>
+        {/* Phase I word count */}
+        {(ft1.phase1_sig || ft1.phase1_innov || ft1.phase1_approach) && (
+          <div style={{ marginTop: 6, fontSize: 11, color: '#6b7280' }}>
+            Phase I Research Strategy: {Math.round(([ft1.phase1_sig, ft1.phase1_innov, ft1.phase1_approach].filter(Boolean).join(' ').split(/\s+/).filter(Boolean).length) / 275 * 10) / 10} / 6 pages
+          </div>
+        )}
+      </div>
+
+      {/* Go/No-Go Milestone display */}
+      <div style={{ margin: '10px 0', padding: '10px 14px', background: goNoGo ? '#f0fdf4' : '#fff7ed', border: `1px solid ${goNoGo ? '#86efac' : '#fbbf24'}`, borderRadius: 8, fontSize: 12 }}>
+        <div style={{ fontWeight: 600, color: goNoGo ? '#166534' : '#92400e', marginBottom: goNoGo ? 4 : 0 }}>
+          {goNoGo ? '✓ Go/No-Go Milestone' : '⚠ Go/No-Go Milestone not set — add in Project Setup tab'}
+        </div>
+        {goNoGo && <div style={{ color: '#166534', lineHeight: 1.5 }}>{goNoGo}</div>}
+      </div>
+
+      {/* Phase II Group */}
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+          Phase II Research Strategy (12 pages)
+        </div>
+        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+          {PHASE2_SECS.map(s => {
+            const hasText = !!ft2[s.id]
+            return (
+              <button key={s.id} onClick={() => setActiveSec(s.id)} style={{ ...mechBtn(isActiveSec(s.id)), position: 'relative' }}>
+                {s.label}
+                {hasText && <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#4caf50', position: 'absolute', top: 4, right: 4 }} />}
+              </button>
+            )
+          })}
+        </div>
+        {(ft2.phase2_sig || ft2.phase2_innov || ft2.phase2_approach) && (
+          <div style={{ marginTop: 6, fontSize: 11, color: '#6b7280' }}>
+            Phase II Research Strategy: {Math.round(([ft2.phase2_sig, ft2.phase2_innov, ft2.phase2_approach].filter(Boolean).join(' ').split(/\s+/).filter(Boolean).length) / 275 * 10) / 10} / 12 pages
+          </div>
+        )}
+      </div>
+
+      {/* Other sections */}
+      {stdSecs.length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+            Other Sections
+          </div>
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+            {stdSecs.map(s => {
+              const hasText = !!sections[s.id]
+              const sc = scores[s.id]
+              return (
+                <button key={s.id} onClick={() => setActiveSec(s.id)} style={{ ...mechBtn(isActiveSec(s.id)), position: 'relative' }}>
+                  {s.label}
+                  {hasText && <span style={{ width: 5, height: 5, borderRadius: '50%', background: sc ? (sc.score <= 3 ? '#4caf50' : sc.score <= 5 ? '#ff9800' : '#e53935') : '#4caf50', position: 'absolute', top: 4, right: 4 }} />}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Active section editor */}
+      <div style={{ marginTop: 12 }}>
+        {activeMeta && activeMeta.phase === 1 && renderSectionEditor(activeSec, 1, activeMeta.label)}
+        {activeMeta && activeMeta.phase === 2 && renderSectionEditor(activeSec, 2, activeMeta.label)}
+        {activeMeta && activeMeta.phase === 0 && activeMeta.id !== '_gonogo' && renderSectionEditor(activeSec, 0, activeMeta.label)}
+        {activeMeta && activeMeta.id === '_gonogo' && (
+          <div style={{ padding: '12px 14px', background: '#fffbeb', border: '1px solid #fbbf24', borderRadius: 8, fontSize: 13, color: '#78350f' }}>
+            Configure the Go/No-Go milestone in the <strong>Project Setup</strong> tab.
+          </div>
+        )}
+      </div>
     </div>
   )
 }

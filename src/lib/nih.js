@@ -158,7 +158,10 @@ export const MECHANISMS = {
     commercialType: 'plan',
     code: 'FAST-TRACK',
     phase: 'I+II',
+    is_fast_track: true,
     requiresGoNoGo: true,
+    phase1_research_strategy_pages: 6,
+    phase2_research_strategy_pages: 12,
     dataManagement: 2,
     introduction: 1
   },

@@ -1,7 +1,7 @@
 # FrankGrant Status Document
 
-**Last Updated:** 2026-03-18
-**Version:** 4.7.0
+**Last Updated:** 2026-03-19
+**Version:** 4.8.0
 **Status:** Production (Internal COARE Tool)
 
 ---
@@ -54,12 +54,13 @@
 - ✅ **Citation Panel** - Shows title, authors, journal, year, PubMed link, Insert button
 - ✅ **Insert to Section** - Appends formatted citation text to section textarea
 
-### **DOCX Export (v4.3.0)**
-- ✅ **Client-side generation** - `docx` v9.6.1, Georgia font, 0.5" margins, US Letter
-- ✅ **Correct section order** - Title page → Summary → Narrative → Aims (pg break) → Research Strategy A/B/C (pg break) → Commercialization → Data Mgmt → Facilities
-- ✅ **Page numbers** - Centered in footer
-- ✅ **Mechanism-aware** - Commercialization only for SBIR/STTR; label adjusts for Phase I vs II
-- ✅ **Two export points** - Toolbar "📄 DOCX" button + "Export DOCX" in Full Grant tab
+### **Enhanced DOCX Export (v4.8.0)**
+- ✅ **Export dropdown** — "📄 Export ▾" toolbar dropdown with three options
+- ✅ **Combined Document** — improved cover page (18pt title bold, 14pt PI, 12pt institution+mechanism, FOA, date + HR), running header (title left / page# right on all content pages), bibliography appendix if citations exist, Fast Track dual research strategy sections
+- ✅ **NIH Submission Package** — separate .docx per section bundled into .zip via JSZip: specific_aims.docx, research_strategy.docx (or phase1/phase2 for Fast Track), commercialization_plan.docx, data_management_plan.docx, facilities.docx, human_subjects.docx, vertebrate_animals.docx, project_summary.docx, bibliography.docx, cover_letter.docx — empty sections skipped
+- ✅ **Print / PDF** — `window.print()` with `@media print` CSS that hides all UI chrome
+- ✅ **Full Grant tab** — also has Combined DOCX + NIH Package (.zip) buttons
+- ✅ **D1 columns** — `go_no_go_milestone TEXT`, `fast_track_phase1_sections TEXT`, `fast_track_phase2_sections TEXT`
 
 ### **Study Section Simulation (v4.3.0)**
 - ✅ **3 parallel Sonnet calls** - Primary (basic scientist), Secondary (physician-scientist), Reader (biostatistician)
@@ -190,6 +191,16 @@
 - ✅ **D1 columns** - `voice_enabled INTEGER DEFAULT 1`, `voice_tier TEXT` on users_meta
 - ✅ **KV session storage** - `voice:{project_id}:{user_id}` with 4h expiration
 - ✅ **Toolbar button** - "🎤 Voice Mode" teal/cyan button in project toolbar
+
+### **Fast Track Dual Research Strategy (v4.8.0)**
+- ✅ **Go/No-Go Milestone field** — amber box in Project Setup tab (shown when mechanism = FAST-TRACK), required warning
+- ✅ **Dual section writer** — FastTrackWriter component replaces standard section list; shows Phase I group (6-page) + Go/No-Go milestone display box + Phase II group (12-page) + Other Sections
+- ✅ **Phase-specific generation** — `generateFTSection(phase, secId)` uses `professorWritePrompt()` with phase-specific prompts for: `phase1_sig`, `phase1_innov`, `phase1_approach`, `phase2_sig`, `phase2_innov`, `phase2_approach`
+- ✅ **Separate storage** — `fast_track_phase1_sections` JSON column (phase1_sig, phase1_innov, phase1_approach) + `fast_track_phase2_sections` JSON column separate from main `sections`
+- ✅ **Compliance counters** — per-phase word count / page estimate shown below each phase group
+- ✅ **DOCX integration** — both Combined DOCX and NIH Package export Phase I / Phase II research strategy as separate labeled sections with Go/No-Go milestone between them
+- ✅ **Phase-specific prompts** — all 6 Fast Track section prompts added to `professorWritePrompt()` in personas.js with phase-appropriate word targets, feasibility vs. full-development framing, go_no_go_milestone injection
+- ✅ **nih.js flags** — `is_fast_track: true`, `phase1_research_strategy_pages: 6`, `phase2_research_strategy_pages: 12`
 
 ### **NIH Compliance**
 - ✅ **Mechanism Support** - STTR-I/II, SBIR-I/II, FAST-TRACK, NCI-IIB, R21, R01, K99

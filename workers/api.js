@@ -462,6 +462,9 @@ async function handleGetProject(req, env, userId, projectId) {
   row.prelim_data_gaps = row.prelim_data_gaps ? JSON.parse(row.prelim_data_gaps) : null
   row.prelim_data_narrative = row.prelim_data_narrative || null
   row.citation_suggestions = row.citation_suggestions ? JSON.parse(row.citation_suggestions) : {}
+  row.fast_track_phase1_sections = row.fast_track_phase1_sections ? JSON.parse(row.fast_track_phase1_sections) : {}
+  row.fast_track_phase2_sections = row.fast_track_phase2_sections ? JSON.parse(row.fast_track_phase2_sections) : {}
+  row.go_no_go_milestone = row.go_no_go_milestone || ''
   return json(row)
 }
 
@@ -475,6 +478,7 @@ async function handleUpdateProject(req, env, userId, projectId) {
       introduction = ?, study_section = ?, review_status = ?,
       foa_number = ?, foa_rules = ?, foa_fetched_at = ?, foa_valid = ?,
       reference_grants = ?, citation_suggestions = ?,
+      go_no_go_milestone = ?, fast_track_phase1_sections = ?, fast_track_phase2_sections = ?,
       updated_at = ?
      WHERE id = ? AND user_id = ?`
   ).bind(
@@ -495,6 +499,9 @@ async function handleUpdateProject(req, env, userId, projectId) {
     body.foa_valid ? 1 : 0,
     body.reference_grants ? JSON.stringify(body.reference_grants) : null,
     body.citation_suggestions ? JSON.stringify(body.citation_suggestions) : null,
+    body.go_no_go_milestone || null,
+    body.fast_track_phase1_sections ? JSON.stringify(body.fast_track_phase1_sections) : null,
+    body.fast_track_phase2_sections ? JSON.stringify(body.fast_track_phase2_sections) : null,
     now, projectId, userId
   ).run()
   if (result.changes === 0) return err('Project not found', 404)
