@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useUser, UserButton } from '@clerk/clerk-react'
+import { useUser } from '@clerk/clerk-react'
 import { useApi } from '../hooks/useApi'
 import GrantEditor from './GrantEditor'
 import Scorer from './Scorer'
@@ -8,6 +8,7 @@ import BiosketchGenerator from './BiosketchGenerator'
 import UsageMeter from './UsageMeter'
 import CommandStation from './CommandStation'
 import LettersGenerator from './LettersGenerator'
+import AppShell from './AppShell'
 
 const STATUS_CONFIG = {
   draft:            { label: 'Draft',           color: '#6b7280', bg: '#f3f4f6', border: '#d1d5db' },
@@ -225,175 +226,171 @@ export default function Dashboard() {
     not_funded: projects.filter(p => p.status === 'not_funded').length,
   }
 
-  if (activeView === 'editor' && activeProject) {
-    return <GrantEditor project={activeProject} onSave={saveProject} onBack={() => { setActiveProject(null); setActiveView('projects') }} />
-  }
-  if (activeView === 'scorer') return <Scorer onBack={() => setActiveView('projects')} />
-  if (activeView === 'wizard') return <GrantWizard onComplete={handleWizardComplete} onCancel={() => setActiveView('projects')} />
-  if (activeView === 'biosketch') return <BiosketchGenerator onBack={() => setActiveView('projects')} />
-  if (activeView === 'command') return <CommandStation onBack={() => setActiveView('projects')} />
-  if (activeView === 'letters') return (
-    <div>
-      <div style={{ padding: '12px 32px', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <button onClick={() => setActiveView('projects')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', fontSize: 14 }}>← Back</button>
-        <span style={{ fontSize: 14, fontWeight: 600 }}>Letters Generator</span>
-      </div>
-      <LettersGenerator projects={projects} />
-    </div>
-  )
-
+  // ── Single return — everything inside AppShell ───────────────────────────
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '1.5rem' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
-        <div>
-          <h1 style={{ fontSize: 22, fontWeight: 500, marginBottom: 4 }}>FrankGrant</h1>
-          <p style={{ fontSize: 13, color: '#666' }}>NIH grant studio · COARE Holdings</p>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 13, color: '#666' }}>{user?.emailAddresses?.[0]?.emailAddress}</span>
-          <UserButton afterSignOutUrl="/" />
-        </div>
-      </div>
+    <AppShell activeView={activeView} setActiveView={setActiveView} activeProject={activeProject}>
 
-      <UsageMeter />
+      {/* ── Grant Editor ─────────────────────────────────────────────────── */}
+      {activeView === 'editor' && activeProject ? (
+        <GrantEditor project={activeProject} onSave={saveProject} onBack={() => { setActiveProject(null); setActiveView('projects') }} />
 
-      {/* Deadline Banner */}
-      {deadlineBanner.length > 0 && (
-        <div style={{ marginBottom: 12, padding: '10px 16px', background: '#fffbeb', border: '1px solid #fbbf24', borderRadius: 8, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span>⚠️</span>
-          <span style={{ fontWeight: 600 }}>You have {deadlineBanner.length} grant deadline(s) approaching this week:</span>
-          <span style={{ color: '#b45309' }}>
-            {deadlineBanner.map((p, i) => (
-              <span key={p.id}>
-                {i > 0 && ', '}
-                <span style={{ cursor: 'pointer', textDecoration: 'underline' }} onClick={() => openProject(p.id)}>{p.title}</span>
-              </span>
-            ))}
-          </span>
-        </div>
-      )}
+      ) : activeView === 'scorer' ? (
+        <Scorer onBack={() => setActiveView('projects')} />
 
-      {/* Pending Invitations Banner */}
-      {pendingInvitations.length > 0 && (
-        <div style={{ marginBottom: 12, padding: '10px 16px', background: '#f5f3ff', border: '1px solid #c4b5fd', borderRadius: 8, fontSize: 13 }}>
-          <div style={{ fontWeight: 600, color: '#7c3aed', marginBottom: 6 }}>👥 You have {pendingInvitations.length} pending collaboration invitation{pendingInvitations.length > 1 ? 's' : ''}:</div>
-          {pendingInvitations.map(inv => (
-            <div key={inv.id} style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
-              <span style={{ flex: 1, color: '#4b5563' }}><strong>{inv.project_title || 'Untitled'}</strong> — invited as <strong>{inv.role}</strong></span>
-              <button
-                onClick={async () => {
-                  try {
-                    await api.acceptInvitation(inv.project_id)
-                    setPendingInvitations(prev => prev.filter(i => i.id !== inv.id))
-                    const data = await api.getSharedProjects()
-                    setSharedProjects(data.projects || [])
-                  } catch (e) { alert('Error accepting: ' + e.message) }
-                }}
-                style={{ padding: '4px 12px', background: '#7c3aed', border: 'none', borderRadius: 4, color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
-              >Accept</button>
+      ) : activeView === 'wizard' ? (
+        <GrantWizard onComplete={handleWizardComplete} onCancel={() => setActiveView('projects')} />
+
+      ) : activeView === 'biosketch' ? (
+        <BiosketchGenerator onBack={() => setActiveView('projects')} />
+
+      ) : activeView === 'command' ? (
+        <CommandStation onBack={() => setActiveView('projects')} />
+
+      ) : activeView === 'letters' ? (
+        <LettersGenerator projects={projects} />
+
+      ) : activeView === 'pipeline' ? (
+        /* ── Pipeline (kanban / calendar / list) ──────────────────────── */
+        <div style={{ padding: '1rem 1.5rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {[['list', '☰ List'], ['board', '⬜ Board'], ['calendar', '📅 Calendar']].map(([v, label]) => (
+                <button key={v} onClick={() => changePipelineView(v)} style={{ ...btnStyle, background: pipelineView === v ? '#1e293b' : '#fff', color: pipelineView === v ? '#fff' : '#111', borderColor: pipelineView === v ? '#1e293b' : '#ccc' }}>{label}</button>
+              ))}
             </div>
-          ))}
-        </div>
-      )}
-
-      {/* Stats bar */}
-      {!loading && projects.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, marginBottom: 16 }}>
-          {[
-            { label: 'Total Grants', value: stats.total, color: '#1e293b' },
-            { label: 'In Progress', value: stats.in_progress, color: '#2563eb' },
-            { label: 'Submitted', value: stats.submitted, color: '#d97706' },
-            { label: 'Awarded', value: `${stats.awarded_count}${stats.awarded_dollars > 0 ? ' · $' + (stats.awarded_dollars / 1000000).toFixed(1) + 'M' : ''}`, color: '#16a34a' },
-            { label: 'Not Funded', value: stats.not_funded, color: '#dc2626' },
-          ].map(s => (
-            <div key={s.label} style={{ padding: '10px 14px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, textAlign: 'center' }}>
-              <div style={{ fontSize: 20, fontWeight: 700, color: s.color }}>{s.value}</div>
-              <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{s.label}</div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Toolbar row */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: 8 }}>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {[['list', '☰ List'], ['board', '⬜ Board'], ['calendar', '📅 Calendar']].map(([v, label]) => (
-            <button key={v} onClick={() => changePipelineView(v)} style={{ ...btnStyle, background: pipelineView === v ? '#1e293b' : '#fff', color: pipelineView === v ? '#fff' : '#111', borderColor: pipelineView === v ? '#1e293b' : '#ccc' }}>{label}</button>
-          ))}
-        </div>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {['eddieb@coareholdings.com', 'eddie@bannermanmenson.com'].includes(user?.emailAddresses?.[0]?.emailAddress) && (
-            <button onClick={() => setActiveView('command')} style={{ ...btnStyle, background: '#dc2626', color: '#fff' }}>⚡ Command</button>
+            <button onClick={newProject} disabled={creating} style={{ ...btnStyle, background: '#0e7490', color: '#fff', border: 'none' }}>{creating ? 'Creating…' : '+ New Grant'}</button>
+          </div>
+          {loading ? (
+            <p style={{ fontSize: 13, color: '#666' }}>Loading…</p>
+          ) : pipelineView === 'board' ? (
+            <KanbanView projects={projects} draggingId={draggingId} onDragStart={handleDragStart} onDragOver={handleDragOver} onDrop={handleDrop} onOpen={openProject} onStatus={openStatusModal} />
+          ) : pipelineView === 'calendar' ? (
+            <CalendarView projects={projects} month={calendarMonth} setMonth={setCalendarMonth} onOpen={openProject} onStatus={openStatusModal} />
+          ) : (
+            <ListView projects={filteredProjects} allMechs={allMechs} statusFilter={statusFilter} setStatusFilter={setStatusFilter} mechFilter={mechFilter} setMechFilter={setMechFilter} priorityFilter={priorityFilter} setPriorityFilter={setPriorityFilter} sortBy={sortBy} setSortBy={setSortBy} onOpen={openProject} onStatus={openStatusModal} onDelete={deleteProject} />
           )}
-          <button onClick={() => setActiveView('wizard')} style={btnStyle}>✨ Wizard</button>
-          <button onClick={() => setActiveView('scorer')} style={btnStyle}>📊 Scorer</button>
-          <button onClick={() => setActiveView('biosketch')} style={btnStyle}>👤 Biosketch</button>
-          <button onClick={() => setActiveView('letters')} style={btnStyle}>📝 Letters</button>
-          <button onClick={newProject} disabled={creating} style={btnStyle}>{creating ? 'Creating…' : '+ New Grant'}</button>
         </div>
-      </div>
 
-      {loading ? (
-        <p style={{ fontSize: 13, color: '#666' }}>Loading…</p>
-      ) : projects.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '3rem', border: '0.5px dashed #ccc', borderRadius: 8 }}>
-          <p style={{ fontSize: 14, color: '#666', marginBottom: 12 }}>No grants yet.</p>
-          <button onClick={newProject} style={btnStyle}>Create your first grant</button>
-        </div>
-      ) : pipelineView === 'list' ? (
-        <ListView
-          projects={filteredProjects}
-          allMechs={allMechs}
-          statusFilter={statusFilter} setStatusFilter={setStatusFilter}
-          mechFilter={mechFilter} setMechFilter={setMechFilter}
-          priorityFilter={priorityFilter} setPriorityFilter={setPriorityFilter}
-          sortBy={sortBy} setSortBy={setSortBy}
-          onOpen={openProject}
-          onStatus={openStatusModal}
-          onDelete={deleteProject}
-        />
-      ) : pipelineView === 'board' ? (
-        <KanbanView
-          projects={projects}
-          draggingId={draggingId}
-          onDragStart={handleDragStart}
-          onDragOver={handleDragOver}
-          onDrop={handleDrop}
-          onOpen={openProject}
-          onStatus={openStatusModal}
-        />
       ) : (
-        <CalendarView
-          projects={projects}
-          month={calendarMonth}
-          setMonth={setCalendarMonth}
-          onOpen={openProject}
-          onStatus={openStatusModal}
-        />
-      )}
+        /* ── My Grants (projects view) ────────────────────────────────── */
+        <div style={{ padding: '1.5rem' }}>
+          <UsageMeter />
 
-      {/* Shared With Me */}
-      {sharedProjects.length > 0 && (
-        <div style={{ marginTop: 32 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: '#7c3aed', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-            👥 Shared With Me <span style={{ fontSize: 12, fontWeight: 400, color: '#9ca3af' }}>({sharedProjects.length})</span>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {sharedProjects.map(p => (
-              <div key={p.id} onClick={() => openProject(p.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 8, cursor: 'pointer' }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14, color: '#1f2937' }}>{p.title}</div>
-                  <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{p.mechanism} · {p.status?.replace(/_/g, ' ')}</div>
+          {/* Deadline Banner */}
+          {deadlineBanner.length > 0 && (
+            <div style={{ marginBottom: 12, padding: '10px 16px', background: '#fffbeb', border: '1px solid #fbbf24', borderRadius: 8, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span>⚠️</span>
+              <span style={{ fontWeight: 600 }}>You have {deadlineBanner.length} grant deadline(s) approaching this week:</span>
+              <span style={{ color: '#b45309' }}>
+                {deadlineBanner.map((p, i) => (
+                  <span key={p.id}>
+                    {i > 0 && ', '}
+                    <span style={{ cursor: 'pointer', textDecoration: 'underline' }} onClick={() => openProject(p.id)}>{p.title}</span>
+                  </span>
+                ))}
+              </span>
+            </div>
+          )}
+
+          {/* Pending Invitations Banner */}
+          {pendingInvitations.length > 0 && (
+            <div style={{ marginBottom: 12, padding: '10px 16px', background: '#f5f3ff', border: '1px solid #c4b5fd', borderRadius: 8, fontSize: 13 }}>
+              <div style={{ fontWeight: 600, color: '#7c3aed', marginBottom: 6 }}>👥 You have {pendingInvitations.length} pending collaboration invitation{pendingInvitations.length > 1 ? 's' : ''}:</div>
+              {pendingInvitations.map(inv => (
+                <div key={inv.id} style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
+                  <span style={{ flex: 1, color: '#4b5563' }}><strong>{inv.project_title || 'Untitled'}</strong> — invited as <strong>{inv.role}</strong></span>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await api.acceptInvitation(inv.project_id)
+                        setPendingInvitations(prev => prev.filter(i => i.id !== inv.id))
+                        const data = await api.getSharedProjects()
+                        setSharedProjects(data.projects || [])
+                      } catch (e) { alert('Error accepting: ' + e.message) }
+                    }}
+                    style={{ padding: '4px 12px', background: '#7c3aed', border: 'none', borderRadius: 4, color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+                  >Accept</button>
                 </div>
-                <span style={{ fontSize: 11, color: '#7c3aed', background: '#ede9fe', padding: '3px 10px', borderRadius: 12, fontWeight: 600, textTransform: 'capitalize' }}>{p.my_role}</span>
-              </div>
-            ))}
+              ))}
+            </div>
+          )}
+
+          {/* Stats bar */}
+          {!loading && projects.length > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 16 }}>
+              {[
+                { label: 'Total Grants', value: stats.total, color: '#1e293b' },
+                { label: 'In Progress', value: stats.in_progress, color: '#2563eb' },
+                { label: 'Submitted', value: stats.submitted, color: '#d97706' },
+                { label: 'Awarded', value: `${stats.awarded_count}${stats.awarded_dollars > 0 ? ' · $' + (stats.awarded_dollars / 1000000).toFixed(1) + 'M' : ''}`, color: '#16a34a' },
+              ].map(s => (
+                <div key={s.label} style={{ padding: '10px 14px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, textAlign: 'center' }}>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: s.color }}>{s.value}</div>
+                  <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{s.label}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Toolbar */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: '#111' }}>
+              {projects.length > 0 ? `${projects.length} grant${projects.length !== 1 ? 's' : ''}` : ''}
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <button onClick={() => setActiveView('scorer')} style={btnStyle}>📊 Scorer</button>
+              <button onClick={newProject} disabled={creating} style={{ ...btnStyle, background: '#0e7490', color: '#fff', border: 'none' }}>{creating ? 'Creating…' : '+ New Grant'}</button>
+            </div>
           </div>
+
+          {loading ? (
+            <p style={{ fontSize: 13, color: '#666' }}>Loading…</p>
+          ) : projects.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '4rem 2rem', border: '1px dashed #d1d5db', borderRadius: 12 }}>
+              <div style={{ fontSize: 36, marginBottom: 12 }}>📋</div>
+              <div style={{ fontSize: 18, fontWeight: 600, color: '#111', marginBottom: 8 }}>No grants yet</div>
+              <div style={{ fontSize: 14, color: '#6b7280', marginBottom: 20 }}>Start writing your first NIH grant application.</div>
+              <button onClick={() => setActiveView('wizard')} style={{ ...btnStyle, background: '#0e7490', color: '#fff', border: 'none', padding: '10px 20px', fontSize: 14 }}>✨ Use Grant Wizard</button>
+              <span style={{ display: 'inline-block', margin: '0 12px', color: '#d1d5db' }}>or</span>
+              <button onClick={newProject} disabled={creating} style={{ ...btnStyle, padding: '10px 20px', fontSize: 14 }}>{creating ? 'Creating…' : 'Blank Grant'}</button>
+            </div>
+          ) : (
+            <ListView
+              projects={filteredProjects}
+              allMechs={allMechs}
+              statusFilter={statusFilter} setStatusFilter={setStatusFilter}
+              mechFilter={mechFilter} setMechFilter={setMechFilter}
+              priorityFilter={priorityFilter} setPriorityFilter={setPriorityFilter}
+              sortBy={sortBy} setSortBy={setSortBy}
+              onOpen={openProject}
+              onStatus={openStatusModal}
+              onDelete={deleteProject}
+            />
+          )}
+
+          {/* Shared With Me */}
+          {sharedProjects.length > 0 && (
+            <div style={{ marginTop: 32 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#7c3aed', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                👥 Shared With Me <span style={{ fontSize: 12, fontWeight: 400, color: '#9ca3af' }}>({sharedProjects.length})</span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {sharedProjects.map(p => (
+                  <div key={p.id} onClick={() => openProject(p.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 8, cursor: 'pointer' }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 600, fontSize: 14, color: '#1f2937' }}>{p.title}</div>
+                      <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{p.mechanism} · {p.status?.replace(/_/g, ' ')}</div>
+                    </div>
+                    <span style={{ fontSize: 11, color: '#7c3aed', background: '#ede9fe', padding: '3px 10px', borderRadius: 12, fontWeight: 600, textTransform: 'capitalize' }}>{p.my_role}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Status Modal */}
+      {/* Status Modal — always rendered at top level inside AppShell */}
       {statusModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div style={{ background: '#fff', borderRadius: 12, padding: 28, maxWidth: 480, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
@@ -442,7 +439,8 @@ export default function Dashboard() {
           </div>
         </div>
       )}
-    </div>
+
+    </AppShell>
   )
 }
 
