@@ -323,7 +323,7 @@ export default function Dashboard() {
           ))}
         </div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {user?.emailAddresses?.[0]?.emailAddress === 'eddieb@coareholdings.com' && (
+          {['eddieb@coareholdings.com', 'eddie@bannermanmenson.com'].includes(user?.emailAddresses?.[0]?.emailAddress) && (
             <button onClick={() => setActiveView('command')} style={{ ...btnStyle, background: '#dc2626', color: '#fff' }}>⚡ Command</button>
           )}
           <button onClick={() => setActiveView('wizard')} style={btnStyle}>✨ Wizard</button>

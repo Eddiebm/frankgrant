@@ -5,7 +5,10 @@
  *          preliminary data upload/analysis/narrative, PubMed citations
  */
 
-const ADMIN_EMAIL = 'eddieb@coareholdings.com'
+const ADMIN_EMAILS = [
+  'eddieb@coareholdings.com',
+  'eddie@bannermanmenson.com',
+]
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -78,7 +81,7 @@ async function requireAdmin(req, env) {
   const payload = await requireAuth(req, env)
   if (!payload) return null
   const email = payload.email || payload['email_address'] || ''
-  if (email !== ADMIN_EMAIL) return null
+  if (!ADMIN_EMAILS.includes(email)) return null
   return payload
 }
 
