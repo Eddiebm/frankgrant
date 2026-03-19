@@ -114,6 +114,10 @@ export default function GrantEditor({ project, onSave, onBack }) {
   // Voice Mode
   const [showVoiceMode, setShowVoiceMode] = useState(false)
 
+  // Completeness gate modal
+  const [completenessModal, setCompletenessModal] = useState(null) // null | { reviewType, items, onProceed }
+
+
   // AI unavailable / retry state
   const [aiUnavailable, setAiUnavailable] = useState(null) // { sectionId, retryAfter, countdown }
   const retryTimerRef = useRef(null)
@@ -136,6 +140,52 @@ export default function GrantEditor({ project, onSave, onBack }) {
   }
 
   useEffect(() => () => { if (retryTimerRef.current) clearInterval(retryTimerRef.current) }, [])
+
+  // ── Document Completeness Check ──────────────────────────────────────────────
+  function wc(text) {
+    if (!text) return 0
+    return text.trim().split(/\s+/).filter(Boolean).length
+  }
+
+  function buildCompletenessItems(reviewType) {
+    const m = project?.mechanism || ''
+    const isSBIR = m.includes('SBIR') || m.includes('STTR') || m === 'D2P2'
+    const isPhaseII = m.includes('-II') || m === 'D2P2' || m === 'R01'
+
+    const minWords = {
+      aims: 200, sig: 400, innov: 200, approach: 800,
+      commercial: isPhaseII ? 1500 : 300, data_mgmt: 300, facilities: 100,
+    }
+
+    const sects = [
+      { id: 'aims', label: 'Specific Aims', min: minWords.aims, always: true },
+      { id: 'sig', label: 'Significance', min: minWords.sig, always: true },
+      { id: 'innov', label: 'Innovation', min: minWords.innov, always: true },
+      { id: 'approach', label: 'Approach', min: minWords.approach, always: true },
+      { id: 'commercial', label: `Commercialization Plan ${isPhaseII ? '(Phase II)' : '(Phase I)'}`, min: minWords.commercial, always: isSBIR },
+      { id: 'data_mgmt', label: 'Data Management Plan', min: minWords.data_mgmt, always: true },
+      { id: 'facilities', label: 'Facilities and Resources', min: minWords.facilities, always: true },
+    ].filter(s => s.always)
+
+    return sects.map(s => {
+      const text = sections[s.id] || ''
+      const words = wc(text)
+      const missing = words === 0
+      const brief = !missing && words < s.min
+      return { ...s, words, missing, brief }
+    })
+  }
+
+  function checkCompletenessAndRun(reviewType, onProceed) {
+    const items = buildCompletenessItems(reviewType)
+    const hasMissing = items.some(i => i.missing)
+    const hasBrief = items.some(i => i.brief)
+    if (hasMissing || hasBrief) {
+      setCompletenessModal({ reviewType, items, onProceed })
+    } else {
+      onProceed()
+    }
+  }
 
   // Collaboration
   const { user } = useUser()
@@ -593,6 +643,10 @@ export default function GrantEditor({ project, onSave, onBack }) {
   }
 
   // ── Study Section ────────────────────────────────────────────────────────────
+  function handleRunStudySectionClick() {
+    checkCompletenessAndRun('Study Section', () => handleRunStudySection())
+  }
+
   async function handleRunStudySection() {
     setStudySectionModal('progress')
     setStudySectionStep(0)
@@ -613,6 +667,10 @@ export default function GrantEditor({ project, onSave, onBack }) {
   }
 
   // ── PD Review ────────────────────────────────────────────────────────────────
+  function handleRunPDReviewClick() {
+    checkCompletenessAndRun('PD Review', () => handleRunPDReview())
+  }
+
   async function handleRunPDReview() {
     setPdReviewModal('loading')
     try {
@@ -626,6 +684,10 @@ export default function GrantEditor({ project, onSave, onBack }) {
   }
 
   // ── Advisory Council ──────────────────────────────────────────────────────────
+  function handleRunAdvisoryCouncilClick() {
+    checkCompletenessAndRun('Advisory Council', () => handleRunAdvisoryCouncil())
+  }
+
   async function handleRunAdvisoryCouncil() {
     setCouncilModal('loading')
     try {
@@ -661,6 +723,10 @@ export default function GrantEditor({ project, onSave, onBack }) {
   }
 
   // ── Commercial Reviewer ───────────────────────────────────────────────────────
+  function handleRunCommercialReviewClick() {
+    checkCompletenessAndRun('Commercial Review', () => handleRunCommercialReview())
+  }
+
   async function handleRunCommercialReview() {
     setCommercialReviewModal('loading')
     try {
@@ -811,21 +877,21 @@ export default function GrantEditor({ project, onSave, onBack }) {
             </button>
           )}
           <button
-            onClick={() => studySectionResults ? setStudySectionModal('results') : handleRunStudySection()}
+            onClick={() => studySectionResults ? setStudySectionModal('results') : handleRunStudySectionClick()}
             style={{ ...ghostBtn, fontSize: 12 }}
             title="Simulate NIH study section review"
           >
             🔬 {studySectionResults ? 'Review' : 'Study Section'}
           </button>
           <button
-            onClick={() => pdReviewResults ? setPdReviewModal('results') : handleRunPDReview()}
+            onClick={() => pdReviewResults ? setPdReviewModal('results') : handleRunPDReviewClick()}
             style={{ ...ghostBtn, fontSize: 12 }}
             title="Get Program Director fundability assessment"
           >
             📋 {pdReviewResults ? 'PD Review' : 'PD Review'}
           </button>
           <button
-            onClick={() => councilResults ? setCouncilModal('results') : handleRunAdvisoryCouncil()}
+            onClick={() => councilResults ? setCouncilModal('results') : handleRunAdvisoryCouncilClick()}
             style={{ ...ghostBtn, fontSize: 12 }}
             title="Get Advisory Council funding recommendation"
           >
@@ -833,7 +899,7 @@ export default function GrantEditor({ project, onSave, onBack }) {
           </button>
           {m.needsCommercial && (
             <button
-              onClick={() => commercialReviewResults ? setCommercialReviewModal('results') : handleRunCommercialReview()}
+              onClick={() => commercialReviewResults ? setCommercialReviewModal('results') : handleRunCommercialReviewClick()}
               style={{ ...ghostBtn, fontSize: 12 }}
               title="Get expert commercialization review"
             >
@@ -1490,6 +1556,16 @@ export default function GrantEditor({ project, onSave, onBack }) {
           setExpanded={setAimsAltExpanded}
           onUse={handleUseAltVersion}
           onClose={() => setAimsOptModal('results')}
+        />
+      )}
+
+      {/* Completeness Gate Modal */}
+      {completenessModal && (
+        <CompletenessModal
+          reviewType={completenessModal.reviewType}
+          items={completenessModal.items}
+          onProceed={() => { setCompletenessModal(null); completenessModal.onProceed() }}
+          onClose={() => setCompletenessModal(null)}
         />
       )}
 
@@ -2370,6 +2446,8 @@ function PDReviewResultsModal({ results, onClose, onRerun }) {
             <div style={{ fontSize: 11, color: '#888', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em' }}>Final Recommendation</div>
             <div style={{ fontSize: 13, lineHeight: 1.6 }}>{results.final_recommendation}</div>
           </div>
+
+          <MissingComponentsPanel missingComponents={results.missing_components} packageCritique={results.package_completeness_critique} />
         </div>
         <div style={{ padding: '1rem 1.5rem', borderTop: '0.5px solid #e5e5e5', display: 'flex', gap: 8 }}>
           <button onClick={copyMemo} style={ghostBtn}>Copy memo</button>
@@ -2476,6 +2554,8 @@ function AdvisoryCouncilModal({ results, onClose, onRerun }) {
               {!results._inputs.used_study_section && !results._inputs.used_pd_review && 'Grant text only (no study section or PD review on file)'}
             </div>
           )}
+
+          <MissingComponentsPanel missingComponents={results.missing_components} packageCritique={results.package_completeness_critique} />
         </div>
         <div style={{ padding: '1rem 1.5rem', borderTop: '0.5px solid #e5e5e5', display: 'flex', gap: 8 }}>
           <button onClick={onRerun} style={ghostBtn}>Re-run</button>
@@ -2632,6 +2712,8 @@ function StudySectionResultsModal({ results, onClose, onRerun }) {
               </div>
             )
           })}
+
+          <MissingComponentsPanel missingComponents={results.summary?.missing_components} packageCritique={results.summary?.package_completeness_critique} />
         </div>
 
         <div style={{ padding: '1rem 1.5rem', borderTop: '0.5px solid #e5e5e5', display: 'flex', gap: 8 }}>
@@ -2809,12 +2891,126 @@ function CommercialReviewModal({ results, onClose, onRerun }) {
               </div>
             )}
           </div>
+
+          <MissingComponentsPanel missingComponents={results.missing_components} packageCritique={results.package_completeness_critique} />
         </div>
         <div style={{ padding: '1rem 1.5rem', borderTop: '0.5px solid #e5e5e5', display: 'flex', gap: 8 }}>
           <button onClick={onRerun} style={ghostBtn}>Re-run</button>
           <button onClick={onClose} style={{ ...ghostBtn, marginLeft: 'auto' }}>Close</button>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── Completeness Gate Modal ───────────────────────────────────────────────────
+function CompletenessModal({ reviewType, items, onProceed, onClose }) {
+  const missing = items.filter(i => i.missing)
+  const brief = items.filter(i => i.brief)
+  const complete = items.filter(i => !i.missing && !i.brief)
+  const pct = Math.round((complete.length / items.length) * 100)
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 3000 }}>
+      <div style={{ background: '#fff', borderRadius: 14, padding: '32px', maxWidth: 520, width: '90%', maxHeight: '80vh', overflowY: 'auto' }}>
+        <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Document Completeness Check</div>
+        <div style={{ fontSize: 13, color: '#888', marginBottom: 20 }}>Before running {reviewType} · {pct}% complete</div>
+
+        <div style={{ marginBottom: 20 }}>
+          {items.map(item => (
+            <div key={item.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '7px 0', borderBottom: '0.5px solid #f0f0f0' }}>
+              <span style={{ fontSize: 16, flexShrink: 0 }}>
+                {item.missing ? '❌' : item.brief ? '⚠️' : '✅'}
+              </span>
+              <div style={{ flex: 1 }}>
+                <span style={{ fontSize: 13, fontWeight: 500 }}>{item.label}</span>
+                <span style={{ fontSize: 12, color: '#888', marginLeft: 8 }}>
+                  {item.missing
+                    ? 'not generated'
+                    : item.brief
+                      ? `${item.words} words — expected ≥${item.min}`
+                      : `${item.words} words`}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {(missing.length > 0 || brief.length > 0) && (
+          <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#92400e', marginBottom: 20 }}>
+            {missing.length > 0 && <div><strong>{missing.length} section{missing.length > 1 ? 's' : ''} not generated.</strong> Reviewers will note these as absent and cannot score criteria that depend on them.</div>}
+            {brief.length > 0 && <div style={{ marginTop: missing.length > 0 ? 6 : 0 }}><strong>{brief.length} section{brief.length > 1 ? 's' : ''} may be incomplete.</strong> Reviewers will flag thin sections and score based only on what is present.</div>}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button
+            onClick={onProceed}
+            style={{ flex: 1, padding: '10px', background: '#fff', border: '1.5px solid #d97706', borderRadius: 8, color: '#92400e', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
+          >
+            Score anyway
+          </button>
+          <button
+            onClick={onClose}
+            style={{ flex: 1, padding: '10px', background: '#111', border: 'none', borderRadius: 8, color: '#fff', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
+          >
+            Complete document first (recommended)
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Missing Components Panel ──────────────────────────────────────────────────
+export function MissingComponentsPanel({ missingComponents, packageCritique }) {
+  if (!missingComponents?.length && !packageCritique) return null
+
+  const critical = missingComponents?.filter(c => c.severity === 'critical') || []
+  const major = missingComponents?.filter(c => c.severity === 'major') || []
+  const minor = missingComponents?.filter(c => c.severity === 'minor') || []
+
+  const severityColors = {
+    critical: { bg: '#fee2e2', border: '#fca5a5', text: '#991b1b', badge: '#dc2626' },
+    major: { bg: '#fffbeb', border: '#fde68a', text: '#92400e', badge: '#d97706' },
+    minor: { bg: '#f9fafb', border: '#e5e7eb', text: '#374151', badge: '#6b7280' },
+  }
+
+  return (
+    <div style={{ marginTop: 24 }}>
+      {missingComponents?.length > 0 && (
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#dc2626' }}>Missing from your submission package</div>
+            <div style={{ fontSize: 12, color: '#888' }}>
+              {critical.length > 0 && <span style={{ color: '#dc2626', marginRight: 6 }}>{critical.length} critical</span>}
+              {major.length > 0 && <span style={{ color: '#d97706', marginRight: 6 }}>{major.length} major</span>}
+              {minor.length > 0 && <span style={{ color: '#6b7280' }}>{minor.length} minor</span>}
+            </div>
+          </div>
+          {missingComponents.map((c, i) => {
+            const col = severityColors[c.severity] || severityColors.minor
+            return (
+              <div key={i} style={{ background: col.bg, border: `1px solid ${col.border}`, borderRadius: 8, padding: '10px 14px', marginBottom: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <span style={{ background: col.badge, color: '#fff', borderRadius: 4, padding: '1px 7px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>{c.severity}</span>
+                  <span style={{ fontWeight: 600, fontSize: 13, color: col.text }}>{c.component}</span>
+                </div>
+                <div style={{ fontSize: 13, color: col.text, marginBottom: 3 }}>{c.why_it_matters}</div>
+                <div style={{ fontSize: 12, color: col.text, opacity: 0.8, fontStyle: 'italic' }}>{c.impact_on_score}</div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+      {packageCritique && (
+        <div style={{ marginTop: 16 }}>
+          <div style={{ fontWeight: 600, fontSize: 13, color: '#374151', marginBottom: 8 }}>Reviewer's package assessment</div>
+          <div style={{ background: '#f3f4f6', borderLeft: '3px solid #9ca3af', borderRadius: 4, padding: '12px 16px', fontSize: 13, color: '#374151', lineHeight: 1.7, fontStyle: 'italic' }}>
+            {packageCritique}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -1,7 +1,7 @@
 # FrankGrant Status Document
 
 **Last Updated:** 2026-03-18
-**Version:** 5.0.0
+**Version:** 5.0.5
 **Status:** Production (Internal COARE Tool)
 
 ---
@@ -11,7 +11,7 @@
 | Resource | URL/ID | Status |
 |----------|--------|--------|
 | **Frontend (Pages)** | https://frankgrant.pages.dev | ✅ Live |
-| **Latest Preview** | https://bc7119f2.frankgrant.pages.dev | ✅ Live |
+| **Latest Preview** | https://ce3514aa.frankgrant.pages.dev | ✅ Live |
 | **R2 Bucket** | frankgrant-backups | ✅ Live |
 | **API Worker** | https://frankgrant-worker.eddie-781pagesdev.workers.dev | ✅ Live |
 | **D1 Database** | frankgrant-db | ✅ Live |
@@ -298,6 +298,22 @@
 - ✅ **Feedback Management Panel** - All feedback with type badges, resolved status, admin notes, mark resolved button
 - ✅ **Tab Navigation** - 9-tab interface with Overview summary panel
 - ✅ **Admin Gating** - Command Station only accessible to eddieb@coareholdings.com
+
+### **Full Document Scoring — No Truncation (v5.0.5)**
+- ✅ **`buildFullGrantContext()` helper** — generates complete grant context string with all sections in full, section word counts, [BRIEF]/[NOT GENERATED] flags for thin sections
+- ✅ **Study Section** — all 3 reviewer Sonnet calls receive complete document via `buildFullGrantContext`, no `.slice()`, max_tokens increased to 1500 per reviewer, 2000 for SRO synthesis
+- ✅ **PD Review** — full document passed, no character limits on any section
+- ✅ **Advisory Council** — full document + full study section synthesis + full PD review results passed
+- ✅ **Commercial Review** — full document including Aims, Significance, Approach, Commercialization Plan all passed in full
+- ✅ **Aims Optimizer** — passes complete Aims + complete Significance section for context
+- ✅ **Reviewer instructions updated** — all reviewers instructed to flag thin/missing sections and score based only on what they can read
+- ✅ **`missing_components` field** — all 4 reviewer JSONs now return `missing_components[]` (component, expected_location, why_it_matters, impact_on_score, severity) + `package_completeness_critique` paragraph
+- ✅ **All system prompts updated** — SS_REVIEWER_1/2/3, SS_SUMMARY, PD_REVIEW_SYSTEM, ADVISORY_COUNCIL_SYSTEM, COMMERCIAL_REVIEWER_SYSTEM
+- ✅ **Completeness gate modal** — shows before any review run when sections are missing/brief; checklist with ✅/⚠️/❌ per section with word counts; "Score anyway" vs "Complete document first" options
+- ✅ **MissingComponentsPanel component** — displayed in Study Section, PD Review, Advisory Council, Commercial Review result modals; severity badges (critical/major/minor); package_completeness_critique in reviewer-voice styled box
+- ✅ **Word count summary in every scorer prompt** — all section word counts + [BRIEF]/[NOT GENERATED] flags passed to every reviewer
+- ✅ **aims_optimize usage_log** — fixed INSERT to use correct column names (action, not feature)
+- ✅ **All scoring routes use `callAnthropicWithFallback`** — graceful degradation on all reviewer calls
 
 ### **Production Resilience (v5.0.0)**
 - ✅ **Graceful Claude Degradation** — `callAnthropicWithFallback()` with 55s AbortController timeout; returns `{_fallback:true}` on 529/500/503; worker returns 503 `ai_unavailable`

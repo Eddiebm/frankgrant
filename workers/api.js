@@ -1023,6 +1023,141 @@ async function handleCommandHealth(req, env) {
   })
 }
 
+function wordCount(text) {
+  if (!text) return 0
+  return text.trim().split(/\s+/).filter(Boolean).length
+}
+
+function buildFullGrantContext(project, sections, setup, fastTrackSections) {
+  const mech = project.mechanism || ''
+  const isSBIR = mech.includes('SBIR') || mech.includes('STTR') || mech.includes('D2P2')
+  const isFastTrack = mech === 'FAST-TRACK'
+  const isPhaseII = mech.includes('-II') || mech === 'D2P2' || mech === 'R01'
+
+  const wc = (text) => {
+    const n = wordCount(text)
+    return n > 0 ? `(${n} words)` : '(not generated)'
+  }
+
+  let ft1 = {}, ft2 = {}
+  try { ft1 = JSON.parse(fastTrackSections?.phase1 || '{}') } catch {}
+  try { ft2 = JSON.parse(fastTrackSections?.phase2 || '{}') } catch {}
+
+  const minWords = {
+    aims: 200, sig: 400, innov: 200, approach: 800,
+    commercial: isPhaseII ? 1500 : 300, data_mgmt: 300, facilities: 100,
+  }
+
+  const sectionWordCounts = {
+    aims: wordCount(sections.aims),
+    sig: wordCount(sections.sig),
+    innov: wordCount(sections.innov),
+    approach: wordCount(sections.approach),
+    commercial: wordCount(sections.commercial || sections.commercialization_potential),
+    data_mgmt: wordCount(sections.data_mgmt),
+    facilities: wordCount(sections.facilities),
+  }
+
+  const wordCountSummary = Object.entries(sectionWordCounts)
+    .filter(([k]) => k !== 'commercial' || isSBIR)
+    .map(([k, n]) => {
+      const labels = { aims: 'Specific Aims', sig: 'Significance', innov: 'Innovation', approach: 'Approach', commercial: 'Commercialization Plan', data_mgmt: 'Data Management Plan', facilities: 'Facilities' }
+      const min = minWords[k]
+      const flag = n > 0 && n < min ? ` [BRIEF: ${n} words, expected ≥${min}]` : n === 0 ? ' [NOT GENERATED]' : ''
+      return `  ${labels[k]}: ${n} words${flag}`
+    }).join('\n')
+
+  const lines = [
+    `GRANT APPLICATION FOR REVIEW`,
+    `Title: ${project.title || setup.title || setup.disease || 'Untitled'}`,
+    `Mechanism: ${mech}`,
+    `Institute: ${setup.institute || 'NIH'}`,
+    `PI: ${setup.pi || 'Not specified'}`,
+    `Institution: ${setup.institution || setup.partner || 'Not specified'}`,
+    `Disease/Indication: ${setup.disease || 'Not specified'}`,
+    ``,
+    `SECTION WORD COUNTS:`,
+    wordCountSummary,
+    ``,
+    `PROJECT SUMMARY ${wc(sections.summary)}:`,
+    sections.summary || 'Not generated',
+    ``,
+    `PROJECT NARRATIVE ${wc(sections.narrative)}:`,
+    sections.narrative || 'Not generated',
+    ``,
+    `SPECIFIC AIMS (complete text) ${wc(sections.aims)}:`,
+    sections.aims || 'Not generated',
+    ``,
+    `SIGNIFICANCE (complete text) ${wc(sections.sig)}:`,
+    sections.sig || 'Not generated',
+    ``,
+    `INNOVATION (complete text) ${wc(sections.innov)}:`,
+    sections.innov || 'Not generated',
+    ``,
+  ]
+
+  if (isFastTrack) {
+    lines.push(
+      `PHASE I RESEARCH STRATEGY — APPROACH (complete text) ${wc(ft1.approach || '')}:`,
+      ft1.approach || 'Not generated',
+      ``,
+      `PHASE II RESEARCH STRATEGY — APPROACH (complete text) ${wc(ft2.approach || '')}:`,
+      ft2.approach || 'Not generated',
+      ``,
+    )
+  } else {
+    lines.push(
+      `APPROACH (complete text) ${wc(sections.approach)}:`,
+      sections.approach || 'Not generated',
+      ``,
+    )
+  }
+
+  if (isSBIR) {
+    const commText = sections.commercial || sections.commercialization_potential || ''
+    lines.push(
+      `COMMERCIALIZATION PLAN (complete text) ${wc(commText)}:`,
+      commText || 'Not generated',
+      ``,
+    )
+  }
+
+  lines.push(
+    `DATA MANAGEMENT AND SHARING PLAN (complete text) ${wc(sections.data_mgmt)}:`,
+    sections.data_mgmt || 'Not generated',
+    ``,
+    `FACILITIES AND RESOURCES (complete text) ${wc(sections.facilities)}:`,
+    sections.facilities || 'Not generated',
+    ``,
+  )
+
+  if (project.prelim_data_narrative) {
+    lines.push(
+      `PRELIMINARY DATA NARRATIVE:`,
+      project.prelim_data_narrative,
+      ``,
+    )
+  }
+
+  if (sections.phase1_equivalency) {
+    lines.push(
+      `PHASE I EQUIVALENCY DOCUMENTATION (complete text) ${wc(sections.phase1_equivalency)}:`,
+      sections.phase1_equivalency,
+      ``,
+    )
+  }
+
+  if (sections.human_subjects) {
+    lines.push(`HUMAN SUBJECTS (complete text):`, sections.human_subjects, ``)
+  }
+
+  if (sections.vertebrate_animals) {
+    lines.push(`VERTEBRATE ANIMALS (complete text):`, sections.vertebrate_animals, ``)
+  }
+
+  return lines.join('\n')
+}
+
 async function handleGetMe(req, env, userId) {
   const meta = await env.DB.prepare('SELECT email, plan_tier, voice_enabled, voice_tier FROM users_meta WHERE id = ?').bind(userId).first()
   return json({
@@ -1716,14 +1851,54 @@ async function handleVoiceSessionPost(req, env, userId) {
 }
 
 // ── Study Section Simulation ──────────────────────────────────────────────────
-const SS_REVIEWER_1 = `You are the PRIMARY REVIEWER (basic scientist, molecular/cellular focus, 25 years running an NIH-funded lab). Score each criterion 1-9 (1=Exceptional, 9=Poor). Be thorough, candid, and specific. At the very end output exactly: SCORES: {"impact":N,"significance":N,"innovation":N,"approach":N,"investigators":N,"environment":N}`
-const SS_REVIEWER_2 = `You are the SECONDARY REVIEWER (translational physician-scientist MD/PhD). Critique clinical relevance and path to patients. Score each criterion 1-9. At the very end output exactly: SCORES: {"impact":N,"significance":N,"innovation":N,"approach":N,"investigators":N,"environment":N}`
-const SS_REVIEWER_3 = `You are the READER (biostatistician/methodologist). Focus on study design, power calculations, SABV. Give a brief critique focused heavily on Approach. Score all criteria 1-9. At the very end output exactly: SCORES: {"impact":N,"significance":N,"innovation":N,"approach":N,"investigators":N,"environment":N}`
-const SS_SUMMARY = `You are the Scientific Review Officer (SRO) synthesizing three reviewer critiques into an NIH Summary Statement. Output ONLY valid JSON: {"impact_score":N,"percentile":N,"criteria":{"significance":N,"innovation":N,"approach":N,"investigators":N,"environment":N},"strengths":["..."],"weaknesses":["..."],"synthesis":"...","fundability":"..."}`
+const SS_REVIEWER_1 = `You are the PRIMARY REVIEWER (basic scientist, molecular/cellular focus, 25 years running an NIH-funded lab). Score each criterion 1-9 (1=Exceptional, 9=Poor). Be thorough, candid, and specific.
+
+You are reviewing the COMPLETE grant application — every section is provided in full. You must read and evaluate what is actually present. When a section is brief or missing, note this explicitly in your critique and score based only on what you can read.
+
+For any section marked [BRIEF] or [NOT GENERATED] in the word counts header, note in your critique: "The [section] is unusually brief at [N] words — score reflects limited available content."
+
+PACKAGE AUDIT REQUIREMENT: As part of your review, explicitly identify in your critique what is MISSING from this submission that a complete NIH application should contain. Note incomplete sections, missing components, and the impact on your scores.
+
+At the very end output exactly: SCORES: {"impact":N,"significance":N,"innovation":N,"approach":N,"investigators":N,"environment":N}`
+
+const SS_REVIEWER_2 = `You are the SECONDARY REVIEWER (translational physician-scientist MD/PhD). Critique clinical relevance and path to patients. Score each criterion 1-9.
+
+You are reviewing the COMPLETE grant application — every section is provided in full. Score based only on what you can actually read. When sections are brief or missing, note this explicitly in your critique.
+
+PACKAGE AUDIT REQUIREMENT: Identify what is missing from this submission that complete NIH applications require. Note the clinical development documentation gaps.
+
+At the very end output exactly: SCORES: {"impact":N,"significance":N,"innovation":N,"approach":N,"investigators":N,"environment":N}`
+
+const SS_REVIEWER_3 = `You are the READER (biostatistician/methodologist). Focus on study design, power calculations, SABV. Give a brief critique focused heavily on Approach. Score all criteria 1-9.
+
+You are reviewing the COMPLETE grant application. For any section marked as brief or missing, score based on what is present and note the limitation.
+
+At the very end output exactly: SCORES: {"impact":N,"significance":N,"innovation":N,"approach":N,"investigators":N,"environment":N}`
+
+const SS_SUMMARY = `You are the Scientific Review Officer (SRO) synthesizing three reviewer critiques into an NIH Summary Statement. Output ONLY valid JSON matching this exact structure:
+{
+  "impact_score": number (1-9, averaged),
+  "percentile": number (estimated 0-99),
+  "criteria": {"significance":number,"innovation":number,"approach":number,"investigators":number,"environment":number},
+  "strengths": ["string"],
+  "weaknesses": ["string"],
+  "synthesis": "string (2-3 paragraph summary statement)",
+  "fundability": "string",
+  "missing_components": [
+    {
+      "component": "string (name of missing or incomplete element)",
+      "expected_location": "string (which section it should appear in)",
+      "why_it_matters": "string (what NIH reviewers expect to see here and why its absence affects the score)",
+      "impact_on_score": "string (which criteria this affects and how)",
+      "severity": "critical|major|minor"
+    }
+  ],
+  "package_completeness_critique": "string (a paragraph written in reviewer voice, directly to the applicant, explicitly calling out what is missing from the submission package and the likely impact on fundability)"
+}`
 
 async function handleStudySection(req, env, userId, projectId) {
   const project = await env.DB.prepare(
-    'SELECT mechanism, setup, sections FROM projects WHERE id = ? AND user_id = ?'
+    'SELECT title, mechanism, setup, sections, fast_track_phase1_sections, fast_track_phase2_sections, prelim_data_narrative FROM projects WHERE id = ? AND user_id = ?'
   ).bind(projectId, userId).first()
   if (!project) return err('Project not found', 404)
 
@@ -1742,29 +1917,22 @@ IMPORTANT — D2P2 APPLICATION: This is an NCI Direct to Phase 2 application. Th
 5. Is the Commercialization Plan appropriate for a company that has already been self-funding development?
 6. Does the applicant demonstrate genuine commercial commitment through their prior private investment?` : ''
 
-  const grantText = [
-    sections.phase1_equivalency ? `PHASE I EQUIVALENCY DOCUMENTATION:\n${sections.phase1_equivalency.slice(0, 2000)}` : '',
-    sections.aims ? `SPECIFIC AIMS:\n${sections.aims}` : '',
-    sections.sig ? `SIGNIFICANCE:\n${sections.sig}` : '',
-    sections.innov ? `INNOVATION:\n${sections.innov}` : '',
-    sections.approach ? `APPROACH (first 3000 chars):\n${(sections.approach || '').slice(0, 3000)}` : '',
-  ].filter(Boolean).join('\n\n---\n\n') || 'No sections generated yet.'
+  const fullGrantContext = buildFullGrantContext(
+    project, sections, setup,
+    { phase1: project.fast_track_phase1_sections, phase2: project.fast_track_phase2_sections }
+  )
 
-  const userMsg = `Review this NIH ${project.mechanism || 'grant'} application:
-
-TITLE: ${setup.title || setup.disease || 'Untitled'}
-PI: ${setup.pi || 'Not specified'}
-DISEASE/INDICATION: ${setup.disease || 'Not specified'}
-
-${grantText.slice(0, 7000)}`
+  const userMsg = `Review this NIH ${project.mechanism || 'grant'} application:\n\n${fullGrantContext}`
 
   const callReviewer = async (system) => {
     const systemWithD2P2 = system + d2p2ReviewerNote
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 900, system: systemWithD2P2, messages: [{ role: 'user', content: userMsg }] }),
-    })
+    const resp = await callAnthropicWithFallback({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1500,
+      system: systemWithD2P2,
+      messages: [{ role: 'user', content: userMsg }],
+    }, env)
+    if (resp._fallback) return { text: 'Reviewer unavailable due to service interruption.', usage: { input_tokens: 0, output_tokens: 0 } }
     const r = await resp.json()
     return { text: r.content?.[0]?.text || '', usage: r.usage }
   }
@@ -1785,17 +1953,15 @@ ${grantText.slice(0, 7000)}`
 
   const s1 = extractScores(rev1.text), s2 = extractScores(rev2.text), s3 = extractScores(rev3.text)
 
-  const synthResp = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 1000,
-      system: SS_SUMMARY,
-      messages: [{ role: 'user', content: `PRIMARY REVIEWER:\n${rev1.text}\n\nSECONDARY REVIEWER:\n${rev2.text}\n\nREADER:\n${rev3.text}` }],
-    }),
-  })
-  const synthResult = await synthResp.json()
+  const synthResp = await callAnthropicWithFallback({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 2000,
+    system: SS_SUMMARY,
+    messages: [{ role: 'user', content: `PRIMARY REVIEWER:\n${rev1.text}\n\nSECONDARY REVIEWER:\n${rev2.text}\n\nREADER:\n${rev3.text}` }],
+  }, env)
+
+  let synthResult = { content: [{ text: '' }], usage: { input_tokens: 0, output_tokens: 0 } }
+  if (!synthResp._fallback) synthResult = await synthResp.json()
   const synthText = synthResult.content?.[0]?.text || ''
 
   let summary = null
@@ -1810,8 +1976,10 @@ ${grantText.slice(0, 7000)}`
       percentile: Math.min(99, Math.round(avgImpact * 9.5 + 5)),
       criteria: { significance: avg('significance'), innovation: avg('innovation'), approach: avg('approach'), investigators: avg('investigators'), environment: avg('environment') },
       strengths: [], weaknesses: [],
-      synthesis: synthText.slice(0, 800),
+      synthesis: synthText.slice(0, 1200),
       fundability: avgImpact <= 2.5 ? 'Likely fundable' : avgImpact <= 4 ? 'Competitive, near payline' : avgImpact <= 6 ? 'Above payline for most ICs' : 'Below typical payline',
+      missing_components: [],
+      package_completeness_critique: '',
     }
   }
 
@@ -1829,6 +1997,7 @@ ${grantText.slice(0, 7000)}`
     reviewer_2: { critique: rev2.text, scores: s2 },
     reviewer_3: { critique: rev3.text, scores: s3 },
     summary,
+    input_tokens_reviewer_1: rev1.usage?.input_tokens || 0,
     generated_at: Math.floor(Date.now() / 1000),
   }
 
@@ -1845,6 +2014,8 @@ const PD_REVIEW_SYSTEM = `You are a senior NIH Program Director with 30 years ac
 
 YOUR ROLE: You provide candid, actionable feedback on fundability. You are not a cheerleader. You are not a destroyer. You tell the truth with specific guidance.
 
+You are reviewing the COMPLETE grant application — every section is provided in full with word counts. Score and critique based only on what you can actually read. For sections marked [BRIEF] or [NOT GENERATED], note this in your assessment.
+
 REVIEW DIMENSIONS:
 1. Mission Fit: Does this align with NIH/IC priorities and current funding initiatives?
 2. Mechanism Match: Is this the right funding mechanism for the science maturity and team?
@@ -1853,11 +2024,33 @@ REVIEW DIMENSIONS:
 5. PI Fundability: Based on track record described, is this PI competitive?
 6. Payline Strategy: Specific changes to move from 35th percentile to 10th percentile
 
-Return ONLY valid JSON matching this exact structure: {"fundability":"fund_now|revise_and_resubmit|do_not_fund","overall_assessment":"string","strengths":["string"],"concerns":["string"],"recommended_actions":["string"],"payline_estimate":"string","priority_score_estimate":"string","final_recommendation":"string"}`
+PACKAGE AUDIT: Identify what is missing from this submission. A complete SBIR/STTR Phase II application includes: Specific Aims (1 page), Research Strategy (12 pages) with Significance/Innovation/Approach, Commercialization Plan (12 pages), Data Management Plan (2 pages), Facilities section, Biosketches, Human Subjects (if applicable), Vertebrate Animals (if applicable), Bibliography, and Letters of Support.
+
+Return ONLY valid JSON matching this exact structure:
+{
+  "fundability": "fund_now|revise_and_resubmit|do_not_fund",
+  "overall_assessment": "string",
+  "strengths": ["string"],
+  "concerns": ["string"],
+  "recommended_actions": ["string"],
+  "payline_estimate": "string",
+  "priority_score_estimate": "string",
+  "final_recommendation": "string",
+  "missing_components": [
+    {
+      "component": "string",
+      "expected_location": "string",
+      "why_it_matters": "string",
+      "impact_on_score": "string",
+      "severity": "critical|major|minor"
+    }
+  ],
+  "package_completeness_critique": "string (written as it would appear in an NIH program director memo, direct and specific)"
+}`
 
 async function handlePDReview(req, env, userId, projectId) {
   const project = await env.DB.prepare(
-    'SELECT title, mechanism, setup, sections FROM projects WHERE id = ? AND user_id = ?'
+    'SELECT title, mechanism, setup, sections, fast_track_phase1_sections, fast_track_phase2_sections, prelim_data_narrative FROM projects WHERE id = ? AND user_id = ?'
   ).bind(projectId, userId).first()
   if (!project) return err('Project not found', 404)
 
@@ -1865,32 +2058,31 @@ async function handlePDReview(req, env, userId, projectId) {
   try { setup = JSON.parse(project.setup || '{}') } catch {}
   try { sections = JSON.parse(project.sections || '{}') } catch {}
 
-  const mech = project.mechanism || 'STTR-I'
-  const isSBIR = mech.includes('SBIR') || mech.includes('STTR')
-  const institute = setup.institute || 'NIH'
+  const fullGrantContext = buildFullGrantContext(
+    project, sections, setup,
+    { phase1: project.fast_track_phase1_sections, phase2: project.fast_track_phase2_sections }
+  )
 
-  const userMsg = `Review this ${mech} grant application for ${institute}.
-Title: ${project.title || setup.disease || 'Untitled'}
-PI: ${setup.pi || 'Not specified'}
-Specific Aims: ${(sections.aims || 'Not generated').slice(0, 800)}
-Significance summary: ${(sections.sig || 'Not generated').slice(0, 500)}
-Innovation summary: ${(sections.innov || 'Not generated').slice(0, 400)}
-Approach summary: ${(sections.approach || 'Not generated').slice(0, 600)}${isSBIR ? `\nCommercialization summary: ${(sections.commercial || 'Not generated').slice(0, 400)}` : ''}
+  const userMsg = `Review this ${project.mechanism || 'STTR-I'} grant application for ${setup.institute || 'NIH'}.
+
+${fullGrantContext}
 
 Write a Program Director review memo. Return ONLY valid JSON.`
 
-  const resp = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1500, system: PD_REVIEW_SYSTEM, messages: [{ role: 'user', content: userMsg }] }),
-  })
+  const resp = await callAnthropicWithFallback({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 2000,
+    system: PD_REVIEW_SYSTEM,
+    messages: [{ role: 'user', content: userMsg }],
+  }, env)
+  if (resp._fallback) return json({ error: 'ai_unavailable' }, 503)
   const r = await resp.json()
   const text = r.content?.[0]?.text || ''
 
   let result = null
   const jm = text.match(/\{[\s\S]*\}/)
   if (jm) { try { result = JSON.parse(jm[0]) } catch {} }
-  if (!result) result = { fundability: 'revise_and_resubmit', overall_assessment: text, strengths: [], concerns: [], recommended_actions: [], payline_estimate: 'Unable to estimate', priority_score_estimate: 'Unable to estimate', final_recommendation: 'See assessment above.' }
+  if (!result) result = { fundability: 'revise_and_resubmit', overall_assessment: text, strengths: [], concerns: [], recommended_actions: [], payline_estimate: 'Unable to estimate', priority_score_estimate: 'Unable to estimate', final_recommendation: 'See assessment above.', missing_components: [], package_completeness_critique: '' }
 
   const inputTokens = r.usage?.input_tokens || 0
   const outputTokens = r.usage?.output_tokens || 0
@@ -1913,18 +2105,40 @@ const ADVISORY_COUNCIL_SYSTEM = `You are the NIH Advisory Council reviewing appl
 
 COUNCIL ROLE: Second-level review focusing on program relevance, portfolio balance, special considerations, payline context, and exceptions.
 
+You receive the complete grant application plus the study section and program director reviews. Consider the full application and all prior review feedback.
+
 DECISION OPTIONS: fund, fund_with_conditions, defer, do_not_fund
 
-Return ONLY valid JSON matching this exact structure: {"decision":"fund|fund_with_conditions|defer|do_not_fund","priority":"high|medium|low","rationale":"string (2 paragraphs)","conditions":["string array, empty if no conditions"],"portfolio_fit":"string (1 sentence)","budget_recommendation":"string","final_statement":"string (1 paragraph formal council statement)"}`
+Return ONLY valid JSON matching this exact structure:
+{
+  "decision": "fund|fund_with_conditions|defer|do_not_fund",
+  "priority": "high|medium|low",
+  "rationale": "string (2 paragraphs)",
+  "conditions": ["string array, empty if no conditions"],
+  "portfolio_fit": "string (1 sentence)",
+  "budget_recommendation": "string",
+  "final_statement": "string (1 paragraph formal council statement)",
+  "missing_components": [
+    {
+      "component": "string",
+      "expected_location": "string",
+      "why_it_matters": "string",
+      "impact_on_score": "string",
+      "severity": "critical|major|minor"
+    }
+  ],
+  "package_completeness_critique": "string (council-voice assessment of submission completeness)"
+}`
 
 async function handleAdvisoryCouncil(req, env, userId, projectId) {
   const project = await env.DB.prepare(
-    'SELECT title, mechanism, setup, study_section_results, pd_review_results FROM projects WHERE id = ? AND user_id = ?'
+    'SELECT title, mechanism, setup, sections, fast_track_phase1_sections, fast_track_phase2_sections, prelim_data_narrative, study_section_results, pd_review_results FROM projects WHERE id = ? AND user_id = ?'
   ).bind(projectId, userId).first()
   if (!project) return err('Project not found', 404)
 
-  let setup = {}, ssResults = null, pdResults = null
+  let setup = {}, sections = {}, ssResults = null, pdResults = null
   try { setup = JSON.parse(project.setup || '{}') } catch {}
+  try { sections = JSON.parse(project.sections || '{}') } catch {}
   try { ssResults = JSON.parse(project.study_section_results || 'null') } catch {}
   try { pdResults = JSON.parse(project.pd_review_results || 'null') } catch {}
 
@@ -1933,27 +2147,56 @@ async function handleAdvisoryCouncil(req, env, userId, projectId) {
   const budgetCaps = { 'STTR-I': '$400K', 'STTR-II': '$2M', 'SBIR-I': '$400K', 'SBIR-II': '$2M', 'R01': '$500K/yr', 'R21': '$275K total' }
   const budgetCap = budgetCaps[mech] || 'Standard NIH limits'
 
+  const fullGrantContext = buildFullGrantContext(
+    project, sections, setup,
+    { phase1: project.fast_track_phase1_sections, phase2: project.fast_track_phase2_sections }
+  )
+
+  const priorReviews = []
+  if (ssResults) {
+    priorReviews.push(`STUDY SECTION RESULTS:
+Impact Score: ${ssResults.summary?.impact_score || 'N/A'}
+Percentile: ${ssResults.summary?.percentile || 'N/A'}
+Synthesis: ${ssResults.summary?.synthesis || 'Not available'}
+Strengths: ${(ssResults.summary?.strengths || []).join('; ')}
+Weaknesses: ${(ssResults.summary?.weaknesses || []).join('; ')}`)
+  } else {
+    priorReviews.push('STUDY SECTION: Not yet reviewed')
+  }
+
+  if (pdResults) {
+    priorReviews.push(`PROGRAM DIRECTOR REVIEW:
+Fundability: ${pdResults.fundability}
+Assessment: ${pdResults.overall_assessment || ''}
+Concerns: ${(pdResults.concerns || []).join('; ')}
+Recommended Actions: ${(pdResults.recommended_actions || []).join('; ')}`)
+  } else {
+    priorReviews.push('PROGRAM DIRECTOR REVIEW: Not yet completed')
+  }
+
   const userMsg = `Make a funding recommendation for this ${mech} application at ${institute}.
-Title: ${project.title || setup.disease || 'Untitled'}
-PI: ${setup.pi || 'Not specified'} at ${setup.partner || setup.institution || 'institution not specified'}
-${ssResults ? `Study Section impact score: ${ssResults.summary?.impact_score || 'N/A'}\nStudy Section summary: ${(ssResults.summary?.synthesis || '').slice(0, 400)}` : 'Study Section: Not yet reviewed'}
-${pdResults ? `Program Director assessment: ${pdResults.fundability}\nPD concerns: ${(pdResults.concerns || []).join('; ')}` : 'Program Director: Not yet reviewed'}
-Mechanism budget: ${budgetCap}
+Mechanism budget cap: ${budgetCap}
+
+${fullGrantContext}
+
+${priorReviews.join('\n\n')}
 
 Make an Advisory Council funding recommendation. Return ONLY valid JSON.`
 
-  const resp = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1000, system: ADVISORY_COUNCIL_SYSTEM, messages: [{ role: 'user', content: userMsg }] }),
-  })
+  const resp = await callAnthropicWithFallback({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 2000,
+    system: ADVISORY_COUNCIL_SYSTEM,
+    messages: [{ role: 'user', content: userMsg }],
+  }, env)
+  if (resp._fallback) return json({ error: 'ai_unavailable' }, 503)
   const r = await resp.json()
   const text = r.content?.[0]?.text || ''
 
   let result = null
   const jm = text.match(/\{[\s\S]*\}/)
   if (jm) { try { result = JSON.parse(jm[0]) } catch {} }
-  if (!result) result = { decision: 'defer', priority: 'medium', rationale: text, conditions: [], portfolio_fit: 'Unable to assess', budget_recommendation: 'Review required', final_statement: 'Council defers pending additional review.' }
+  if (!result) result = { decision: 'defer', priority: 'medium', rationale: text, conditions: [], portfolio_fit: 'Unable to assess', budget_recommendation: 'Review required', final_statement: 'Council defers pending additional review.', missing_components: [], package_completeness_critique: '' }
 
   result._inputs = { used_study_section: !!ssResults, study_section_score: ssResults?.summary?.impact_score || null, used_pd_review: !!pdResults, pd_fundability: pdResults?.fundability || null }
 
@@ -2025,6 +2268,10 @@ const COMMERCIAL_REVIEWER_SYSTEM = `You are a senior commercialization expert an
 
 YOUR ROLE: Provide a frank, expert commercialization review that tells the applicant exactly how compelling (or not) their commercialization plan is — both for NIH reviewers and real investors.
 
+You are reviewing the COMPLETE grant application — every section is provided in full with word counts. You cannot score Investigators without reading about the team, you cannot score Environment without reading about facilities, you cannot score Significance without reading the Aims. Score based on what you actually read.
+
+PACKAGE AUDIT: For any section marked [BRIEF] or [NOT GENERATED], note this in your critique and explain how the missing content affects your ability to score that dimension. Identify what a complete commercialization submission should contain.
+
 SCORING RUBRIC (each dimension 0-20 points):
 - Market Assessment: Is the market real, large, and well-defined? Are TAM/SAM/SOM credible?
 - IP Strategy: Is there a defensible IP position? Freedom to operate addressed?
@@ -2032,11 +2279,36 @@ SCORING RUBRIC (each dimension 0-20 points):
 - Revenue Model: Is the revenue model credible? Pricing, reimbursement, payer landscape?
 - Commercial Team: Does the team have the commercial experience to execute?
 
-Return ONLY valid JSON: {"viability":"high|medium|low|not_viable","overall_score":number,"market":{"score":number,"feedback":"string","tam_estimate":"string","key_insight":"string"},"ip":{"score":number,"feedback":"string","ip_strength":"strong|moderate|weak","key_insight":"string"},"regulatory":{"score":number,"feedback":"string","pathway":"string","timeline_estimate":"string"},"revenue_model":{"score":number,"feedback":"string","model_type":"string","key_insight":"string"},"commercial_team":{"score":number,"feedback":"string","gaps":["string"]},"investor_readiness":"series_a_ready|seed_stage|pre_seed|not_ready","strengths":["string"],"critical_weaknesses":["string"],"top_improvements":["string"],"phase3_readiness":"string","bottom_line":"string"}`
+Return ONLY valid JSON:
+{
+  "viability": "high|medium|low|not_viable",
+  "overall_score": number,
+  "market": {"score":number,"feedback":"string","tam_estimate":"string","key_insight":"string"},
+  "ip": {"score":number,"feedback":"string","ip_strength":"strong|moderate|weak","key_insight":"string"},
+  "regulatory": {"score":number,"feedback":"string","pathway":"string","timeline_estimate":"string"},
+  "revenue_model": {"score":number,"feedback":"string","model_type":"string","key_insight":"string"},
+  "commercial_team": {"score":number,"feedback":"string","gaps":["string"]},
+  "investor_readiness": "series_a_ready|seed_stage|pre_seed|not_ready",
+  "strengths": ["string"],
+  "critical_weaknesses": ["string"],
+  "top_improvements": ["string"],
+  "phase3_readiness": "string",
+  "bottom_line": "string",
+  "missing_components": [
+    {
+      "component": "string",
+      "expected_location": "string",
+      "why_it_matters": "string",
+      "impact_on_score": "string",
+      "severity": "critical|major|minor"
+    }
+  ],
+  "package_completeness_critique": "string (frank investor/reviewer assessment of what is missing)"
+}`
 
 async function handleCommercialReview(req, env, userId, projectId) {
   const project = await env.DB.prepare(
-    'SELECT title, mechanism, setup, sections FROM projects WHERE id = ? AND user_id = ?'
+    'SELECT title, mechanism, setup, sections, fast_track_phase1_sections, fast_track_phase2_sections, prelim_data_narrative FROM projects WHERE id = ? AND user_id = ?'
   ).bind(projectId, userId).first()
   if (!project) return err('Project not found', 404)
 
@@ -2044,32 +2316,31 @@ async function handleCommercialReview(req, env, userId, projectId) {
   try { setup = JSON.parse(project.setup || '{}') } catch {}
   try { sections = JSON.parse(project.sections || '{}') } catch {}
 
-  const mech = project.mechanism || 'STTR-I'
-  const commercialText = sections.commercial || sections.sig || 'Not provided'
+  const fullGrantContext = buildFullGrantContext(
+    project, sections, setup,
+    { phase1: project.fast_track_phase1_sections, phase2: project.fast_track_phase2_sections }
+  )
 
-  const userMsg = `Review the commercialization plan for this ${mech} application.
-Title: ${project.title || setup.disease || 'Untitled'}
-PI / Company: ${setup.pi || 'Not specified'}
-Target disease: ${setup.disease || 'Not specified'}
-Commercial path (from setup): ${setup.commercial || 'Not specified'}
-Aims: ${(sections.aims || '').slice(0, 600)}
-Commercialization plan: ${commercialText.slice(0, 1500)}
-Significance: ${(sections.sig || '').slice(0, 400)}
+  const userMsg = `Review the commercialization plan and full application for this ${project.mechanism || 'STTR-I'} grant.
+
+${fullGrantContext}
 
 Provide a complete commercialization review. Return ONLY valid JSON.`
 
-  const resp = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1500, system: COMMERCIAL_REVIEWER_SYSTEM, messages: [{ role: 'user', content: userMsg }] }),
-  })
+  const resp = await callAnthropicWithFallback({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 2000,
+    system: COMMERCIAL_REVIEWER_SYSTEM,
+    messages: [{ role: 'user', content: userMsg }],
+  }, env)
+  if (resp._fallback) return json({ error: 'ai_unavailable' }, 503)
   const r = await resp.json()
   const text = r.content?.[0]?.text || ''
 
   let result = null
   const jm = text.match(/\{[\s\S]*\}/)
   if (jm) { try { result = JSON.parse(jm[0]) } catch {} }
-  if (!result) result = { viability: 'medium', overall_score: 50, market: { score: 10, feedback: text, tam_estimate: 'N/A', key_insight: '' }, ip: { score: 10, feedback: '', ip_strength: 'moderate', key_insight: '' }, regulatory: { score: 10, feedback: '', pathway: '', timeline_estimate: '' }, revenue_model: { score: 10, feedback: '', model_type: '', key_insight: '' }, commercial_team: { score: 10, feedback: '', gaps: [] }, investor_readiness: 'seed_stage', strengths: [], critical_weaknesses: [], top_improvements: [], phase3_readiness: '', bottom_line: 'Review could not be parsed — see raw assessment.' }
+  if (!result) result = { viability: 'medium', overall_score: 50, market: { score: 10, feedback: text, tam_estimate: 'N/A', key_insight: '' }, ip: { score: 10, feedback: '', ip_strength: 'moderate', key_insight: '' }, regulatory: { score: 10, feedback: '', pathway: '', timeline_estimate: '' }, revenue_model: { score: 10, feedback: '', model_type: '', key_insight: '' }, commercial_team: { score: 10, feedback: '', gaps: [] }, investor_readiness: 'seed_stage', strengths: [], critical_weaknesses: [], top_improvements: [], phase3_readiness: '', bottom_line: 'Review could not be parsed — see raw assessment.', missing_components: [], package_completeness_critique: '' }
 
   const inputTokens = r.usage?.input_tokens || 0
   const outputTokens = r.usage?.output_tokens || 0
@@ -2693,7 +2964,7 @@ async function handleOptimizeAims(req, env, userId, projectId) {
       model: SONNET,
       max_tokens: 1500,
       system: `You are an expert NIH grant reviewer who has reviewed over 1,000 Specific Aims pages. Score this Aims page on 5 critical elements and provide specific improvement feedback. Return ONLY valid JSON: { "overall_score": number (0-100), "elements": { "hook_sentence": { "score": number (0-20), "feedback": string, "example_improvement": string }, "problem_statement": { "score": number (0-20), "feedback": string, "example_improvement": string }, "aims_structure": { "score": number (0-20), "feedback": string, "example_improvement": string }, "innovation_claim": { "score": number (0-20), "feedback": string, "example_improvement": string }, "impact_statement": { "score": number (0-20), "feedback": string, "example_improvement": string } }, "strongest_element": string, "weakest_element": string, "top_three_improvements": string[], "reviewer_first_impression": string, "fundability_prediction": string }`,
-      messages: [{ role: 'user', content: `Score this Specific Aims page:\n\n${aimsText}` }],
+      messages: [{ role: 'user', content: `Score this Specific Aims page:\n\n${aimsText}${sections.sig ? `\n\nSIGNIFICANCE SECTION (for context):\n${sections.sig}` : ''}` }],
     }),
   })
   if (!response.ok) return err('AI service error', 502)
@@ -2713,8 +2984,8 @@ async function handleOptimizeAims(req, env, userId, projectId) {
   const inputTokens = result.usage?.input_tokens || 0
   const outputTokens = result.usage?.output_tokens || 0
   try {
-    await env.DB.prepare('INSERT INTO usage_log (user_id, feature, model, input_tokens, output_tokens, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-      .bind(userId, 'aims_optimize', SONNET, inputTokens, outputTokens, Math.floor(Date.now() / 1000)).run()
+    await env.DB.prepare('INSERT INTO usage_log (id, user_id, action, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(crypto.randomUUID(), userId, 'aims_optimize', SONNET, inputTokens, outputTokens, 0, 0, Math.floor(Date.now() / 1000)).run()
   } catch {}
   return json(optimization)
 }
