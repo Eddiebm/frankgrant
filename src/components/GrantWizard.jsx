@@ -24,13 +24,18 @@ export default function GrantWizard({ onComplete, onCancel }) {
     try {
       const result = await api.callAI({
         model: HAIKU, // Use Haiku for extraction
-        max_tokens: 500,
+        max_tokens: 1500,
         system: EXTRACT_STUDY_SYSTEM,
         messages: [{ role: 'user', content: description }]
       }, 'extract_study')
 
       const text = result.content[0].text.replace(/```json|```/g, '').trim()
-      const data = JSON.parse(text)
+      let data = null
+      try { data = JSON.parse(text) } catch {
+        const m = text.match(/\{[\s\S]*\}/)
+        if (m) try { data = JSON.parse(m[0]) } catch {}
+      }
+      if (!data) throw new Error('Could not parse structured study data — please try again')
       setExtracted(data)
       setStep('review')
     } catch (e) {

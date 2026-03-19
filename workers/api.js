@@ -190,6 +190,38 @@ async function checkVoiceEnabled(userId, env) {
   return meta.voice_enabled === 1
 }
 
+// ── Safe JSON parsing for AI responses ────────────────────────────────────
+function safeParseJSON(text) {
+  if (!text) return null
+  // Direct parse first
+  try { return JSON.parse(text) } catch {}
+  // Strip markdown code fences and retry
+  const stripped = text.replace(/^```(?:json)?\n?|\n?```$/gm, '').trim()
+  try { return JSON.parse(stripped) } catch {}
+  // Extract first JSON object from surrounding text
+  const m = stripped.match(/\{[\s\S]*\}/)
+  if (m) {
+    try { return JSON.parse(m[0]) } catch {}
+    // Escape literal newlines/tabs that appear inside string values
+    try {
+      let inStr = false, out = ''
+      for (let i = 0; i < m[0].length; i++) {
+        const ch = m[0][i]
+        if (ch === '"' && (i === 0 || m[0][i - 1] !== '\\')) inStr = !inStr
+        if (inStr && ch === '\n') { out += '\\n'; continue }
+        if (inStr && ch === '\r') { out += '\\r'; continue }
+        if (inStr && ch === '\t') { out += '\\t'; continue }
+        out += ch
+      }
+      return JSON.parse(out)
+    } catch {}
+  }
+  // Try JSON array
+  const arr = stripped.match(/\[[\s\S]*\]/)
+  if (arr) { try { return JSON.parse(arr[0]) } catch {} }
+  return null
+}
+
 // ── Token pricing (per 1M tokens) ─────────────────────────────────────────
 const PRICING = {
   'claude-sonnet-4-20250514': { input: 3.00, output: 15.00 },
@@ -203,7 +235,7 @@ const TIER_LIMITS = {
 }
 
 const MAX_TOKENS_BY_FEATURE = {
-  'extract_study': 300,
+  'extract_study': 1500,
   'compress_grant': 300,
   'section_summary': 200,
   'compliance': 500,
@@ -347,8 +379,8 @@ If no issues found, return { "issues": [] }.`
     const raw = result.content?.[0]?.text?.replace(/```json|```/g, '').trim()
     if (!raw) return
 
-    let parsed
-    try { parsed = JSON.parse(raw) } catch { return }
+    let parsed = safeParseJSON(raw)
+    if (!parsed) return
 
     // Load existing compliance_results and merge
     const project = await env.DB.prepare(
@@ -820,7 +852,7 @@ IMPORTANT: Return ONLY the JSON object, no markdown, no explanation.`
     const aiResult = await aiResp.json()
     const raw = aiResult.content?.[0]?.text?.replace(/```json|```/g, '').trim()
     if (raw) {
-      rules = JSON.parse(raw)
+      rules = safeParseJSON(raw)
 
       // Validate
       const isSBIRSTTR = rules.activity_codes?.some(c => ['R43', 'R44', 'U43', 'U44', 'R41', 'R42'].includes(c))
@@ -969,7 +1001,7 @@ Return ONLY valid JSON:
 
     const result = await resp.json()
     const raw = result.content?.[0]?.text?.replace(/```json|```/g, '').trim()
-    const analysis = JSON.parse(raw)
+    const analysis = safeParseJSON(raw)
     return json({ analysis })
   } catch (e) {
     return err('Analysis failed: ' + e.message)
@@ -1400,7 +1432,7 @@ async function handleCommandFeedbackCluster(req, env) {
   })
   const result = await resp.json()
   const text = result.content[0].text.replace(/```json|```/g, '').trim()
-  return json({ themes: JSON.parse(text) })
+  return json({ themes: safeParseJSON(text) || [] })
 }
 
 // ── Preliminary Data ──────────────────────────────────────────────────────────
@@ -1550,8 +1582,8 @@ Evaluate the sufficiency of this preliminary data. Return ONLY valid JSON:
 
   const result = await resp.json()
   const raw = result.content?.[0]?.text?.replace(/```json|```/g, '').trim()
-  let analysis
-  try { analysis = JSON.parse(raw) } catch { return err('Analysis parsing failed') }
+  let analysis = safeParseJSON(raw)
+  if (!analysis) return err('Analysis parsing failed')
 
   const inputTokens = result.usage?.input_tokens || 0
   const outputTokens = result.usage?.output_tokens || 0
@@ -1649,8 +1681,7 @@ async function handleCitations(req, env, userId) {
 
   const kwResult = await kwResp.json()
   const kwRaw = kwResult.content?.[0]?.text?.replace(/```json|```/g, '').trim()
-  let searchTerms = []
-  try { searchTerms = JSON.parse(kwRaw) } catch {}
+  let searchTerms = safeParseJSON(kwRaw) || []
 
   if (searchTerms.length === 0) return json({ citations: [], search_terms: [] })
 
@@ -2045,9 +2076,7 @@ IMPORTANT — D2P2 APPLICATION: This is an NCI Direct to Phase 2 application. Th
     if (resp._fallback) return { criteria: null, critique: 'Reviewer unavailable due to service interruption.', usage: { input_tokens: 0, output_tokens: 0 } }
     const r = await resp.json()
     const text = r.content?.[0]?.text || ''
-    let parsed = null
-    const jm = text.match(/\{[\s\S]*\}/)
-    if (jm) { try { parsed = JSON.parse(jm[0]) } catch {} }
+    const parsed = safeParseJSON(text)
     return {
       criteria: parsed?.criteria || null,
       critique: parsed?.critique || text,
@@ -2132,9 +2161,7 @@ For each criterion in your output: use the pre-computed score exactly, but synth
   if (!synthResp._fallback) synthResult = await synthResp.json()
   const synthText = synthResult.content?.[0]?.text || ''
 
-  let summary = null
-  const jm = synthText.match(/\{[\s\S]*\}/)
-  if (jm) { try { summary = JSON.parse(jm[0]) } catch {} }
+  let summary = safeParseJSON(synthText)
 
   if (!summary) {
     summary = {
@@ -2266,7 +2293,7 @@ Write a Program Director review memo. Return ONLY valid JSON.`
 
   let result = null
   const jm = text.match(/\{[\s\S]*\}/)
-  if (jm) { try { result = JSON.parse(jm[0]) } catch {} }
+  if (jm) { result = safeParseJSON(jm[0]) }
   if (!result) result = { fundability: 'revise_and_resubmit', overall_assessment: text, strengths: [], concerns: [], recommended_actions: [], payline_estimate: 'Unable to estimate', priority_score_estimate: 'Unable to estimate', final_recommendation: 'See assessment above.', missing_components: [], package_completeness_critique: '' }
 
   const inputTokens = r.usage?.input_tokens || 0
@@ -2380,7 +2407,7 @@ Make an Advisory Council funding recommendation. Return ONLY valid JSON.`
 
   let result = null
   const jm = text.match(/\{[\s\S]*\}/)
-  if (jm) { try { result = JSON.parse(jm[0]) } catch {} }
+  if (jm) { result = safeParseJSON(jm[0]) }
   if (!result) result = { decision: 'defer', priority: 'medium', rationale: text, conditions: [], portfolio_fit: 'Unable to assess', budget_recommendation: 'Review required', final_statement: 'Council defers pending additional review.', missing_components: [], package_completeness_critique: '' }
 
   result._inputs = { used_study_section: !!ssResults, study_section_score: ssResults?.summary?.impact_score || null, used_pd_review: !!pdResults, pd_fundability: pdResults?.fundability || null }
@@ -2530,7 +2557,7 @@ Provide a complete commercialization review. Return ONLY valid JSON.`
 
   let result = null
   const jm = text.match(/\{[\s\S]*\}/)
-  if (jm) { try { result = JSON.parse(jm[0]) } catch {} }
+  if (jm) { result = safeParseJSON(jm[0]) }
   if (!result) result = { viability: 'medium', overall_score: 50, market: { score: 10, feedback: text, tam_estimate: 'N/A', key_insight: '' }, ip: { score: 10, feedback: '', ip_strength: 'moderate', key_insight: '' }, regulatory: { score: 10, feedback: '', pathway: '', timeline_estimate: '' }, revenue_model: { score: 10, feedback: '', model_type: '', key_insight: '' }, commercial_team: { score: 10, feedback: '', gaps: [] }, investor_readiness: 'seed_stage', strengths: [], critical_weaknesses: [], top_improvements: [], phase3_readiness: '', bottom_line: 'Review could not be parsed — see raw assessment.', missing_components: [], package_completeness_critique: '' }
 
   const inputTokens = r.usage?.input_tokens || 0
@@ -2606,7 +2633,7 @@ Return ONLY valid JSON:
 
   let chartData = null
   const jm = text.match(/\{[\s\S]*\}/)
-  if (jm) { try { chartData = JSON.parse(jm[0]) } catch {} }
+  if (jm) { chartData = safeParseJSON(jm[0]) }
   if (!chartData) return err('Could not extract chart data from the commercialization section. Add more specific market data first.')
 
   const inputTokens = r.usage?.input_tokens || 0
@@ -2819,7 +2846,7 @@ ${project.reviewer_comments.slice(0, 8000)}`
   const text = result.content?.[0]?.text || ''
   let analysis = null
   const jm = text.match(/\{[\s\S]*\}/)
-  if (jm) { try { analysis = JSON.parse(jm[0]) } catch {} }
+  if (jm) { analysis = safeParseJSON(jm[0]) }
   if (!analysis) analysis = { overall_impact_score: null, major_concerns: [], minor_concerns: [], strengths_to_preserve: [], recommended_changes: [], introduction_outline: text }
 
   try {
@@ -3221,7 +3248,7 @@ Return ONLY valid JSON:
   let optimization = {}
   try {
     const m = text.match(/\{[\s\S]*\}/)
-    if (m) optimization = JSON.parse(m[0])
+    if (m) optimization = safeParseJSON(m[0]) || {}
   } catch {}
 
   try {
@@ -3845,7 +3872,7 @@ async function runReferenceVerification(projectId, sectionName, content, userId,
   let citations = []
   try {
     const jm = (extractResult.content?.[0]?.text || '').match(/\{[\s\S]*\}/)
-    if (jm) citations = JSON.parse(jm[0]).citations || []
+    if (jm) citations = safeParseJSON(jm[0])?.citations || []
   } catch { return }
 
   citations = citations.slice(0, 20)
@@ -3944,7 +3971,7 @@ async function handleQualityPass1(req, env, userId, projectId) {
       const r = await accuracyResp.json()
       const text = r.content?.[0]?.text || ''
       const jm = text.match(/\{[\s\S]*\}/)
-      if (jm) accuracyResult = { ...accuracyResult, ...JSON.parse(jm[0]) }
+      if (jm) { const p = safeParseJSON(jm[0]); if (p) accuracyResult = { ...accuracyResult, ...p } }
     } catch {}
   }
 
@@ -3955,7 +3982,7 @@ async function handleQualityPass1(req, env, userId, projectId) {
       const r = await citationExtractResp.json()
       const text = r.content?.[0]?.text || ''
       const jm = text.match(/\{[\s\S]*\}/)
-      if (jm) citations = JSON.parse(jm[0]).citations || []
+      if (jm) citations = safeParseJSON(jm[0])?.citations || []
     } catch {}
   }
 
@@ -4072,7 +4099,7 @@ async function handleQualityPass2(req, env, userId, projectId) {
       const r = await contentResp.json()
       const text = r.content?.[0]?.text || ''
       const jm = text.match(/\{[\s\S]*\}/)
-      if (jm) contentIssues = JSON.parse(jm[0]).content_issues || []
+      if (jm) contentIssues = safeParseJSON(jm[0])?.content_issues || []
     } catch {}
   }
 
@@ -4099,9 +4126,7 @@ async function runStudySectionCore(project, sections, setup, env) {
     if (resp._fallback) return { criteria: null, critique: 'Reviewer unavailable.', usage: { input_tokens: 0, output_tokens: 0 } }
     const r = await resp.json()
     const text = r.content?.[0]?.text || ''
-    let parsed = null
-    const jm = text.match(/\{[\s\S]*\}/)
-    if (jm) { try { parsed = JSON.parse(jm[0]) } catch {} }
+    const parsed = safeParseJSON(text)
     return { criteria: parsed?.criteria || null, critique: parsed?.critique || text, usage: r.usage }
   }
 
@@ -4148,7 +4173,7 @@ async function handleQualityPass3(req, env, userId, projectId) {
       const r = await resp.json()
       const text = r.content?.[0]?.text || ''
       const jm = text.match(/\{[\s\S]*\}/)
-      try { return jm ? JSON.parse(jm[0]) : null } catch { return null }
+      return jm ? safeParseJSON(jm[0]) : null
     })() : Promise.resolve(null)
   ])
 

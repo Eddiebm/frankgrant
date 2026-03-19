@@ -987,7 +987,7 @@ TASK: The user will describe their study in plain language. Extract structured i
 8. **commercial**: Commercialization path (market, customers, regulatory pathway) — for STTR/SBIR only
 9. **pa**: Suggested NIH institute/PA if identifiable (NCI, NHLBI, NIGMS, etc.)
 
-Return ONLY valid JSON:
+Return ONLY valid JSON. Do not use newlines or special characters inside string values. Keep all string values on a single line. Do not truncate your response.
 {
   "title": "...",
   "mechanism": "STTR-I",
