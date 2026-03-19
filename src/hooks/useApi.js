@@ -104,6 +104,13 @@ export function useApi() {
     return request('POST', '/letters/generate', { letter_type, project_id, letter_fields })
   }
 
+  // Aims Optimizer
+  async function optimizeAims(projectId) { return request('POST', `/projects/${projectId}/optimize-aims`, {}) }
+  async function generateAimsAlternatives(projectId) { return request('POST', `/projects/${projectId}/optimize-aims/alternatives`, {}) }
+
+  // Pipeline Status
+  async function patchProjectStatus(projectId, data) { return request('PATCH', `/projects/${projectId}/status`, data) }
+
   // Resubmission
   async function importReviewerComments(projectId, text) {
     return request('POST', `/projects/${projectId}/resubmission/import-comments`, { reviewer_comments: text })
@@ -125,5 +132,6 @@ export function useApi() {
     runStudySection, runPDReview, runAdvisoryCouncil, polishSection,
     generateLetter, importReviewerComments, analyzeResubmission, generateResubmissionIntro, reviseForResubmission,
     runCommercialReview, generateCharts, getBibliography, saveBibliography,
+    optimizeAims, generateAimsAlternatives, patchProjectStatus,
   }
 }

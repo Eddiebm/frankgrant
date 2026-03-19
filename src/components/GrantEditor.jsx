@@ -84,6 +84,14 @@ export default function GrantEditor({ project, onSave, onBack }) {
   const [goNoGoMilestone, setGoNoGoMilestone] = useState(project.go_no_go_milestone || '')
   const [activeFTSec, setActiveFTSec] = useState('phase1_sig')
 
+  // Aims Optimizer
+  const [aimsOptModal, setAimsOptModal] = useState(null) // null | 'loading' | 'results' | 'alternatives'
+  const [aimsOptData, setAimsOptData] = useState(project.aims_optimization || null)
+  const [aimsAltData, setAimsAltData] = useState(project.aims_alternatives || null)
+  const [aimsOptLoading, setAimsOptLoading] = useState(false)
+  const [aimsAltLoading, setAimsAltLoading] = useState(false)
+  const [aimsAltExpanded, setAimsAltExpanded] = useState({})
+
   // Study Section
   const [studySectionModal, setStudySectionModal] = useState(null) // null | 'progress' | 'results'
   const [studySectionStep, setStudySectionStep] = useState(0)
@@ -510,6 +518,39 @@ export default function GrantEditor({ project, onSave, onBack }) {
     window.print()
   }
 
+  // ── Aims Optimizer ────────────────────────────────────────────────────────────
+  async function handleOptimizeAims() {
+    setAimsOptLoading(true)
+    setAimsOptModal('loading')
+    try {
+      const result = await api.optimizeAims(project.id)
+      setAimsOptData(result)
+      setAimsOptModal('results')
+    } catch (e) {
+      alert('Optimization failed: ' + e.message)
+      setAimsOptModal(null)
+    }
+    setAimsOptLoading(false)
+  }
+
+  async function handleGenerateAlternatives() {
+    setAimsAltLoading(true)
+    try {
+      const alts = await api.generateAimsAlternatives(project.id)
+      setAimsAltData(alts)
+      setAimsOptModal('alternatives')
+    } catch (e) {
+      alert('Failed to generate alternatives: ' + e.message)
+    }
+    setAimsAltLoading(false)
+  }
+
+  function handleUseAltVersion(altText) {
+    const updated = updateSection('aims', altText)
+    save(updated, scores)
+    setAimsOptModal(null)
+  }
+
   // ── Study Section ────────────────────────────────────────────────────────────
   async function handleRunStudySection() {
     setStudySectionModal('progress')
@@ -718,6 +759,16 @@ export default function GrantEditor({ project, onSave, onBack }) {
               </div>
             )}
           </div>
+          {sections.aims && sections.aims.length > 50 && (
+            <button
+              onClick={() => aimsOptData && !aimsOptLoading ? setAimsOptModal('results') : handleOptimizeAims()}
+              disabled={aimsOptLoading}
+              style={{ ...ghostBtn, fontSize: 12, background: aimsOptData ? '#f0fdf4' : '#fff', borderColor: aimsOptData ? '#86efac' : undefined }}
+              title="Score and optimize your Specific Aims"
+            >
+              🎯 {aimsOptLoading ? 'Scoring…' : 'Optimize Aims'}
+            </button>
+          )}
           <button
             onClick={() => studySectionResults ? setStudySectionModal('results') : handleRunStudySection()}
             style={{ ...ghostBtn, fontSize: 12 }}
@@ -1355,6 +1406,42 @@ export default function GrantEditor({ project, onSave, onBack }) {
         />
       )}
 
+      {/* Aims Optimizer Loading */}
+      {aimsOptModal === 'loading' && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: '#fff', borderRadius: 12, padding: '32px 40px', maxWidth: 400, textAlign: 'center' }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>🎯</div>
+            <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>Scoring Your Specific Aims</div>
+            <div style={{ color: '#666', fontSize: 13 }}>An expert NIH reviewer is analyzing 5 critical elements…</div>
+            <div style={{ marginTop: 20, height: 4, background: '#e5e7eb', borderRadius: 4, overflow: 'hidden' }}>
+              <div style={{ height: '100%', background: '#3b82f6', borderRadius: 4, width: '60%', animation: 'pulse 1.5s infinite' }} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Aims Optimizer Results */}
+      {aimsOptModal === 'results' && aimsOptData && (
+        <AimsOptimizerModal
+          data={aimsOptData}
+          altLoading={aimsAltLoading}
+          onGenerateAlts={handleGenerateAlternatives}
+          onClose={() => setAimsOptModal(null)}
+          onRerun={handleOptimizeAims}
+        />
+      )}
+
+      {/* Aims Alternatives */}
+      {aimsOptModal === 'alternatives' && aimsAltData && (
+        <AimsAlternativesModal
+          alternatives={aimsAltData}
+          expanded={aimsAltExpanded}
+          setExpanded={setAimsAltExpanded}
+          onUse={handleUseAltVersion}
+          onClose={() => setAimsOptModal('results')}
+        />
+      )}
+
       {/* Study Section Progress Modal */}
       {studySectionModal === 'progress' && (
         <StudySectionProgressModal step={studySectionStep} />
@@ -1458,6 +1545,147 @@ export default function GrantEditor({ project, onSave, onBack }) {
           onClose={() => setShowVoiceMode(false)}
         />
       )}
+    </div>
+  )
+}
+
+// ── Aims Optimizer Modal ─────────────────────────────────────────────────────
+function AimsOptimizerModal({ data, altLoading, onGenerateAlts, onClose, onRerun }) {
+  const [expanded, setExpanded] = useState({})
+  const score = data.overall_score || 0
+  const scoreColor = score >= 80 ? '#16a34a' : score >= 60 ? '#d97706' : '#dc2626'
+  const scoreBg = score >= 80 ? '#f0fdf4' : score >= 60 ? '#fffbeb' : '#fef2f2'
+  const scoreBorder = score >= 80 ? '#86efac' : score >= 60 ? '#fbbf24' : '#fca5a5'
+  const elementLabels = { hook_sentence: 'Hook Sentence', problem_statement: 'Problem Statement', aims_structure: 'Aims Structure', innovation_claim: 'Innovation Claim', impact_statement: 'Impact Statement' }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
+      <div style={{ background: '#fff', borderRadius: 12, padding: 28, maxWidth: 680, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div style={{ fontWeight: 700, fontSize: 17 }}>🎯 Specific Aims Score</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={onRerun} style={{ fontSize: 12, padding: '4px 10px', border: '1px solid #e5e7eb', borderRadius: 6, cursor: 'pointer', background: '#fff' }}>↻ Re-run</button>
+            <button onClick={onClose} style={{ fontSize: 12, padding: '4px 10px', border: '1px solid #e5e7eb', borderRadius: 6, cursor: 'pointer', background: '#fff' }}>✕ Close</button>
+          </div>
+        </div>
+
+        {/* Overall score */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20, padding: '16px 20px', background: scoreBg, border: `1px solid ${scoreBorder}`, borderRadius: 10, marginBottom: 20 }}>
+          <div style={{ textAlign: 'center', minWidth: 80 }}>
+            <div style={{ fontSize: 42, fontWeight: 800, color: scoreColor, lineHeight: 1 }}>{score}</div>
+            <div style={{ fontSize: 11, color: '#666', marginTop: 2 }}>out of 100</div>
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ height: 10, background: '#e5e7eb', borderRadius: 5, overflow: 'hidden', marginBottom: 8 }}>
+              <div style={{ height: '100%', width: `${score}%`, background: scoreColor, borderRadius: 5, transition: 'width 0.6s ease' }} />
+            </div>
+            {data.fundability_prediction && (
+              <div style={{ fontSize: 13, fontWeight: 600, color: scoreColor }}>{data.fundability_prediction}</div>
+            )}
+          </div>
+        </div>
+
+        {/* 5 element bars */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>Element Scores</div>
+          {data.elements && Object.entries(data.elements).map(([key, el]) => (
+            <div key={key} style={{ marginBottom: 8, border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', cursor: 'pointer', background: key === data.strongest_element ? '#f0fdf4' : key === data.weakest_element ? '#fef2f2' : '#fafafa' }}
+                onClick={() => setExpanded(e => ({ ...e, [key]: !e[key] }))}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 3 }}>
+                    {elementLabels[key] || key}
+                    {key === data.strongest_element && <span style={{ marginLeft: 6, fontSize: 10, background: '#dcfce7', color: '#166534', padding: '1px 5px', borderRadius: 10 }}>Strongest</span>}
+                    {key === data.weakest_element && <span style={{ marginLeft: 6, fontSize: 10, background: '#fee2e2', color: '#991b1b', padding: '1px 5px', borderRadius: 10 }}>Needs Work</span>}
+                  </div>
+                  <div style={{ height: 5, background: '#e5e7eb', borderRadius: 3, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${(el.score / 20) * 100}%`, background: el.score >= 16 ? '#16a34a' : el.score >= 12 ? '#d97706' : '#dc2626', borderRadius: 3 }} />
+                  </div>
+                </div>
+                <div style={{ fontSize: 15, fontWeight: 700, minWidth: 40, textAlign: 'right', color: el.score >= 16 ? '#16a34a' : el.score >= 12 ? '#d97706' : '#dc2626' }}>{el.score}/20</div>
+                <div style={{ fontSize: 11, color: '#888' }}>{expanded[key] ? '▲' : '▼'}</div>
+              </div>
+              {expanded[key] && (
+                <div style={{ padding: '10px 12px', borderTop: '1px solid #e5e7eb', fontSize: 12, lineHeight: 1.6 }}>
+                  <div style={{ marginBottom: 6 }}><span style={{ fontWeight: 600 }}>Feedback: </span>{el.feedback}</div>
+                  {el.example_improvement && (
+                    <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 6, padding: '8px 10px', color: '#1e40af', fontStyle: 'italic' }}>
+                      <span style={{ fontWeight: 600, fontStyle: 'normal' }}>Example: </span>{el.example_improvement}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Top 3 improvements */}
+        {data.top_three_improvements && data.top_three_improvements.length > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Top 3 Action Items</div>
+            {data.top_three_improvements.map((item, i) => (
+              <div key={i} style={{ display: 'flex', gap: 10, marginBottom: 6, padding: '8px 12px', background: '#fffbeb', border: '1px solid #fbbf24', borderRadius: 8, fontSize: 12 }}>
+                <span style={{ fontWeight: 700, color: '#d97706', minWidth: 18 }}>{i + 1}.</span>
+                <span>{item}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Reviewer first impression */}
+        {data.reviewer_first_impression && (
+          <div style={{ padding: '12px 16px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, marginBottom: 16, fontSize: 13, fontStyle: 'italic', lineHeight: 1.6 }}>
+            <div style={{ fontWeight: 700, fontStyle: 'normal', fontSize: 11, color: '#64748b', marginBottom: 4 }}>REVIEWER FIRST IMPRESSION</div>
+            "{data.reviewer_first_impression}"
+          </div>
+        )}
+
+        <button
+          onClick={onGenerateAlts}
+          disabled={altLoading}
+          style={{ width: '100%', padding: '10px', background: '#1e40af', color: '#fff', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: altLoading ? 'not-allowed' : 'pointer', opacity: altLoading ? 0.7 : 1 }}
+        >
+          {altLoading ? '⟳ Generating 3 Alternative Structures…' : '✨ Generate Alternative Aims Structures'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Aims Alternatives Modal ───────────────────────────────────────────────────
+function AimsAlternativesModal({ alternatives, onUse, onClose }) {
+  const structureColors = ['#1e40af', '#7c3aed', '#0f766e']
+  const structureBgs = ['#eff6ff', '#f5f3ff', '#f0fdfa']
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
+      <div style={{ background: '#fff', borderRadius: 12, padding: 28, maxWidth: 1100, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <div style={{ fontWeight: 700, fontSize: 17 }}>✨ Alternative Aims Structures</div>
+          <button onClick={onClose} style={{ fontSize: 12, padding: '4px 10px', border: '1px solid #e5e7eb', borderRadius: 6, cursor: 'pointer', background: '#fff' }}>← Back to Score</button>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+          {alternatives.map((alt, i) => (
+            <div key={i} style={{ border: `1.5px solid ${structureColors[i]}30`, borderRadius: 10, overflow: 'hidden' }}>
+              <div style={{ padding: '10px 14px', background: structureBgs[i], borderBottom: `1px solid ${structureColors[i]}20` }}>
+                <div style={{ fontWeight: 700, fontSize: 13, color: structureColors[i] }}>{alt.name}</div>
+              </div>
+              <div style={{ padding: '12px 14px', fontSize: 12, lineHeight: 1.65, whiteSpace: 'pre-wrap', maxHeight: 360, overflowY: 'auto', color: '#374151' }}>{alt.text}</div>
+              <div style={{ padding: '10px 14px', borderTop: `1px solid ${structureColors[i]}20`, background: structureBgs[i] }}>
+                <button
+                  onClick={() => onUse(alt.text)}
+                  style={{ width: '100%', padding: '7px', background: structureColors[i], color: '#fff', border: 'none', borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                >
+                  Use This Version
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{ marginTop: 16, padding: '10px 14px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12, color: '#666', textAlign: 'center' }}>
+          Mix &amp; Match: Copy elements from any version and paste into your Aims section in the writer tab.
+        </div>
+      </div>
     </div>
   )
 }

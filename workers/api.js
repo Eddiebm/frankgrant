@@ -405,9 +405,21 @@ async function handleAI(req, env, userId, userEmail, ctx) {
 // ── Project CRUD ──────────────────────────────────────────────────────────────
 async function handleListProjects(req, env, userId) {
   const { results } = await env.DB.prepare(
-    'SELECT id, title, mechanism, updated_at, created_at FROM projects WHERE user_id = ? ORDER BY updated_at DESC'
+    `SELECT id, title, mechanism, updated_at, created_at,
+      status, submission_date, next_deadline, priority, award_amount, award_number, sections
+     FROM projects WHERE user_id = ? ORDER BY updated_at DESC`
   ).bind(userId).all()
-  return json(results)
+  const projects = (results || []).map(p => {
+    let completion_pct = 0
+    try {
+      const secs = JSON.parse(p.sections || '{}')
+      const keys = ['aims', 'sig', 'innov', 'approach', 'summary', 'narrative']
+      const filled = keys.filter(k => secs[k] && secs[k].length > 50).length
+      completion_pct = Math.round((filled / keys.length) * 100)
+    } catch {}
+    return { ...p, sections: undefined, completion_pct, status: p.status || 'draft', priority: p.priority || 'medium' }
+  })
+  return json(projects)
 }
 
 async function handleCreateProject(req, env, userId) {
@@ -469,6 +481,16 @@ async function handleGetProject(req, env, userId, projectId) {
   row.d2p2_equivalency_period = row.d2p2_equivalency_period || ''
   row.d2p2_milestones_achieved = row.d2p2_milestones_achieved || ''
   row.d2p2_rationale = row.d2p2_rationale || ''
+  row.aims_optimization = row.aims_optimization ? (() => { try { return JSON.parse(row.aims_optimization) } catch { return null } })() : null
+  row.aims_alternatives = row.aims_alternatives ? (() => { try { return JSON.parse(row.aims_alternatives) } catch { return null } })() : null
+  row.status = row.status || 'draft'
+  row.priority = row.priority || 'medium'
+  row.submission_date = row.submission_date || null
+  row.award_date = row.award_date || null
+  row.award_amount = row.award_amount || null
+  row.award_number = row.award_number || null
+  row.next_deadline = row.next_deadline || null
+  row.notes = row.notes || null
   return json(row)
 }
 
@@ -2365,6 +2387,124 @@ Return only the revised text. Make improvements visible and specific. Maintain w
   return json({ revised, section_id })
 }
 
+// ── Aims Optimizer ────────────────────────────────────────────────────────────
+async function handleOptimizeAims(req, env, userId, projectId) {
+  const project = await env.DB.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').bind(projectId, userId).first()
+  if (!project) return err('Project not found', 404)
+  const sections = JSON.parse(project.sections || '{}')
+  const aimsText = sections.aims || ''
+  if (!aimsText || aimsText.trim().length < 50) return err('Specific Aims section is empty or too short', 400)
+
+  const SONNET = 'claude-sonnet-4-20250514'
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({
+      model: SONNET,
+      max_tokens: 1500,
+      system: `You are an expert NIH grant reviewer who has reviewed over 1,000 Specific Aims pages. Score this Aims page on 5 critical elements and provide specific improvement feedback. Return ONLY valid JSON: { "overall_score": number (0-100), "elements": { "hook_sentence": { "score": number (0-20), "feedback": string, "example_improvement": string }, "problem_statement": { "score": number (0-20), "feedback": string, "example_improvement": string }, "aims_structure": { "score": number (0-20), "feedback": string, "example_improvement": string }, "innovation_claim": { "score": number (0-20), "feedback": string, "example_improvement": string }, "impact_statement": { "score": number (0-20), "feedback": string, "example_improvement": string } }, "strongest_element": string, "weakest_element": string, "top_three_improvements": string[], "reviewer_first_impression": string, "fundability_prediction": string }`,
+      messages: [{ role: 'user', content: `Score this Specific Aims page:\n\n${aimsText}` }],
+    }),
+  })
+  if (!response.ok) return err('AI service error', 502)
+  const result = await response.json()
+  const text = result.content?.[0]?.text || '{}'
+  let optimization = {}
+  try {
+    const m = text.match(/\{[\s\S]*\}/)
+    if (m) optimization = JSON.parse(m[0])
+  } catch {}
+
+  try {
+    await env.DB.prepare('UPDATE projects SET aims_optimization = ?, updated_at = ? WHERE id = ? AND user_id = ?')
+      .bind(JSON.stringify(optimization), Math.floor(Date.now() / 1000), projectId, userId).run()
+  } catch (e) { console.error('Save aims_optimization failed:', e) }
+
+  const inputTokens = result.usage?.input_tokens || 0
+  const outputTokens = result.usage?.output_tokens || 0
+  try {
+    await env.DB.prepare('INSERT INTO usage_log (user_id, feature, model, input_tokens, output_tokens, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .bind(userId, 'aims_optimize', SONNET, inputTokens, outputTokens, Math.floor(Date.now() / 1000)).run()
+  } catch {}
+  return json(optimization)
+}
+
+async function handleOptimizeAimsAlternatives(req, env, userId, projectId) {
+  const project = await env.DB.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').bind(projectId, userId).first()
+  if (!project) return err('Project not found', 404)
+  const sections = JSON.parse(project.sections || '{}')
+  const setup = JSON.parse(project.setup || '{}')
+  const aimsText = sections.aims || ''
+  if (!aimsText || aimsText.trim().length < 50) return err('Specific Aims section is empty', 400)
+
+  const SONNET = 'claude-sonnet-4-20250514'
+  const context = `Title: ${project.title || 'Untitled'}\nMechanism: ${project.mechanism || 'STTR-I'}\nDisease/Condition: ${setup.disease || ''}\nBiology: ${setup.biology || ''}\nPI: ${setup.pi || ''}\n\nORIGINAL SPECIFIC AIMS:\n${aimsText}`
+
+  const structures = [
+    { name: 'Problem-Focused', instruction: 'Generate Specific Aims with PROBLEM-FOCUSED structure. Open with devastating impact of disease. Build to critical barrier. Introduce solution. State aims as solutions to specific aspects of barrier.' },
+    { name: 'Discovery-Focused', instruction: 'Generate Specific Aims with DISCOVERY-FOCUSED structure. Open with surprising scientific insight or gap in knowledge. Build case for why gap matters. State aims as experiments that fill this gap and transform the field.' },
+    { name: 'Translational', instruction: 'Generate Specific Aims with TRANSLATIONAL structure. Open with patient impact and unmet clinical need. Connect to underlying biology. State aims progressing from basic validation through translational application.' },
+  ]
+
+  const callAlt = async (instruction) => {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: SONNET, max_tokens: 1200,
+        system: `You are a world-class NIH grant writer. ${instruction} Write a complete Specific Aims page (~275 words, ~1 page). Return only the aims text, no preamble or explanation.`,
+        messages: [{ role: 'user', content: context }],
+      }),
+    })
+    const data = await r.json()
+    return { text: data.content?.[0]?.text || '', tokens: data.usage || {} }
+  }
+
+  const [alt1, alt2, alt3] = await Promise.all(structures.map(s => callAlt(s.instruction)))
+  const alternatives = [
+    { name: structures[0].name, text: alt1.text },
+    { name: structures[1].name, text: alt2.text },
+    { name: structures[2].name, text: alt3.text },
+  ]
+
+  try {
+    await env.DB.prepare('UPDATE projects SET aims_alternatives = ?, updated_at = ? WHERE id = ? AND user_id = ?')
+      .bind(JSON.stringify(alternatives), Math.floor(Date.now() / 1000), projectId, userId).run()
+  } catch (e) { console.error('Save aims_alternatives failed:', e) }
+
+  const totalInput = (alt1.tokens.input_tokens || 0) + (alt2.tokens.input_tokens || 0) + (alt3.tokens.input_tokens || 0)
+  const totalOutput = (alt1.tokens.output_tokens || 0) + (alt2.tokens.output_tokens || 0) + (alt3.tokens.output_tokens || 0)
+  try {
+    await env.DB.prepare('INSERT INTO usage_log (user_id, feature, model, input_tokens, output_tokens, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .bind(userId, 'aims_alternatives', SONNET, totalInput, totalOutput, Math.floor(Date.now() / 1000)).run()
+  } catch {}
+  return json(alternatives)
+}
+
+// ── Pipeline Status ────────────────────────────────────────────────────────────
+async function handlePatchProjectStatus(req, env, userId, projectId) {
+  const body = await req.json()
+  const now = Math.floor(Date.now() / 1000)
+  const project = await env.DB.prepare('SELECT id FROM projects WHERE id = ? AND user_id = ?').bind(projectId, userId).first()
+  if (!project) return err('Project not found', 404)
+  try {
+    await env.DB.prepare(
+      `UPDATE projects SET status = ?, submission_date = ?, award_date = ?, award_amount = ?, award_number = ?, next_deadline = ?, priority = ?, notes = ?, updated_at = ? WHERE id = ? AND user_id = ?`
+    ).bind(
+      body.status || 'draft',
+      body.submission_date || null,
+      body.award_date || null,
+      body.award_amount != null ? body.award_amount : null,
+      body.award_number || null,
+      body.next_deadline || null,
+      body.priority || 'medium',
+      body.notes || null,
+      now, projectId, userId
+    ).run()
+  } catch (e) { return err('Update failed: ' + e.message, 500) }
+  return json({ ok: true, updated_at: now })
+}
+
 // ── Main fetch handler ────────────────────────────────────────────────────────
 export default {
   async fetch(req, env, ctx) {
@@ -2560,6 +2700,28 @@ export default {
       }
       if (path === '/api/voice/session' && req.method === 'POST') {
         const response = await handleVoiceSessionPost(req, env, userId)
+        await logError(path, 200, null, Date.now() - startTime, userId, env)
+        return response
+      }
+
+      // Aims Optimizer
+      const optimizeAimsMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/optimize-aims$/)
+      if (optimizeAimsMatch && req.method === 'POST') {
+        const response = await handleOptimizeAims(req, env, userId, optimizeAimsMatch[1])
+        await logError(path, 200, null, Date.now() - startTime, userId, env)
+        return response
+      }
+      const optimizeAimsAltMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/optimize-aims\/alternatives$/)
+      if (optimizeAimsAltMatch && req.method === 'POST') {
+        const response = await handleOptimizeAimsAlternatives(req, env, userId, optimizeAimsAltMatch[1])
+        await logError(path, 200, null, Date.now() - startTime, userId, env)
+        return response
+      }
+
+      // Pipeline Status
+      const patchStatusMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/status$/)
+      if (patchStatusMatch && req.method === 'PATCH') {
+        const response = await handlePatchProjectStatus(req, env, userId, patchStatusMatch[1])
         await logError(path, 200, null, Date.now() - startTime, userId, env)
         return response
       }

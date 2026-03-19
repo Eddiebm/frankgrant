@@ -1,7 +1,7 @@
 # FrankGrant Status Document
 
 **Last Updated:** 2026-03-18
-**Version:** 4.9.0
+**Version:** 4.10.0
 **Status:** Production (Internal COARE Tool)
 
 ---
@@ -191,6 +191,33 @@
 - ✅ **D1 columns** - `voice_enabled INTEGER DEFAULT 1`, `voice_tier TEXT` on users_meta
 - ✅ **KV session storage** - `voice:{project_id}:{user_id}` with 4h expiration
 - ✅ **Toolbar button** - "🎤 Voice Mode" teal/cyan button in project toolbar
+
+### **Specific Aims Optimizer (v4.10.0)**
+- ✅ **"🎯 Optimize Aims" toolbar button** — shown only when Specific Aims section has content (>50 chars)
+- ✅ **Scoring modal** — overall score 0-100 with color coding (80+ green, 60-79 amber, <60 red), animated progress bar, fundability prediction
+- ✅ **5-element analysis** — Hook Sentence, Problem Statement, Aims Structure, Innovation Claim, Impact Statement — each scored 0-20 with expandable feedback and example improvement
+- ✅ **Strongest/weakest badges** — highlighted inline on element bars
+- ✅ **Top 3 action items** — amber boxes with specific improvements
+- ✅ **Reviewer first impression** — quoted block, verbatim from NIH reviewer persona
+- ✅ **Generate Alternative Structures button** — triggers 3 parallel Sonnet calls (max_tokens 1200 each)
+- ✅ **3-column alternatives view** — Problem-Focused, Discovery-Focused, Translational structures side by side with scrollable text
+- ✅ **Use This Version** — one-click replaces Aims section content and saves
+- ✅ **Mix & Match note** — copy elements across versions
+- ✅ **Worker routes** — `POST /api/projects/:id/optimize-aims` and `POST /api/projects/:id/optimize-aims/alternatives`
+- ✅ **D1 columns** — `aims_optimization TEXT`, `aims_alternatives TEXT`
+
+### **Grant Pipeline Management (v4.10.0)**
+- ✅ **Pipeline status** — 8 statuses: draft, in_progress, ready_to_submit, submitted, under_review, awarded, not_funded, withdrawn
+- ✅ **PATCH /api/projects/:id/status** — updates status, submission_date, award_date, award_amount, award_number, next_deadline, priority, notes
+- ✅ **D1 columns** — status, submission_date, award_date, award_amount, priority, notes, next_deadline, award_number (10 new columns)
+- ✅ **Stats bar** — Total Grants, In Progress, Submitted, Awarded (count + $M), Not Funded
+- ✅ **Deadline banner** — "⚠️ You have N grant deadline(s) approaching this week" with project links
+- ✅ **View toggle** — ☰ List / ⬜ Board / 📅 Calendar with localStorage persistence
+- ✅ **List view** — filter by status/mechanism/priority, sort by deadline/status/mechanism/updated, completion % bar, deadline countdown (color-coded), quick Open/Status/Delete buttons
+- ✅ **Kanban board** — 7 columns, HTML5 drag-and-drop (no library), PATCH on drop, card shows title, mechanism, priority, deadline badge, completion bar
+- ✅ **Calendar view** — monthly grid with prev/next navigation, color-coded deadline events (blue >14d, amber ≤14d, red ≤3d/overdue), click to open project, "No deadline set" section with Set Deadline button
+- ✅ **Status modal** — edit status, priority, next_deadline, submission_date, award_amount, award_number, notes; award fields conditionally shown
+- ✅ **Enhanced list cards** — status badge, priority color, mechanism badge, deadline countdown, completion % progress bar
 
 ### **NCI Direct to Phase 2 (D2P2) Mechanism (v4.9.0)**
 - ✅ **D2P2 mechanism** — Added `D2P2` to MECHANISMS in nih.js: 12-page strategy, 12-page commercial, $2,097,580 budget cap, 24 months, NCI only, requires Phase I equivalency documentation
