@@ -1,7 +1,9 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { useUser } from '@clerk/clerk-react'
 import { useApi } from '../hooks/useApi'
 import PreliminaryData from './PreliminaryData'
 import VoiceMode from './VoiceMode'
+import CollaborationPanel from './CollaborationPanel'
 import { CommercialChartsPanel } from './CommercialCharts'
 import BibliographyManager from './BibliographyManager'
 import { generateGrantDOCX } from '../lib/docxExport'
@@ -112,6 +114,19 @@ export default function GrantEditor({ project, onSave, onBack }) {
   // Voice Mode
   const [showVoiceMode, setShowVoiceMode] = useState(false)
 
+  // Collaboration
+  const { user } = useUser()
+  const [showCollabPanel, setShowCollabPanel] = useState(false)
+  const [commentCount, setCommentCount] = useState(0)
+
+  useEffect(() => {
+    if (!project.id) return
+    api.getComments(project.id).then(data => {
+      const all = Object.values(data.grouped || {}).flat()
+      setCommentCount(all.filter(c => !c.resolved).length)
+    }).catch(() => {})
+  }, [project.id])
+
   // Commercial Reviewer
   const [commercialReviewModal, setCommercialReviewModal] = useState(null) // null | 'loading' | 'results'
   const [commercialReviewResults, setCommercialReviewResults] = useState(project.commercial_review_results ? (() => { try { return JSON.parse(project.commercial_review_results) } catch { return null } })() : null)
@@ -166,7 +181,7 @@ export default function GrantEditor({ project, onSave, onBack }) {
     }
   }
 
-  async function save(updatedSections, updatedScores, updatedFoaRules, updatedFT1, updatedFT2, updatedMilestone) {
+  async function save(updatedSections, updatedScores, updatedFoaRules, updatedFT1, updatedFT2, updatedMilestone, snapshotMeta) {
     setSaveState('saving')
     try {
       await onSave({
@@ -184,6 +199,7 @@ export default function GrantEditor({ project, onSave, onBack }) {
         d2p2_equivalency_period: d2p2EquivalencyPeriod,
         d2p2_milestones_achieved: d2p2MilestonesAchieved,
         d2p2_rationale: d2p2Rationale,
+        ...(snapshotMeta || {}),
       })
       setSaveState('saved')
     } catch {
@@ -252,7 +268,7 @@ export default function GrantEditor({ project, onSave, onBack }) {
 
       const text = result.content.map(b => b.text || '').join('')
       const updated = updateSection(secId, text)
-      await save(updated, scores)
+      await save(updated, scores, undefined, undefined, undefined, undefined, { _auto_snapshot: true, _snapshot_summary: `Generated: ${secId}` })
       scoreSection(secId, text, updated)
 
       // Start compliance polling
@@ -812,6 +828,16 @@ export default function GrantEditor({ project, onSave, onBack }) {
             title="Talk to your grant with AI voice assistant"
           >
             🎤 Voice Mode
+          </button>
+          <button
+            onClick={() => setShowCollabPanel(p => !p)}
+            style={{ ...ghostBtn, fontSize: 12, background: '#7c3aed', color: '#fff', borderColor: '#7c3aed', position: 'relative' }}
+            title="Collaborate with your team"
+          >
+            👥 Share
+            {commentCount > 0 && (
+              <span style={{ position: 'absolute', top: -6, right: -6, background: '#ef4444', color: '#fff', borderRadius: '50%', width: 16, height: 16, fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>{commentCount > 9 ? '9+' : commentCount}</span>
+            )}
           </button>
         </div>
 
@@ -1528,6 +1554,15 @@ export default function GrantEditor({ project, onSave, onBack }) {
             onClose={() => setShowBibliography(false)}
           />
         </div>
+      )}
+
+      {/* Collaboration Panel */}
+      {showCollabPanel && (
+        <CollaborationPanel
+          projectId={project.id}
+          projectOwnerId={project.user_id}
+          onClose={() => setShowCollabPanel(false)}
+        />
       )}
 
       {/* Voice Mode Overlay */}

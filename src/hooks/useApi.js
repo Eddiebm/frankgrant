@@ -125,6 +125,24 @@ export function useApi() {
     return request('POST', `/projects/${projectId}/resubmission/revise-section`, { section_id: sectionId, section_text: sectionText, section_label: sectionLabel })
   }
 
+  // Collaboration
+  async function inviteCollaborator(projectId, email, role) { return request('POST', `/projects/${projectId}/collaborators`, { email, role }) }
+  async function getCollaborators(projectId) { return request('GET', `/projects/${projectId}/collaborators`) }
+  async function deleteCollaborator(projectId, collabId) { return request('DELETE', `/projects/${projectId}/collaborators/${collabId}`) }
+  async function patchCollaborator(projectId, collabId, role) { return request('PATCH', `/projects/${projectId}/collaborators/${collabId}`, { role }) }
+  async function acceptInvitation(projectId) { return request('POST', `/projects/${projectId}/collaborators/accept`, {}) }
+  async function getSharedProjects() { return request('GET', '/projects/shared') }
+  async function getPendingInvitations() { return request('GET', '/projects/pending-invitations') }
+  async function postComment(projectId, content, sectionName) { return request('POST', `/projects/${projectId}/comments`, { content, section_name: sectionName || null }) }
+  async function getComments(projectId) { return request('GET', `/projects/${projectId}/comments`) }
+  async function patchComment(projectId, commentId, resolved) { return request('PATCH', `/projects/${projectId}/comments/${commentId}`, { resolved }) }
+  async function deleteComment(projectId, commentId) { return request('DELETE', `/projects/${projectId}/comments/${commentId}`) }
+  async function assignSection(projectId, sectionName, email) { return request('POST', `/projects/${projectId}/sections/${encodeURIComponent(sectionName)}/assign`, { email }) }
+  async function createSnapshot(projectId, summary) { return request('POST', `/projects/${projectId}/versions`, { change_summary: summary }) }
+  async function getVersions(projectId) { return request('GET', `/projects/${projectId}/versions`) }
+  async function getVersion(projectId, versionNumber) { return request('GET', `/projects/${projectId}/versions/${versionNumber}`) }
+  async function restoreVersion(projectId, versionNumber) { return request('POST', `/projects/${projectId}/versions/${versionNumber}/restore`, { confirm: 'RESTORE' }) }
+
   return {
     callAI, listProjects, createProject, getProject, updateProject, deleteProject, getUsage,
     parseFOA, searchGrants, analyzeGrant, saveReference, getCompliance, getToken,
@@ -133,5 +151,8 @@ export function useApi() {
     generateLetter, importReviewerComments, analyzeResubmission, generateResubmissionIntro, reviseForResubmission,
     runCommercialReview, generateCharts, getBibliography, saveBibliography,
     optimizeAims, generateAimsAlternatives, patchProjectStatus,
+    inviteCollaborator, getCollaborators, deleteCollaborator, patchCollaborator, acceptInvitation,
+    getSharedProjects, getPendingInvitations, postComment, getComments, patchComment, deleteComment,
+    assignSection, createSnapshot, getVersions, getVersion, restoreVersion,
   }
 }

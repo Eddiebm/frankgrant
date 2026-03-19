@@ -62,6 +62,8 @@ export default function Dashboard() {
   const [activeView, setActiveView] = useState('projects')
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
+  const [sharedProjects, setSharedProjects] = useState([])
+  const [pendingInvitations, setPendingInvitations] = useState([])
 
   // Pipeline view
   const [pipelineView, setPipelineView] = useState(() => localStorage.getItem('fg_pipeline_view') || 'list')
@@ -88,6 +90,9 @@ export default function Dashboard() {
       })
       .catch(console.error)
       .finally(() => setLoading(false))
+    // Load collaboration data
+    api.getSharedProjects().then(d => setSharedProjects(d.projects || [])).catch(() => {})
+    api.getPendingInvitations().then(d => setPendingInvitations(d.invitations || [])).catch(() => {})
   }, [])
 
   function changePipelineView(v) {
@@ -269,6 +274,29 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* Pending Invitations Banner */}
+      {pendingInvitations.length > 0 && (
+        <div style={{ marginBottom: 12, padding: '10px 16px', background: '#f5f3ff', border: '1px solid #c4b5fd', borderRadius: 8, fontSize: 13 }}>
+          <div style={{ fontWeight: 600, color: '#7c3aed', marginBottom: 6 }}>👥 You have {pendingInvitations.length} pending collaboration invitation{pendingInvitations.length > 1 ? 's' : ''}:</div>
+          {pendingInvitations.map(inv => (
+            <div key={inv.id} style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
+              <span style={{ flex: 1, color: '#4b5563' }}><strong>{inv.project_title || 'Untitled'}</strong> — invited as <strong>{inv.role}</strong></span>
+              <button
+                onClick={async () => {
+                  try {
+                    await api.acceptInvitation(inv.project_id)
+                    setPendingInvitations(prev => prev.filter(i => i.id !== inv.id))
+                    const data = await api.getSharedProjects()
+                    setSharedProjects(data.projects || [])
+                  } catch (e) { alert('Error accepting: ' + e.message) }
+                }}
+                style={{ padding: '4px 12px', background: '#7c3aed', border: 'none', borderRadius: 4, color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+              >Accept</button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Stats bar */}
       {!loading && projects.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, marginBottom: 16 }}>
@@ -343,6 +371,26 @@ export default function Dashboard() {
           onOpen={openProject}
           onStatus={openStatusModal}
         />
+      )}
+
+      {/* Shared With Me */}
+      {sharedProjects.length > 0 && (
+        <div style={{ marginTop: 32 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: '#7c3aed', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+            👥 Shared With Me <span style={{ fontSize: 12, fontWeight: 400, color: '#9ca3af' }}>({sharedProjects.length})</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {sharedProjects.map(p => (
+              <div key={p.id} onClick={() => openProject(p.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 8, cursor: 'pointer' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600, fontSize: 14, color: '#1f2937' }}>{p.title}</div>
+                  <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{p.mechanism} · {p.status?.replace(/_/g, ' ')}</div>
+                </div>
+                <span style={{ fontSize: 11, color: '#7c3aed', background: '#ede9fe', padding: '3px 10px', borderRadius: 12, fontWeight: 600, textTransform: 'capitalize' }}>{p.my_role}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* Status Modal */}

@@ -491,6 +491,9 @@ async function handleGetProject(req, env, userId, projectId) {
   row.award_number = row.award_number || null
   row.next_deadline = row.next_deadline || null
   row.notes = row.notes || null
+  row.shared_with = row.shared_with ? (() => { try { return JSON.parse(row.shared_with) } catch { return [] } })() : []
+  row.section_assignments = row.section_assignments ? (() => { try { return JSON.parse(row.section_assignments) } catch { return {} } })() : {}
+  row.current_version = row.current_version || 1
   return json(row)
 }
 
@@ -506,6 +509,7 @@ async function handleUpdateProject(req, env, userId, projectId) {
       reference_grants = ?, citation_suggestions = ?,
       go_no_go_milestone = ?, fast_track_phase1_sections = ?, fast_track_phase2_sections = ?,
       d2p2_funding_source = ?, d2p2_equivalency_period = ?, d2p2_milestones_achieved = ?, d2p2_rationale = ?,
+      section_assignments = ?,
       updated_at = ?
      WHERE id = ? AND user_id = ?`
   ).bind(
@@ -533,9 +537,23 @@ async function handleUpdateProject(req, env, userId, projectId) {
     body.d2p2_equivalency_period || null,
     body.d2p2_milestones_achieved || null,
     body.d2p2_rationale || null,
+    body.section_assignments ? JSON.stringify(body.section_assignments) : null,
     now, projectId, userId
   ).run()
   if (result.changes === 0) return err('Project not found', 404)
+
+  // Auto-snapshot if triggered by generation
+  if (body._auto_snapshot && body.sections) {
+    try {
+      const latest = await env.DB.prepare('SELECT MAX(version_number) as max_ver FROM project_versions WHERE project_id = ?').bind(projectId).first()
+      const nextVer = (latest?.max_ver || 0) + 1
+      await env.DB.prepare(
+        'INSERT INTO project_versions (project_id, user_id, version_number, sections_snapshot, change_summary, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+      ).bind(projectId, userId, nextVer, JSON.stringify(body.sections), body._snapshot_summary || 'Auto-save', now).run()
+      await env.DB.prepare('UPDATE projects SET current_version = ? WHERE id = ?').bind(nextVer, projectId).run()
+    } catch (e) { console.error('Auto-snapshot failed:', e) }
+  }
+
   return json({ ok: true, updated_at: now })
 }
 
@@ -2387,6 +2405,210 @@ Return only the revised text. Make improvements visible and specific. Maintain w
   return json({ revised, section_id })
 }
 
+// ── Collaboration Access Control ─────────────────────────────────────────────
+async function checkProjectAccess(projectId, userId, userEmail, env) {
+  const project = await env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first()
+  if (!project) return null
+  if (project.user_id === userId) return { role: 'owner', project }
+  let collab = await env.DB.prepare(
+    "SELECT * FROM project_collaborators WHERE project_id = ? AND user_id = ? AND status = 'accepted'"
+  ).bind(projectId, userId).first()
+  if (!collab && userEmail) {
+    collab = await env.DB.prepare(
+      "SELECT * FROM project_collaborators WHERE project_id = ? AND email = ? AND status = 'accepted'"
+    ).bind(projectId, userEmail.toLowerCase()).first()
+  }
+  if (!collab) return null
+  return { role: collab.role, project, collab }
+}
+
+// ── Collaboration Handlers ────────────────────────────────────────────────────
+async function handleInviteCollaborator(req, env, userId, userEmail, projectId) {
+  const project = await env.DB.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').bind(projectId, userId).first()
+  if (!project) return err('Not found or not owner', 403)
+  const body = await req.json()
+  const { email, role = 'reviewer' } = body
+  if (!email) return err('Email required', 400)
+  if (!['co_writer', 'reviewer', 'admin'].includes(role)) return err('Invalid role', 400)
+  const existing = await env.DB.prepare('SELECT id FROM project_collaborators WHERE project_id = ? AND email = ?').bind(projectId, email.toLowerCase()).first()
+  if (existing) return err('Already invited', 409)
+  const now = Math.floor(Date.now() / 1000)
+  const result = await env.DB.prepare(
+    'INSERT INTO project_collaborators (project_id, invited_by, email, role, status, invited_at) VALUES (?, ?, ?, ?, ?, ?)'
+  ).bind(projectId, userId, email.toLowerCase(), role, 'pending', now).run()
+  const sharedWith = project.shared_with ? (() => { try { return JSON.parse(project.shared_with) } catch { return [] } })() : []
+  if (!sharedWith.includes(email.toLowerCase())) {
+    sharedWith.push(email.toLowerCase())
+    await env.DB.prepare('UPDATE projects SET shared_with = ? WHERE id = ?').bind(JSON.stringify(sharedWith), projectId).run()
+  }
+  return json({ id: result.lastRowId, project_id: projectId, email: email.toLowerCase(), role, status: 'pending', invited_at: now }, 201)
+}
+
+async function handleGetCollaborators(req, env, userId, userEmail, projectId) {
+  const access = await checkProjectAccess(projectId, userId, userEmail, env)
+  if (!access) return err('Access denied', 403)
+  const { results } = await env.DB.prepare('SELECT * FROM project_collaborators WHERE project_id = ? ORDER BY invited_at ASC').bind(projectId).all()
+  return json({ owner_id: access.project.user_id, collaborators: results || [] })
+}
+
+async function handleDeleteCollaborator(req, env, userId, projectId, collaboratorId) {
+  const project = await env.DB.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').bind(projectId, userId).first()
+  if (!project) return err('Not found or not owner', 403)
+  const collab = await env.DB.prepare('SELECT * FROM project_collaborators WHERE id = ? AND project_id = ?').bind(parseInt(collaboratorId), projectId).first()
+  if (!collab) return err('Collaborator not found', 404)
+  await env.DB.prepare('DELETE FROM project_collaborators WHERE id = ?').bind(parseInt(collaboratorId)).run()
+  const sharedWith = project.shared_with ? (() => { try { return JSON.parse(project.shared_with) } catch { return [] } })() : []
+  await env.DB.prepare('UPDATE projects SET shared_with = ? WHERE id = ?').bind(JSON.stringify(sharedWith.filter(e => e !== collab.email)), projectId).run()
+  return json({ ok: true })
+}
+
+async function handlePatchCollaborator(req, env, userId, projectId, collaboratorId) {
+  const project = await env.DB.prepare('SELECT id FROM projects WHERE id = ? AND user_id = ?').bind(projectId, userId).first()
+  if (!project) return err('Not found or not owner', 403)
+  const body = await req.json()
+  if (!['co_writer', 'reviewer', 'admin'].includes(body.role)) return err('Invalid role', 400)
+  const res = await env.DB.prepare('UPDATE project_collaborators SET role = ? WHERE id = ? AND project_id = ?').bind(body.role, parseInt(collaboratorId), projectId).run()
+  if (res.changes === 0) return err('Not found', 404)
+  return json({ ok: true })
+}
+
+async function handleAcceptInvitation(req, env, userId, userEmail, projectId) {
+  const collab = await env.DB.prepare(
+    "SELECT * FROM project_collaborators WHERE project_id = ? AND email = ? AND status = 'pending'"
+  ).bind(projectId, userEmail.toLowerCase()).first()
+  if (!collab) return err('No pending invitation found for this email', 404)
+  const now = Math.floor(Date.now() / 1000)
+  await env.DB.prepare("UPDATE project_collaborators SET status = 'accepted', accepted_at = ?, user_id = ? WHERE id = ?").bind(now, userId, collab.id).run()
+  return json({ ok: true, project_id: projectId, role: collab.role })
+}
+
+async function handleGetSharedProjects(req, env, userId, userEmail) {
+  const { results } = await env.DB.prepare(
+    `SELECT p.id, p.title, p.mechanism, p.updated_at, p.user_id as owner_id, pc.role, pc.email as collab_email, pc.status
+     FROM project_collaborators pc JOIN projects p ON p.id = pc.project_id
+     WHERE (pc.user_id = ? OR pc.email = ?) AND pc.status = 'accepted' ORDER BY p.updated_at DESC`
+  ).bind(userId, userEmail.toLowerCase()).all()
+  return json(results || [])
+}
+
+async function handleGetPendingInvitations(req, env, userId, userEmail) {
+  const { results } = await env.DB.prepare(
+    `SELECT pc.id, pc.project_id, pc.role, pc.invited_at, p.title, p.mechanism
+     FROM project_collaborators pc JOIN projects p ON p.id = pc.project_id
+     WHERE pc.email = ? AND pc.status = 'pending' ORDER BY pc.invited_at DESC`
+  ).bind(userEmail.toLowerCase()).all()
+  return json(results || [])
+}
+
+// Comments
+async function handlePostComment(req, env, userId, userEmail, projectId) {
+  const access = await checkProjectAccess(projectId, userId, userEmail, env)
+  if (!access) return err('Access denied', 403)
+  const body = await req.json()
+  if (!body.comment_text?.trim()) return err('Comment text required', 400)
+  const now = Math.floor(Date.now() / 1000)
+  const result = await env.DB.prepare(
+    'INSERT INTO project_comments (project_id, user_id, user_email, section_name, comment_text, resolved, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)'
+  ).bind(projectId, userId, userEmail, body.section_name || null, body.comment_text.trim(), now).run()
+  return json({ id: result.lastRowId, project_id: projectId, user_id: userId, user_email: userEmail, section_name: body.section_name || null, comment_text: body.comment_text.trim(), resolved: 0, created_at: now }, 201)
+}
+
+async function handleGetComments(req, env, userId, userEmail, projectId) {
+  const access = await checkProjectAccess(projectId, userId, userEmail, env)
+  if (!access) return err('Access denied', 403)
+  const { results } = await env.DB.prepare('SELECT * FROM project_comments WHERE project_id = ? ORDER BY created_at ASC').bind(projectId).all()
+  const grouped = {}
+  ;(results || []).forEach(c => {
+    const key = c.section_name || '__general__'
+    if (!grouped[key]) grouped[key] = []
+    grouped[key].push(c)
+  })
+  return json(grouped)
+}
+
+async function handlePatchComment(req, env, userId, userEmail, projectId, commentId) {
+  const access = await checkProjectAccess(projectId, userId, userEmail, env)
+  if (!access) return err('Access denied', 403)
+  const comment = await env.DB.prepare('SELECT * FROM project_comments WHERE id = ? AND project_id = ?').bind(parseInt(commentId), projectId).first()
+  if (!comment) return err('Comment not found', 404)
+  if (access.role !== 'owner' && comment.user_id !== userId) return err('Not authorized', 403)
+  const body = await req.json()
+  await env.DB.prepare('UPDATE project_comments SET resolved = ? WHERE id = ?').bind(body.resolved ? 1 : 0, parseInt(commentId)).run()
+  return json({ ok: true })
+}
+
+async function handleDeleteComment(req, env, userId, userEmail, projectId, commentId) {
+  const access = await checkProjectAccess(projectId, userId, userEmail, env)
+  if (!access) return err('Access denied', 403)
+  const comment = await env.DB.prepare('SELECT * FROM project_comments WHERE id = ? AND project_id = ?').bind(parseInt(commentId), projectId).first()
+  if (!comment) return err('Comment not found', 404)
+  if (access.role !== 'owner' && comment.user_id !== userId) return err('Not authorized', 403)
+  await env.DB.prepare('DELETE FROM project_comments WHERE id = ?').bind(parseInt(commentId)).run()
+  return json({ ok: true })
+}
+
+// Section assignment
+async function handleAssignSection(req, env, userId, projectId, sectionName) {
+  const project = await env.DB.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').bind(projectId, userId).first()
+  if (!project) return err('Not found or not owner', 403)
+  const body = await req.json()
+  const assignments = project.section_assignments ? (() => { try { return JSON.parse(project.section_assignments) } catch { return {} } })() : {}
+  if (body.assignee_email) { assignments[sectionName] = body.assignee_email } else { delete assignments[sectionName] }
+  await env.DB.prepare('UPDATE projects SET section_assignments = ? WHERE id = ?').bind(JSON.stringify(assignments), projectId).run()
+  return json({ ok: true, section_assignments: assignments })
+}
+
+// Version history
+async function handleCreateSnapshot(req, env, userId, userEmail, projectId) {
+  const access = await checkProjectAccess(projectId, userId, userEmail, env)
+  if (!access) return err('Access denied', 403)
+  const body = await req.json()
+  const project = access.project
+  const latest = await env.DB.prepare('SELECT MAX(version_number) as max_ver FROM project_versions WHERE project_id = ?').bind(projectId).first()
+  const nextVer = (latest?.max_ver || 0) + 1
+  const now = Math.floor(Date.now() / 1000)
+  await env.DB.prepare(
+    'INSERT INTO project_versions (project_id, user_id, version_number, sections_snapshot, change_summary, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+  ).bind(projectId, userId, nextVer, project.sections || '{}', body.change_summary || 'Manual snapshot', now).run()
+  await env.DB.prepare('UPDATE projects SET current_version = ? WHERE id = ?').bind(nextVer, projectId).run()
+  return json({ ok: true, version_number: nextVer, created_at: now })
+}
+
+async function handleGetVersions(req, env, userId, userEmail, projectId) {
+  const access = await checkProjectAccess(projectId, userId, userEmail, env)
+  if (!access) return err('Access denied', 403)
+  const { results } = await env.DB.prepare(
+    'SELECT id, project_id, user_id, version_number, change_summary, created_at FROM project_versions WHERE project_id = ? ORDER BY version_number DESC'
+  ).bind(projectId).all()
+  return json(results || [])
+}
+
+async function handleGetVersion(req, env, userId, userEmail, projectId, versionNumber) {
+  const access = await checkProjectAccess(projectId, userId, userEmail, env)
+  if (!access) return err('Access denied', 403)
+  const version = await env.DB.prepare('SELECT * FROM project_versions WHERE project_id = ? AND version_number = ?').bind(projectId, parseInt(versionNumber)).first()
+  if (!version) return err('Version not found', 404)
+  return json({ ...version, sections_snapshot: version.sections_snapshot ? (() => { try { return JSON.parse(version.sections_snapshot) } catch { return {} } })() : {} })
+}
+
+async function handleRestoreVersion(req, env, userId, projectId, versionNumber) {
+  const project = await env.DB.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').bind(projectId, userId).first()
+  if (!project) return err('Not found or not owner', 403)
+  const body = await req.json()
+  if (body.confirm !== 'RESTORE') return err('Must confirm with { confirm: "RESTORE" }', 400)
+  const version = await env.DB.prepare('SELECT * FROM project_versions WHERE project_id = ? AND version_number = ?').bind(projectId, parseInt(versionNumber)).first()
+  if (!version) return err('Version not found', 404)
+  const now = Math.floor(Date.now() / 1000)
+  const latest = await env.DB.prepare('SELECT MAX(version_number) as max_ver FROM project_versions WHERE project_id = ?').bind(projectId).first()
+  const nextVer = (latest?.max_ver || 0) + 1
+  await env.DB.prepare(
+    'INSERT INTO project_versions (project_id, user_id, version_number, sections_snapshot, change_summary, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+  ).bind(projectId, userId, nextVer, project.sections || '{}', `Pre-restore snapshot (was at v${versionNumber})`, now).run()
+  await env.DB.prepare('UPDATE projects SET sections = ?, current_version = ?, updated_at = ? WHERE id = ?').bind(version.sections_snapshot, nextVer + 1, now, projectId).run()
+  const restored = version.sections_snapshot ? (() => { try { return JSON.parse(version.sections_snapshot) } catch { return {} } })() : {}
+  return json({ ok: true, sections: restored, version_saved: nextVer, restored_from: parseInt(versionNumber) })
+}
+
 // ── Aims Optimizer ────────────────────────────────────────────────────────────
 async function handleOptimizeAims(req, env, userId, projectId) {
   const project = await env.DB.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').bind(projectId, userId).first()
@@ -2610,6 +2832,93 @@ export default {
         const responseTime = Date.now() - startTime
         await logError(path, 200, null, responseTime, userId, env)
         return response
+      }
+
+      // Collaboration - global routes (must be before projectMatch)
+      if (path === '/api/projects/shared' && req.method === 'GET') {
+        const response = await handleGetSharedProjects(req, env, userId, userEmail)
+        await logError(path, 200, null, Date.now() - startTime, userId, env)
+        return response
+      }
+
+      if (path === '/api/projects/pending-invitations' && req.method === 'GET') {
+        const response = await handleGetPendingInvitations(req, env, userId, userEmail)
+        await logError(path, 200, null, Date.now() - startTime, userId, env)
+        return response
+      }
+
+      // Collaboration - per-project routes (must be before generic projectMatch)
+      const collabMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/collaborators$/)
+      if (collabMatch) {
+        const projectId = collabMatch[1]
+        let response
+        if (req.method === 'GET') response = await handleGetCollaborators(req, env, userId, userEmail, projectId)
+        else if (req.method === 'POST') response = await handleInviteCollaborator(req, env, userId, userEmail, projectId)
+        if (response) { await logError(path, 200, null, Date.now() - startTime, userId, env); return response }
+      }
+
+      const collabItemMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/collaborators\/(\d+)$/)
+      if (collabItemMatch) {
+        const [, projectId, collabId] = collabItemMatch
+        let response
+        if (req.method === 'DELETE') response = await handleDeleteCollaborator(req, env, userId, projectId, parseInt(collabId))
+        else if (req.method === 'PATCH') response = await handlePatchCollaborator(req, env, userId, projectId, parseInt(collabId))
+        if (response) { await logError(path, 200, null, Date.now() - startTime, userId, env); return response }
+      }
+
+      const collabAcceptMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/collaborators\/accept$/)
+      if (collabAcceptMatch && req.method === 'POST') {
+        const response = await handleAcceptInvitation(req, env, userId, userEmail, collabAcceptMatch[1])
+        await logError(path, 200, null, Date.now() - startTime, userId, env)
+        return response
+      }
+
+      const commentsMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/comments$/)
+      if (commentsMatch) {
+        const projectId = commentsMatch[1]
+        let response
+        if (req.method === 'GET') response = await handleGetComments(req, env, userId, userEmail, projectId)
+        else if (req.method === 'POST') response = await handlePostComment(req, env, userId, userEmail, projectId)
+        if (response) { await logError(path, 200, null, Date.now() - startTime, userId, env); return response }
+      }
+
+      const commentItemMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/comments\/(\d+)$/)
+      if (commentItemMatch) {
+        const [, projectId, commentId] = commentItemMatch
+        let response
+        if (req.method === 'PATCH') response = await handlePatchComment(req, env, userId, userEmail, projectId, parseInt(commentId))
+        else if (req.method === 'DELETE') response = await handleDeleteComment(req, env, userId, userEmail, projectId, parseInt(commentId))
+        if (response) { await logError(path, 200, null, Date.now() - startTime, userId, env); return response }
+      }
+
+      const sectionAssignMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/sections\/([^/]+)\/assign$/)
+      if (sectionAssignMatch && req.method === 'POST') {
+        const response = await handleAssignSection(req, env, userId, sectionAssignMatch[1], decodeURIComponent(sectionAssignMatch[2]))
+        await logError(path, 200, null, Date.now() - startTime, userId, env)
+        return response
+      }
+
+      const versionRestoreMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/versions\/(\d+)\/restore$/)
+      if (versionRestoreMatch && req.method === 'POST') {
+        const response = await handleRestoreVersion(req, env, userId, versionRestoreMatch[1], versionRestoreMatch[2])
+        await logError(path, 200, null, Date.now() - startTime, userId, env)
+        return response
+      }
+
+      const versionItemMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/versions\/(\d+)$/)
+      if (versionItemMatch && req.method === 'GET') {
+        const response = await handleGetVersion(req, env, userId, userEmail, versionItemMatch[1], versionItemMatch[2])
+        await logError(path, 200, null, Date.now() - startTime, userId, env)
+        return response
+      }
+
+      const versionsMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/versions$/)
+      if (versionsMatch) {
+        const projectId = versionsMatch[1]
+        let response
+        if (req.method === 'GET') response = await handleGetVersions(req, env, userId, userEmail, projectId)
+        else if (req.method === 'POST') response = await handleCreateSnapshot(req, env, userId, userEmail, projectId)
+        if (response) { await logError(path, 200, null, Date.now() - startTime, userId, env); return response }
       }
 
       // Project routes

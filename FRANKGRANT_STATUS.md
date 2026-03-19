@@ -1,7 +1,7 @@
 # FrankGrant Status Document
 
 **Last Updated:** 2026-03-18
-**Version:** 4.10.0
+**Version:** 4.11.0
 **Status:** Production (Internal COARE Tool)
 
 ---
@@ -11,7 +11,7 @@
 | Resource | URL/ID | Status |
 |----------|--------|--------|
 | **Frontend (Pages)** | https://frankgrant.pages.dev | ✅ Live |
-| **Latest Preview** | https://c715d0e2.frankgrant.pages.dev | ✅ Live |
+| **Latest Preview** | https://59f19296.frankgrant.pages.dev | ✅ Live |
 | **API Worker** | https://frankgrant-worker.eddie-781pagesdev.workers.dev | ✅ Live |
 | **D1 Database** | frankgrant-db | ✅ Live |
 | **D1 Database ID** | 728339df-7875-4fb7-a58b-196cd8099e22 | — |
@@ -218,6 +218,16 @@
 - ✅ **Calendar view** — monthly grid with prev/next navigation, color-coded deadline events (blue >14d, amber ≤14d, red ≤3d/overdue), click to open project, "No deadline set" section with Set Deadline button
 - ✅ **Status modal** — edit status, priority, next_deadline, submission_date, award_amount, award_number, notes; award fields conditionally shown
 - ✅ **Enhanced list cards** — status badge, priority color, mechanism badge, deadline countdown, completion % progress bar
+
+### **Project Collaboration (v4.11.0)**
+- ✅ **D1 tables** — `project_collaborators`, `project_comments`, `project_versions`; 3 new columns on `projects` (`shared_with`, `section_assignments`, `current_version`)
+- ✅ **Access control** — `checkProjectAccess` helper: owner full access, accepted collaborators by role (co_writer/reviewer/admin), email+user_id matching
+- ✅ **15+ worker routes** — invite/manage/remove collaborators, accept invitation, shared projects, pending invitations, comments (CRUD + resolve), section assignments, version snapshots/restore
+- ✅ **Auto-snapshot** — triggered via `_auto_snapshot: true` flag in PUT body when a section is generated, stores full sections JSON in project_versions
+- ✅ **CollaborationPanel** — 380px right-side drawer: Team tab (invite + role management), Comments tab (post/resolve/delete, grouped by section), History tab (snapshots + restore)
+- ✅ **"👥 Share" button** — in GrantEditor toolbar with unresolved comment count badge (red dot)
+- ✅ **Dashboard** — "Shared With Me" section below own projects, pending invitation banner with Accept button
+- ✅ **useApi.js** — 16 new collaboration API methods
 
 ### **NCI Direct to Phase 2 (D2P2) Mechanism (v4.9.0)**
 - ✅ **D2P2 mechanism** — Added `D2P2` to MECHANISMS in nih.js: 12-page strategy, 12-page commercial, $2,097,580 budget cap, 24 months, NCI only, requires Phase I equivalency documentation
