@@ -52,6 +52,7 @@ const ELEVENLABS_VOICES = [
 export default function VoiceMode({ project, onSectionGenerated, onSectionUpdated, onClose }) {
   const { getToken } = useAuth()
 
+  const [voiceEnabled, setVoiceEnabled] = useState(null) // null=loading, true/false
   const [isListening, setIsListening] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -97,7 +98,18 @@ export default function VoiceMode({ project, onSectionGenerated, onSectionUpdate
 
   useEffect(() => {
     injectCSS()
-    loadSession()
+    async function init() {
+      try {
+        const token = await getToken()
+        const res = await fetch(`${API_BASE}/users/me`, { headers: { Authorization: `Bearer ${token}` } })
+        const data = await res.json()
+        setVoiceEnabled(data.voice_enabled === true)
+        if (data.voice_enabled === true) loadSession()
+      } catch {
+        setVoiceEnabled(false)
+      }
+    }
+    init()
     return () => {
       if (recognitionRef.current) { try { recognitionRef.current.stop() } catch {} }
       if (dictateRef.current) { try { dictateRef.current.stop() } catch {} }
@@ -655,6 +667,48 @@ export default function VoiceMode({ project, onSectionGenerated, onSectionUpdate
 
   const barState = isListening ? 'listening' : isSpeaking ? 'speaking' : ''
   const statusText = dictateMode ? 'Dictating — say "done" to finish' : readingAll ? `Reading ${readProgress?.sectionName || ''}…` : isListening ? 'Listening…' : isProcessing ? 'Thinking…' : isSpeaking ? 'Speaking…' : 'Tap to speak'
+
+  // Loading state while checking entitlement
+  if (voiceEnabled === null) {
+    return (
+      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}>
+        <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>Loading…</div>
+      </div>
+    )
+  }
+
+  // Upgrade modal when voice is not enabled
+  if (voiceEnabled === false) {
+    return (
+      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+        <div style={{ background: '#1a1a2e', border: '1px solid rgba(45,212,191,0.25)', borderRadius: 16, padding: '40px 48px', maxWidth: 440, textAlign: 'center', position: 'relative' }}>
+          <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 20, lineHeight: 1 }}>×</button>
+          <div style={{ fontSize: 36, marginBottom: 12 }}>🎤</div>
+          <h2 style={{ color: '#fff', margin: '0 0 8px', fontSize: 22, fontWeight: 700 }}>Voice Mode</h2>
+          <div style={{ color: '#2dd4bf', fontWeight: 600, fontSize: 16, marginBottom: 20 }}>
+            $49/month individual · $99/month lab
+          </div>
+          <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 14, lineHeight: 1.6, margin: '0 0 28px' }}>
+            Work with your grant through conversation. Have sections read aloud, dictate edits hands-free, run the study section simulation, and ask questions about your application — all by voice.
+          </p>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+            {['📖 Read entire grant aloud', '🎙️ Dictate section edits', '🔬 Voice study section', '✏️ Edit by instruction'].map(f => (
+              <span key={f} style={{ background: 'rgba(45,212,191,0.1)', border: '1px solid rgba(45,212,191,0.2)', borderRadius: 20, padding: '4px 12px', fontSize: 12, color: '#2dd4bf' }}>{f}</span>
+            ))}
+          </div>
+          <button
+            onClick={() => { onClose(); window.location.hash = '/upgrade/voice' }}
+            style={{ marginTop: 28, width: '100%', padding: '14px', background: 'linear-gradient(135deg,#2dd4bf,#7c3aed)', border: 'none', borderRadius: 10, color: '#fff', fontWeight: 700, fontSize: 16, cursor: 'pointer' }}
+          >
+            Add Voice Mode
+          </button>
+          <p style={{ marginTop: 12, fontSize: 12, color: 'rgba(255,255,255,0.3)' }}>
+            Contact your admin if you believe you should have access.
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 2000, fontFamily: 'system-ui, -apple-system, sans-serif' }}>

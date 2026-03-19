@@ -169,8 +169,8 @@ async function trackUserActivity(userId, email, env, isAICall = false, tokens = 
     ).bind(now, existing.total_generations + (isAICall ? 1 : 0), existing.total_tokens_used + tokens, existing.estimated_cost_usd + estimatedCost, userId).run()
   } else {
     await env.DB.prepare(
-      `INSERT INTO users_meta (id, email, email_domain, first_seen, last_active, total_generations, total_tokens_used, estimated_cost_usd)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO users_meta (id, email, email_domain, first_seen, last_active, total_generations, total_tokens_used, estimated_cost_usd, voice_enabled)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`
     ).bind(userId, email, emailDomain, now, now, isAICall ? 1 : 0, tokens, estimatedCost).run()
   }
 }
@@ -178,6 +178,13 @@ async function trackUserActivity(userId, email, env, isAICall = false, tokens = 
 async function checkSuspended(userId, env) {
   const meta = await env.DB.prepare('SELECT suspended FROM users_meta WHERE id = ?').bind(userId).first()
   return meta?.suspended === 1
+}
+
+async function checkVoiceEnabled(userId, env) {
+  const meta = await env.DB.prepare('SELECT voice_enabled FROM users_meta WHERE id = ?').bind(userId).first()
+  // null row = new user not yet tracked (default deny until row exists)
+  if (!meta) return false
+  return meta.voice_enabled === 1
 }
 
 // ── Token pricing (per 1M tokens) ─────────────────────────────────────────
@@ -1013,6 +1020,15 @@ async function handleCommandHealth(req, env) {
     error_rate: errorRate.toFixed(2), avg_latency_ms: avgLatency.avg?.toFixed(1) || 0,
     claude_error_rate: claudeErrorRate.toFixed(2), rate_limit_hits: rateLimitHits.count,
     row_counts: rowCounts, deployments: deployments.results, recent_errors: recentErrors.results
+  })
+}
+
+async function handleGetMe(req, env, userId) {
+  const meta = await env.DB.prepare('SELECT email, plan_tier, voice_enabled, voice_tier FROM users_meta WHERE id = ?').bind(userId).first()
+  return json({
+    voice_enabled: meta?.voice_enabled === 1,
+    plan_tier: meta?.plan_tier || 'free',
+    voice_tier: meta?.voice_tier || null,
   })
 }
 
@@ -3277,7 +3293,18 @@ export default {
         return response
       }
 
+      // Users: me
+      if (path === '/api/users/me' && req.method === 'GET') {
+        return handleGetMe(req, env, userId)
+      }
+
       // Voice Mode
+      if (path.startsWith('/api/voice/')) {
+        const voiceAllowed = await checkVoiceEnabled(userId, env)
+        if (!voiceAllowed) {
+          return json({ error: 'voice_not_enabled', message: 'Voice Mode is a premium feature', upgrade_url: '/upgrade/voice' }, 403)
+        }
+      }
       if (path === '/api/voice/intent' && req.method === 'POST') {
         const response = await handleVoiceIntent(req, env, userId)
         await logError(path, 200, null, Date.now() - startTime, userId, env)
