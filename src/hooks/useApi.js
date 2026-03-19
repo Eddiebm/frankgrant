@@ -89,6 +89,16 @@ export function useApi() {
     return request('POST', `/projects/${projectId}/polish`, { section_id: sectionId, section_text: sectionText, section_label: sectionLabel })
   }
 
+  // Commercial Reviewer
+  async function runCommercialReview(projectId) { return request('POST', `/projects/${projectId}/commercial-review`, {}) }
+
+  // Commercial Charts
+  async function generateCharts(projectId) { return request('POST', `/projects/${projectId}/generate-charts`, {}) }
+
+  // Bibliography
+  async function getBibliography(projectId) { return request('GET', `/projects/${projectId}/bibliography`) }
+  async function saveBibliography(projectId, bibliography) { return request('POST', `/projects/${projectId}/bibliography`, { bibliography }) }
+
   // Letters Generator
   async function generateLetter(letter_type, project_id, letter_fields) {
     return request('POST', '/letters/generate', { letter_type, project_id, letter_fields })
@@ -114,5 +124,6 @@ export function useApi() {
     uploadPrelim, listPrelim, deletePrelim, analyzePrelim, generatePrelimNarrative, getCitations,
     runStudySection, runPDReview, runAdvisoryCouncil, polishSection,
     generateLetter, importReviewerComments, analyzeResubmission, generateResubmissionIntro, reviseForResubmission,
+    runCommercialReview, generateCharts, getBibliography, saveBibliography,
   }
 }

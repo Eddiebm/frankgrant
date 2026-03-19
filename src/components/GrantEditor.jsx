@@ -2,6 +2,8 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { useApi } from '../hooks/useApi'
 import PreliminaryData from './PreliminaryData'
 import VoiceMode from './VoiceMode'
+import { CommercialChartsPanel } from './CommercialCharts'
+import BibliographyManager from './BibliographyManager'
 import { generateGrantDOCX } from '../lib/docxExport'
 import {
   MECHANISMS, SECTIONS, WORDS_PER_PAGE, INSTITUTES,
@@ -82,6 +84,18 @@ export default function GrantEditor({ project, onSave, onBack }) {
 
   // Voice Mode
   const [showVoiceMode, setShowVoiceMode] = useState(false)
+
+  // Commercial Reviewer
+  const [commercialReviewModal, setCommercialReviewModal] = useState(null) // null | 'loading' | 'results'
+  const [commercialReviewResults, setCommercialReviewResults] = useState(project.commercial_review_results ? (() => { try { return JSON.parse(project.commercial_review_results) } catch { return null } })() : null)
+
+  // Commercial Charts
+  const [chartData, setChartData] = useState(project.commercial_charts ? (() => { try { return JSON.parse(project.commercial_charts) } catch { return null } })() : null)
+  const [generatingCharts, setGeneratingCharts] = useState(false)
+  const [showCharts, setShowCharts] = useState(false)
+
+  // Bibliography
+  const [showBibliography, setShowBibliography] = useState(false)
 
   // Resubmission
   const [resubComments, setResubComments] = useState(project.reviewer_comments || '')
@@ -460,6 +474,32 @@ export default function GrantEditor({ project, onSave, onBack }) {
     setPolishModal(null)
   }
 
+  // ── Commercial Reviewer ───────────────────────────────────────────────────────
+  async function handleRunCommercialReview() {
+    setCommercialReviewModal('loading')
+    try {
+      const results = await api.runCommercialReview(project.id)
+      setCommercialReviewResults(results)
+      setCommercialReviewModal('results')
+    } catch (e) {
+      setCommercialReviewModal(null)
+      alert('Commercial review failed: ' + e.message)
+    }
+  }
+
+  // ── Commercial Charts ─────────────────────────────────────────────────────────
+  async function handleGenerateCharts() {
+    setGeneratingCharts(true)
+    try {
+      const data = await api.generateCharts(project.id)
+      setChartData(data)
+      setShowCharts(true)
+    } catch (e) {
+      alert('Chart generation failed: ' + e.message)
+    }
+    setGeneratingCharts(false)
+  }
+
   // ── Resubmission ─────────────────────────────────────────────────────────────
   async function handleImportReviewerComments() {
     if (!resubComments.trim()) return
@@ -579,6 +619,22 @@ export default function GrantEditor({ project, onSave, onBack }) {
             title="Get Advisory Council funding recommendation"
           >
             🏛️ Council
+          </button>
+          {m.needsCommercial && (
+            <button
+              onClick={() => commercialReviewResults ? setCommercialReviewModal('results') : handleRunCommercialReview()}
+              style={{ ...ghostBtn, fontSize: 12 }}
+              title="Get expert commercialization review"
+            >
+              💰 {commercialReviewResults ? 'Comm Review' : 'Comm Review'}
+            </button>
+          )}
+          <button
+            onClick={() => setShowBibliography(d => !d)}
+            style={{ ...ghostBtn, fontSize: 12, background: showBibliography ? '#f0f0f0' : '#fff' }}
+            title="Manage your bibliography"
+          >
+            📚 Bibliography
           </button>
           <button
             onClick={() => setShowVoiceMode(true)}
@@ -771,6 +827,31 @@ export default function GrantEditor({ project, onSave, onBack }) {
                   onRecheck={() => recheckCompliance(sec.id)}
                   hasText={!!sections[sec.id]}
                 />
+
+                {/* Commercial charts for commercial section */}
+                {sec.id === 'commercial' && m.needsCommercial && (
+                  <div style={{ marginBottom: 8, display: 'flex', gap: 6 }}>
+                    <button
+                      onClick={handleGenerateCharts}
+                      disabled={generatingCharts}
+                      style={{ ...ghostBtn, fontSize: 11, padding: '4px 10px', borderColor: '#7c3aed', color: '#7c3aed' }}
+                      title="Generate market, revenue, and competitive landscape charts"
+                    >
+                      {generatingCharts ? '⟳ Generating Charts...' : '📊 Generate Charts'}
+                    </button>
+                    {chartData && (
+                      <button
+                        onClick={() => setShowCharts(s => !s)}
+                        style={{ ...ghostBtn, fontSize: 11, padding: '4px 10px' }}
+                      >
+                        {showCharts ? '▲ Hide Charts' : '📊 View Charts'}
+                      </button>
+                    )}
+                  </div>
+                )}
+                {sec.id === 'commercial' && showCharts && chartData && (
+                  <CommercialChartsPanel chartData={chartData} onClose={() => setShowCharts(false)} />
+                )}
 
                 {/* Citations + Polish */}
                 {sections[sec.id] && (
@@ -1080,6 +1161,41 @@ export default function GrantEditor({ project, onSave, onBack }) {
           onClose={() => setCouncilModal(null)}
           onRerun={handleRunAdvisoryCouncil}
         />
+      )}
+
+      {/* Commercial Review Loading */}
+      {commercialReviewModal === 'loading' && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: '#fff', borderRadius: 12, padding: '32px 40px', textAlign: 'center', maxWidth: 360 }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>💰</div>
+            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8 }}>Commercial Review in Progress</div>
+            <div style={{ fontSize: 13, color: '#6b7280' }}>Our VC/commercialization expert is analyzing your plan...</div>
+          </div>
+        </div>
+      )}
+
+      {/* Commercial Review Results */}
+      {commercialReviewModal === 'results' && commercialReviewResults && (
+        <CommercialReviewModal
+          results={commercialReviewResults}
+          onClose={() => setCommercialReviewModal(null)}
+          onRerun={handleRunCommercialReview}
+        />
+      )}
+
+      {/* Bibliography Drawer */}
+      {showBibliography && (
+        <div style={{ position: 'fixed', right: 0, top: 0, bottom: 0, width: 480, background: '#fff', boxShadow: '-4px 0 20px rgba(0,0,0,0.1)', overflowY: 'auto', zIndex: 900 }}>
+          <BibliographyManager
+            projectId={project.id}
+            onInsert={(text) => {
+              const current = sections[activeSec] || ''
+              const updated = updateSection(activeSec, current + '\n\n' + text)
+              save(updated, scores)
+            }}
+            onClose={() => setShowBibliography(false)}
+          />
+        </div>
       )}
 
       {/* Voice Mode Overlay */}
@@ -1840,6 +1956,133 @@ function downloadTxt(secs, sections, title, mech) {
   a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }))
   a.download = title.replace(/[^a-z0-9]/gi, '_').toLowerCase() + '.txt'
   a.click()
+}
+
+// ── Commercial Review Modal ────────────────────────────────────────────────────
+function CommercialReviewModal({ results, onClose, onRerun }) {
+  const viabilityConfig = {
+    high: { bg: '#dcfce7', border: '#86efac', text: '#15803d', label: '✅ HIGH VIABILITY' },
+    medium: { bg: '#fef9c3', border: '#fde047', text: '#854d0e', label: '⚠️ MEDIUM VIABILITY' },
+    low: { bg: '#ffedd5', border: '#fdba74', text: '#9a3412', label: '🔶 LOW VIABILITY' },
+    not_viable: { bg: '#fee2e2', border: '#fca5a5', text: '#991b1b', label: '❌ NOT VIABLE' },
+  }
+  const vc = viabilityConfig[results.viability] || viabilityConfig.medium
+  const invConfig = { series_a_ready: { label: 'Series A Ready', color: '#15803d' }, seed_stage: { label: 'Seed Stage', color: '#1d4ed8' }, pre_seed: { label: 'Pre-Seed', color: '#92400e' }, not_ready: { label: 'Not Investor Ready', color: '#991b1b' } }
+  const inv = invConfig[results.investor_readiness] || { label: results.investor_readiness || 'Unknown', color: '#6b7280' }
+
+  function ScoreDimension({ label, dim }) {
+    if (!dim) return null
+    const pct = ((dim.score || 0) / 20) * 100
+    const color = pct >= 70 ? '#16a34a' : pct >= 40 ? '#d97706' : '#dc2626'
+    return (
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 13 }}>
+          <span style={{ fontWeight: 600 }}>{label}</span>
+          <span style={{ fontWeight: 700, color }}>{dim.score}/20</span>
+        </div>
+        <div style={{ height: 6, background: '#e5e7eb', borderRadius: 3, marginBottom: 8 }}>
+          <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 3 }} />
+        </div>
+        <div style={{ fontSize: 12, color: '#374151', lineHeight: 1.5 }}>{dim.feedback}</div>
+        {dim.key_insight && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 4, fontStyle: 'italic' }}>{dim.key_insight}</div>}
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1000, overflowY: 'auto', padding: '2rem 1rem' }}>
+      <div style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 680 }}>
+        <div style={{ padding: '1.25rem 1.5rem', borderBottom: '0.5px solid #e5e5e5', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 17 }}>💰 Commercial Review</div>
+            <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>VC & Commercialization Expert Assessment</div>
+          </div>
+          <button onClick={onClose} style={{ ...ghostBtn, padding: '4px 10px', fontSize: 13 }}>✕</button>
+        </div>
+        <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          {/* Viability + Overall Score */}
+          <div style={{ display: 'flex', gap: 12 }}>
+            <div style={{ flex: 1, padding: '16px 20px', background: vc.bg, border: `1.5px solid ${vc.border}`, borderRadius: 10, textAlign: 'center' }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: vc.text }}>{vc.label}</div>
+            </div>
+            <div style={{ padding: '16px 20px', background: '#f8f8f8', borderRadius: 10, textAlign: 'center', minWidth: 100 }}>
+              <div style={{ fontSize: 11, color: '#888', marginBottom: 4, fontWeight: 600 }}>SCORE</div>
+              <div style={{ fontSize: 28, fontWeight: 700, color: (results.overall_score || 0) >= 70 ? '#15803d' : (results.overall_score || 0) >= 50 ? '#d97706' : '#dc2626' }}>{results.overall_score || 0}</div>
+              <div style={{ fontSize: 10, color: '#9ca3af' }}>/ 100</div>
+            </div>
+            <div style={{ padding: '16px 20px', background: '#f8f8f8', borderRadius: 10, textAlign: 'center', minWidth: 120 }}>
+              <div style={{ fontSize: 11, color: '#888', marginBottom: 4, fontWeight: 600 }}>INVESTOR READINESS</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: inv.color }}>{inv.label}</div>
+            </div>
+          </div>
+
+          {/* 5 Dimension Scores */}
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12 }}>Dimension Scores</div>
+            <ScoreDimension label="🏪 Market Assessment" dim={results.market} />
+            <ScoreDimension label="🔒 IP Strategy" dim={results.ip} />
+            <ScoreDimension label="🏥 Regulatory Pathway" dim={results.regulatory} />
+            <ScoreDimension label="💵 Revenue Model" dim={results.revenue_model} />
+            <ScoreDimension label="👥 Commercial Team" dim={results.commercial_team} />
+            {results.commercial_team?.gaps?.length > 0 && (
+              <div style={{ marginTop: -8, marginBottom: 14, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {results.commercial_team.gaps.map((g, i) => <span key={i} style={{ fontSize: 11, background: '#fee2e2', color: '#991b1b', padding: '2px 8px', borderRadius: 10 }}>{g}</span>)}
+              </div>
+            )}
+          </div>
+
+          {/* Strengths + Weaknesses */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            {(results.strengths || []).length > 0 && (
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 8, color: '#15803d' }}>Strengths</div>
+                {results.strengths.map((s, i) => <div key={i} style={{ fontSize: 12, marginBottom: 6, paddingLeft: 12, borderLeft: '2px solid #86efac' }}>{s}</div>)}
+              </div>
+            )}
+            {(results.critical_weaknesses || []).length > 0 && (
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 8, color: '#dc2626' }}>Critical Weaknesses</div>
+                {results.critical_weaknesses.map((w, i) => <div key={i} style={{ fontSize: 12, marginBottom: 6, paddingLeft: 12, borderLeft: '2px solid #fca5a5' }}>{w}</div>)}
+              </div>
+            )}
+          </div>
+
+          {/* Top Improvements */}
+          {(results.top_improvements || []).length > 0 && (
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 8 }}>Top Improvements to Make</div>
+              {results.top_improvements.map((imp, i) => (
+                <div key={i} style={{ display: 'flex', gap: 8, padding: '8px 12px', background: '#fffbeb', borderRadius: 8, fontSize: 12, marginBottom: 6 }}>
+                  <span style={{ fontWeight: 700, color: '#d97706' }}>{i + 1}.</span>
+                  <span>{imp}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Phase 3 readiness + bottom line */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            {results.phase3_readiness && (
+              <div style={{ padding: '12px 16px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8 }}>
+                <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4, fontWeight: 600 }}>PHASE III READINESS</div>
+                <div style={{ fontSize: 12 }}>{results.phase3_readiness}</div>
+              </div>
+            )}
+            {results.bottom_line && (
+              <div style={{ padding: '12px 16px', background: '#1e293b', borderRadius: 8 }}>
+                <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4, fontWeight: 600 }}>BOTTOM LINE</div>
+                <div style={{ fontSize: 12, color: '#f1f5f9', lineHeight: 1.5 }}>{results.bottom_line}</div>
+              </div>
+            )}
+          </div>
+        </div>
+        <div style={{ padding: '1rem 1.5rem', borderTop: '0.5px solid #e5e5e5', display: 'flex', gap: 8 }}>
+          <button onClick={onRerun} style={ghostBtn}>Re-run</button>
+          <button onClick={onClose} style={{ ...ghostBtn, marginLeft: 'auto' }}>Close</button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 const ghostBtn = { padding: '6px 14px', fontSize: 13, border: '0.5px solid #ddd', borderRadius: 8, cursor: 'pointer', background: '#fff', color: '#111' }

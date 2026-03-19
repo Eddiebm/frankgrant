@@ -1,7 +1,7 @@
 # FrankGrant Status Document
 
 **Last Updated:** 2026-03-18
-**Version:** 4.6.0
+**Version:** 4.7.0
 **Status:** Production (Internal COARE Tool)
 
 ---
@@ -11,7 +11,7 @@
 | Resource | URL/ID | Status |
 |----------|--------|--------|
 | **Frontend (Pages)** | https://frankgrant.pages.dev | ✅ Live |
-| **Latest Preview** | https://38eea23f.frankgrant.pages.dev | ✅ Live |
+| **Latest Preview** | https://c715d0e2.frankgrant.pages.dev | ✅ Live |
 | **API Worker** | https://frankgrant-worker.eddie-781pagesdev.workers.dev | ✅ Live |
 | **D1 Database** | frankgrant-db | ✅ Live |
 | **D1 Database ID** | 728339df-7875-4fb7-a58b-196cd8099e22 | — |
@@ -96,6 +96,44 @@
 - ✅ **Persisted** - `advisory_council_results` column
 - ✅ **Worker route** - `POST /api/projects/:id/advisory-council`, Sonnet, max_tokens 1000
 - ✅ **Voice Mode integration** - "What did the program director say" → loads PD context; "What did the advisory council decide" → loads council context
+
+### **Commercial Reviewer Panel (v4.7.0)**
+- ✅ **"💰 Comm Review" toolbar button** — visible only for SBIR/STTR mechanisms (when commercialization plan exists)
+- ✅ **Viability badge** — High / Medium / Low / Not Viable with color coding
+- ✅ **Overall score** — 0-100 with green/amber/red threshold coloring
+- ✅ **Investor readiness** — Series A Ready / Seed Stage / Pre-Seed / Not Ready
+- ✅ **5 dimension scores** — Market Assessment, IP Strategy, Regulatory Pathway, Revenue Model, Commercial Team (each /20)
+- ✅ **Scored dimension bars** — visual progress bar per dimension with feedback text and key insights
+- ✅ **Commercial team gaps** — tagged badges showing missing commercial expertise
+- ✅ **Strengths vs Critical Weaknesses** — side-by-side grid
+- ✅ **Top Improvements** — numbered action list
+- ✅ **Phase III readiness + Bottom Line** — dark card with frank bottom-line assessment
+- ✅ **Persisted** — `commercial_review_results` column, re-run or view instantly
+- ✅ **Worker route** — `POST /api/projects/:id/commercial-review`, Sonnet, max_tokens 1500
+
+### **SVG Charts in Commercialization Plan (v4.7.0)**
+- ✅ **"📊 Generate Charts" button** — in commercial section writer (SBIR/STTR only)
+- ✅ **Haiku extraction** — extracts TAM/SAM/SOM, revenue projections, competitor positioning from commercialization text
+- ✅ **Market Opportunity chart** — concentric circles SVG showing TAM/SAM/SOM with dollar labels
+- ✅ **Revenue Projection chart** — 5-year bar chart with gradient fills and formatted dollar labels
+- ✅ **Competitive Landscape chart** — 2×2 positioning matrix (Innovation vs Accessibility) with quadrant coloring
+- ✅ **Pure inline SVG** — no charting library, zero extra dependencies
+- ✅ **Show/Hide toggle** — "📊 View Charts" / "▲ Hide Charts" button after generation
+- ✅ **Persisted** — `commercial_charts` column stores structured JSON, charts re-render from data
+- ✅ **Worker route** — `POST /api/projects/:id/generate-charts`, Haiku, max_tokens 800
+
+### **Bibliography Manager (v4.7.0)**
+- ✅ **"📚 Bibliography" toolbar button** — opens 480px right-side drawer
+- ✅ **Add manual citations** — form with: Title, Authors, Journal, Year, Volume, Issue, Pages, PMID, Section Tag
+- ✅ **NIH-style formatting** — auto-formats all citations as numbered NIH bibliography entries
+- ✅ **PubMed link** — clickable PubMed ↗ link for citations with PMID
+- ✅ **Section tagging** — optional tag to track which section each citation belongs to
+- ✅ **Copy All** — copies full formatted bibliography to clipboard
+- ✅ **Insert into Section** — inserts formatted bibliography into the currently active section
+- ✅ **Delete** — remove individual citations with ✕ button
+- ✅ **Formatted preview** — live NIH-formatted reference list preview at bottom
+- ✅ **Persisted** — `bibliography` column stores JSON array, loaded on drawer open
+- ✅ **Worker routes** — `GET /POST /api/projects/:id/bibliography`
 
 ### **Missing Required Grant Sections (v4.6.0)**
 - ✅ **Introduction (Resubmission)** — shown only when `is_resubmission` is true; 1-page with asterisk-marked changes

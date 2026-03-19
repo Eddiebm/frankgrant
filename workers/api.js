@@ -1883,6 +1883,172 @@ PRESERVE scientific facts, structure, and word count (±10%). Return ONLY the po
   return json({ polished, section_id })
 }
 
+// ── Commercial Reviewer Panel ─────────────────────────────────────────────────
+const COMMERCIAL_REVIEWER_SYSTEM = `You are a senior commercialization expert and venture capitalist who has evaluated over 500 SBIR/STTR applications and funded 40+ life science startups. You have deep expertise in NIH SBIR/STTR commercialization requirements and private market realities.
+
+YOUR ROLE: Provide a frank, expert commercialization review that tells the applicant exactly how compelling (or not) their commercialization plan is — both for NIH reviewers and real investors.
+
+SCORING RUBRIC (each dimension 0-20 points):
+- Market Assessment: Is the market real, large, and well-defined? Are TAM/SAM/SOM credible?
+- IP Strategy: Is there a defensible IP position? Freedom to operate addressed?
+- Regulatory Pathway: Is the regulatory strategy realistic? FDA pathway identified?
+- Revenue Model: Is the revenue model credible? Pricing, reimbursement, payer landscape?
+- Commercial Team: Does the team have the commercial experience to execute?
+
+Return ONLY valid JSON: {"viability":"high|medium|low|not_viable","overall_score":number,"market":{"score":number,"feedback":"string","tam_estimate":"string","key_insight":"string"},"ip":{"score":number,"feedback":"string","ip_strength":"strong|moderate|weak","key_insight":"string"},"regulatory":{"score":number,"feedback":"string","pathway":"string","timeline_estimate":"string"},"revenue_model":{"score":number,"feedback":"string","model_type":"string","key_insight":"string"},"commercial_team":{"score":number,"feedback":"string","gaps":["string"]},"investor_readiness":"series_a_ready|seed_stage|pre_seed|not_ready","strengths":["string"],"critical_weaknesses":["string"],"top_improvements":["string"],"phase3_readiness":"string","bottom_line":"string"}`
+
+async function handleCommercialReview(req, env, userId, projectId) {
+  const project = await env.DB.prepare(
+    'SELECT title, mechanism, setup, sections FROM projects WHERE id = ? AND user_id = ?'
+  ).bind(projectId, userId).first()
+  if (!project) return err('Project not found', 404)
+
+  let setup = {}, sections = {}
+  try { setup = JSON.parse(project.setup || '{}') } catch {}
+  try { sections = JSON.parse(project.sections || '{}') } catch {}
+
+  const mech = project.mechanism || 'STTR-I'
+  const commercialText = sections.commercial || sections.sig || 'Not provided'
+
+  const userMsg = `Review the commercialization plan for this ${mech} application.
+Title: ${project.title || setup.disease || 'Untitled'}
+PI / Company: ${setup.pi || 'Not specified'}
+Target disease: ${setup.disease || 'Not specified'}
+Commercial path (from setup): ${setup.commercial || 'Not specified'}
+Aims: ${(sections.aims || '').slice(0, 600)}
+Commercialization plan: ${commercialText.slice(0, 1500)}
+Significance: ${(sections.sig || '').slice(0, 400)}
+
+Provide a complete commercialization review. Return ONLY valid JSON.`
+
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1500, system: COMMERCIAL_REVIEWER_SYSTEM, messages: [{ role: 'user', content: userMsg }] }),
+  })
+  const r = await resp.json()
+  const text = r.content?.[0]?.text || ''
+
+  let result = null
+  const jm = text.match(/\{[\s\S]*\}/)
+  if (jm) { try { result = JSON.parse(jm[0]) } catch {} }
+  if (!result) result = { viability: 'medium', overall_score: 50, market: { score: 10, feedback: text, tam_estimate: 'N/A', key_insight: '' }, ip: { score: 10, feedback: '', ip_strength: 'moderate', key_insight: '' }, regulatory: { score: 10, feedback: '', pathway: '', timeline_estimate: '' }, revenue_model: { score: 10, feedback: '', model_type: '', key_insight: '' }, commercial_team: { score: 10, feedback: '', gaps: [] }, investor_readiness: 'seed_stage', strengths: [], critical_weaknesses: [], top_improvements: [], phase3_readiness: '', bottom_line: 'Review could not be parsed — see raw assessment.' }
+
+  const inputTokens = r.usage?.input_tokens || 0
+  const outputTokens = r.usage?.output_tokens || 0
+  const pricing = PRICING['claude-sonnet-4-20250514']
+  const cost = (inputTokens / 1e6) * pricing.input + (outputTokens / 1e6) * pricing.output
+  await env.DB.prepare('INSERT INTO usage_log (id, user_id, action, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(crypto.randomUUID(), userId, 'commercial_review', 'claude-sonnet-4-20250514', inputTokens, outputTokens, 0, 0, Math.floor(Date.now() / 1000)).run()
+  await trackUserActivity(userId, '', env, true, inputTokens + outputTokens, cost)
+
+  try {
+    await env.DB.prepare('UPDATE projects SET commercial_review_results = ? WHERE id = ? AND user_id = ?')
+      .bind(JSON.stringify(result), projectId, userId).run()
+  } catch {}
+
+  return json(result)
+}
+
+// ── Commercial Charts Generator ───────────────────────────────────────────────
+async function handleGenerateCharts(req, env, userId, projectId) {
+  const project = await env.DB.prepare(
+    'SELECT title, mechanism, setup, sections FROM projects WHERE id = ? AND user_id = ?'
+  ).bind(projectId, userId).first()
+  if (!project) return err('Project not found', 404)
+
+  let setup = {}, sections = {}
+  try { setup = JSON.parse(project.setup || '{}') } catch {}
+  try { sections = JSON.parse(project.sections || '{}') } catch {}
+
+  const commercialText = sections.commercial || ''
+  const prompt = `You are a market analyst. Extract commercialization data from this NIH grant text and return ONLY valid JSON for chart generation.
+
+Grant title: ${project.title || setup.disease || 'Untitled'}
+Disease: ${setup.disease || 'Not specified'}
+Commercial text: ${commercialText.slice(0, 2000)}
+Setup commercial: ${setup.commercial || ''}
+
+Extract or estimate reasonable values for:
+1. Market sizing (TAM, SAM, SOM) in USD millions
+2. Revenue projection for years 1-5 (in $ millions)
+3. Top 4 competitors with positioning on innovation (0-10) vs accessibility (0-10) axes
+
+Return ONLY valid JSON:
+{
+  "market": {
+    "tam": number,
+    "sam": number,
+    "som": number,
+    "tam_label": "string",
+    "sam_label": "string",
+    "som_label": "string"
+  },
+  "revenue": [
+    { "year": "Year 1", "value": number },
+    { "year": "Year 2", "value": number },
+    { "year": "Year 3", "value": number },
+    { "year": "Year 4", "value": number },
+    { "year": "Year 5", "value": number }
+  ],
+  "competitors": [
+    { "name": "string", "innovation": number, "accessibility": number, "is_us": false },
+    { "name": "${project.title || 'Our Solution'}", "innovation": number, "accessibility": number, "is_us": true }
+  ]
+}`
+
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 800, messages: [{ role: 'user', content: prompt }] }),
+  })
+  const r = await resp.json()
+  const text = r.content?.[0]?.text || ''
+
+  let chartData = null
+  const jm = text.match(/\{[\s\S]*\}/)
+  if (jm) { try { chartData = JSON.parse(jm[0]) } catch {} }
+  if (!chartData) return err('Could not extract chart data from the commercialization section. Add more specific market data first.')
+
+  const inputTokens = r.usage?.input_tokens || 0
+  const outputTokens = r.usage?.output_tokens || 0
+  const pricing = PRICING['claude-haiku-4-5-20251001']
+  const cost = (inputTokens / 1e6) * pricing.input + (outputTokens / 1e6) * pricing.output
+  await env.DB.prepare('INSERT INTO usage_log (id, user_id, action, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(crypto.randomUUID(), userId, 'generate_charts', 'claude-haiku-4-5-20251001', inputTokens, outputTokens, 0, 0, Math.floor(Date.now() / 1000)).run()
+  await trackUserActivity(userId, '', env, true, inputTokens + outputTokens, cost)
+
+  try {
+    await env.DB.prepare('UPDATE projects SET commercial_charts = ? WHERE id = ? AND user_id = ?')
+      .bind(JSON.stringify(chartData), projectId, userId).run()
+  } catch {}
+
+  return json(chartData)
+}
+
+// ── Bibliography ──────────────────────────────────────────────────────────────
+async function handleBibliographyGet(req, env, userId, projectId) {
+  const project = await env.DB.prepare(
+    'SELECT bibliography FROM projects WHERE id = ? AND user_id = ?'
+  ).bind(projectId, userId).first()
+  if (!project) return err('Project not found', 404)
+
+  let bibliography = []
+  try { bibliography = JSON.parse(project.bibliography || '[]') } catch {}
+  return json({ bibliography })
+}
+
+async function handleBibliographySave(req, env, userId, projectId) {
+  const project = await env.DB.prepare('SELECT id FROM projects WHERE id = ? AND user_id = ?').bind(projectId, userId).first()
+  if (!project) return err('Project not found', 404)
+
+  const body = await req.json()
+  const bibliography = body.bibliography || []
+  await env.DB.prepare('UPDATE projects SET bibliography = ? WHERE id = ? AND user_id = ?')
+    .bind(JSON.stringify(bibliography), projectId, userId).run()
+  return json({ ok: true, count: bibliography.length })
+}
+
 // ── Letters Generator ─────────────────────────────────────────────────────────
 const LETTER_TEMPLATES = {
   collaborator_support: { name: 'Collaborator Support Letter', maxTokens: 700 },
@@ -2399,6 +2565,37 @@ export default {
         const response = await handlePolish(req, env, userId, polishMatch[1])
         await logError(path, 200, null, Date.now() - startTime, userId, env)
         return response
+      }
+
+      // Commercial Reviewer
+      const commercialReviewMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/commercial-review$/)
+      if (commercialReviewMatch && req.method === 'POST') {
+        const response = await handleCommercialReview(req, env, userId, commercialReviewMatch[1])
+        await logError(path, 200, null, Date.now() - startTime, userId, env)
+        return response
+      }
+
+      // Commercial Charts
+      const chartsMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/generate-charts$/)
+      if (chartsMatch && req.method === 'POST') {
+        const response = await handleGenerateCharts(req, env, userId, chartsMatch[1])
+        await logError(path, 200, null, Date.now() - startTime, userId, env)
+        return response
+      }
+
+      // Bibliography
+      const bibliographyMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/bibliography$/)
+      if (bibliographyMatch) {
+        if (req.method === 'GET') {
+          const response = await handleBibliographyGet(req, env, userId, bibliographyMatch[1])
+          await logError(path, 200, null, Date.now() - startTime, userId, env)
+          return response
+        }
+        if (req.method === 'POST') {
+          const response = await handleBibliographySave(req, env, userId, bibliographyMatch[1])
+          await logError(path, 200, null, Date.now() - startTime, userId, env)
+          return response
+        }
       }
 
       // Letters Generator
