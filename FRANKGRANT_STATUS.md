@@ -1,7 +1,7 @@
 # FrankGrant Status Document
 
 **Last Updated:** 2026-03-19
-**Version:** 5.7.0
+**Version:** 5.8.0
 **Status:** Production (Internal COARE Tool)
 
 ---
@@ -23,6 +23,16 @@
 ---
 
 ## ✅ Features: Built & Deployed
+
+### **Complete Navigation Rebuild — AppShell, Responsive Mobile, Editor Redesign (v5.8.0)**
+- ✅ **App.jsx refactored as router** — `AppRouter` component manages `currentView` state ('dashboard' | 'editor' | 'wizard' | 'biosketch' | 'letters' | 'pipeline' | 'command' | 'scorer') and `activeProject`; all view transitions happen here
+- ✅ **Dashboard decoupled from routing** — Dashboard is now a pure view component accepting `onOpenProject` and `onNewGrant` props; removed internal `activeView` state and all nested view rendering; removed self-wrapping in AppShell
+- ✅ **AppShell remains navigation wrapper** — 220px sidebar (collapsible to 48px), teal active state, breadcrumbs, admin-only Command Station item; mobile bottom tab bar with More bottom sheet; localStorage persistence for collapsed state
+- ✅ **GrantEditor top bar simplified** — replaced crowded toolbar (15+ buttons) with 3-group layout: Back button left, title+mechanism+institute+save-state center, Voice Mode + Export + Share right
+- ✅ **GrantEditor left panel added** — 220px fixed left panel with Sections (Setup + 7 content sections with status icons and word counts), Reviews (Study Section, PD Review, Advisory Council, Commercial Review), Tools (Aims Optimizer, Prelim Data, Grant Search, Bibliography, Rewrite, Quality Review, Checklist), and Views (Full Grant, Resubmission)
+- ✅ **Editor layout updated** — full-height flex column: top bar (52px) + body row (left panel 220px + right panel flex-1 scrollable)
+- ✅ **Drawers converted to fixed overlays** — Prelim Data and Grant Search drawers now render as `position: fixed` right-side overlays instead of flex siblings
+- ✅ **All existing functionality preserved** — all handlers (study section, PD review, advisory council, commercial review, aims optimizer, resubmission, bibliography, checklist, voice mode, collaboration panel, all modals) remain intact; left panel items are entry points to the same functionality
 
 ### **Email Grant, Shareable Read-Only Link, PDF Export (v5.7.0)**
 - ✅ **POST /api/projects/:id/email** — sends combined DOCX as Resend attachment to any email; graceful fallback if RESEND_API_KEY not set; logs to usage_log

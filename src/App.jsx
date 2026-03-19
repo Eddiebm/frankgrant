@@ -1,10 +1,18 @@
 import { useState, useEffect } from 'react'
-import { SignedIn, SignedOut, SignIn } from '@clerk/clerk-react'
+import { SignedIn, SignedOut, SignIn, useUser } from '@clerk/clerk-react'
+import AppShell from './components/AppShell'
 import Dashboard from './components/Dashboard'
-import ErrorBoundary from './components/ErrorBoundary'
-import FeedbackButton from './components/FeedbackButton'
+import GrantEditor from './components/GrantEditor'
+import LettersGenerator from './components/LettersGenerator'
+import BiosketchGenerator from './components/BiosketchGenerator'
 import StatusPage from './components/StatusPage'
 import SharedGrantView from './components/SharedGrantView'
+import ErrorBoundary from './components/ErrorBoundary'
+import FeedbackButton from './components/FeedbackButton'
+import CommandStation from './components/CommandStation'
+import GrantWizard from './components/GrantWizard'
+import Scorer from './components/Scorer'
+import { useApi } from './hooks/useApi'
 
 const API_BASE = import.meta.env.VITE_WORKER_URL || '/api'
 
@@ -50,6 +58,88 @@ function AnthropicStatusBanner({ onDismiss }) {
       <span style={{ flex: 1 }}>AI generation is currently experiencing delays due to a third-party service issue. Your saved work is unaffected.</span>
       <button onClick={onDismiss} style={{ background: 'none', border: 'none', color: '#fde68a', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>×</button>
     </div>
+  )
+}
+
+function AppRouter() {
+  const { user } = useUser()
+  const api = useApi()
+  const [currentView, setCurrentView] = useState('dashboard')
+  const [activeProject, setActiveProject] = useState(null)
+
+  const userEmail = user?.emailAddresses?.[0]?.emailAddress || ''
+
+  function handleNavigate(view) {
+    if (view === 'settings') { alert('Settings — coming soon!'); return }
+    setCurrentView(view)
+  }
+
+  function handleOpenProject(project) {
+    setActiveProject(project)
+    setCurrentView('editor')
+  }
+
+  async function handleSaveProject(data) {
+    if (!activeProject) return
+    try {
+      await api.updateProject(activeProject.id, data)
+      setActiveProject(prev => ({ ...prev, ...data }))
+    } catch (e) { console.error('Save failed:', e) }
+  }
+
+  function handleBack() {
+    setActiveProject(null)
+    setCurrentView('dashboard')
+  }
+
+  function handleWizardComplete(project) {
+    setActiveProject(project)
+    setCurrentView('editor')
+  }
+
+  return (
+    <AppShell
+      currentView={currentView}
+      onNavigate={handleNavigate}
+      editorProject={activeProject}
+      userEmail={userEmail}
+      activeView={currentView}
+      setActiveView={handleNavigate}
+      activeProject={activeProject}
+    >
+      {currentView === 'editor' && activeProject ? (
+        <GrantEditor
+          project={activeProject}
+          onSave={handleSaveProject}
+          onBack={handleBack}
+        />
+      ) : currentView === 'wizard' ? (
+        <GrantWizard
+          onComplete={handleWizardComplete}
+          onCancel={() => setCurrentView('dashboard')}
+        />
+      ) : currentView === 'biosketch' ? (
+        <BiosketchGenerator onBack={() => setCurrentView('dashboard')} />
+      ) : currentView === 'command' ? (
+        <CommandStation onBack={() => setCurrentView('dashboard')} />
+      ) : currentView === 'letters' ? (
+        <LettersGenerator />
+      ) : currentView === 'scorer' ? (
+        <Scorer onBack={() => setCurrentView('dashboard')} />
+      ) : currentView === 'pipeline' ? (
+        <Dashboard
+          onOpenProject={handleOpenProject}
+          onNewGrant={() => setCurrentView('wizard')}
+          initialView="pipeline"
+        />
+      ) : (
+        <Dashboard
+          onOpenProject={handleOpenProject}
+          onNewGrant={() => setCurrentView('wizard')}
+          initialView="projects"
+        />
+      )}
+    </AppShell>
   )
 }
 
@@ -128,7 +218,7 @@ export default function App() {
       </SignedOut>
       <SignedIn>
         <div style={{ marginTop: anthropicDegraded && !bannerDismissed ? 44 : 0 }}>
-          <Dashboard />
+          <AppRouter />
           <FeedbackButton />
         </div>
       </SignedIn>

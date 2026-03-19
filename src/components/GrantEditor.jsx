@@ -1021,47 +1021,53 @@ export default function GrantEditor({ project, onSave, onBack }) {
     setResubRevising(r => ({ ...r, [secId]: false }))
   }
 
+  // Left panel sections list (simplified to core sections)
+  const LEFT_PANEL_SECTIONS = [
+    { id: 'aims', label: 'Specific Aims', icon: '📝' },
+    { id: 'sig', label: 'Significance', icon: '🔬' },
+    { id: 'innov', label: 'Innovation', icon: '💡' },
+    { id: 'approach', label: 'Approach', icon: '🔭' },
+    { id: 'commercial', label: 'Commercialization', icon: '💼', needsCommercial: true },
+    { id: 'data_mgmt', label: 'Data Management', icon: '📊' },
+    { id: 'facilities', label: 'Facilities', icon: '🏢' },
+  ]
+
   return (
-    <div style={{ maxWidth: (showGrantDrawer || showPrelimDrawer) ? 'none' : 900, margin: '0 auto', padding: '1.5rem', display: 'flex', gap: 0 }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: '1.5rem' }}>
-          <button onClick={onBack} style={ghostBtn}>← Grants</button>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+
+      {/* ── SIMPLIFIED TOP BAR ───────────────────────────────────────────────── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 16px', borderBottom: '0.5px solid #e5e7eb', background: '#fff', flexShrink: 0, minHeight: 52 }}>
+        {/* Left: Back button */}
+        <button onClick={onBack} style={{ ...ghostBtn, fontSize: 13, padding: '6px 10px', flexShrink: 0 }}>← Back</button>
+
+        {/* Center: Title + badges */}
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden' }}>
           <input
             value={title}
             onChange={e => { setTitle(e.target.value); setSaveState('unsaved') }}
             onBlur={() => save()}
-            style={{ flex: 1, fontSize: 16, fontWeight: 500, border: 'none', outline: 'none', background: 'transparent' }}
+            style={{ fontSize: 14, fontWeight: 600, border: 'none', outline: 'none', background: 'transparent', minWidth: 0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
             placeholder="Grant title"
           />
-          <span style={{ fontSize: 12, color: saveState === 'error' ? 'red' : '#999' }}>
+          <span style={{ fontSize: 11, padding: '2px 8px', background: '#e0f2fe', color: '#0369a1', borderRadius: 10, fontWeight: 600, flexShrink: 0 }}>{mech}</span>
+          {setup.institute && (
+            <span style={{ fontSize: 11, padding: '2px 8px', background: '#f3f4f6', color: '#374151', borderRadius: 10, fontWeight: 500, flexShrink: 0 }}>{setup.institute}</span>
+          )}
+          <span style={{ fontSize: 11, color: saveState === 'error' ? '#dc2626' : '#9ca3af', flexShrink: 0 }}>
             {saveState === 'saving' ? 'Saving...' : saveState === 'unsaved' ? 'Unsaved' : saveState === 'error' ? 'Save failed' : 'Saved'}
           </span>
+        </div>
+
+        {/* Right: Voice Mode, Export, Share */}
+        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
           <button
-            onClick={() => { setShowPrelimDrawer(d => !d); setShowGrantDrawer(false) }}
-            style={{ ...ghostBtn, fontSize: 12, background: showPrelimDrawer ? '#f0f0f0' : '#fff', position: 'relative' }}
-            title="Preliminary data"
+            onClick={() => setShowVoiceMode(true)}
+            style={{ ...ghostBtn, fontSize: 12, background: '#0e7490', color: '#fff', borderColor: '#0e7490' }}
+            title="Talk to your grant with AI voice assistant"
           >
-            📎 Prelim
-            {prelimScore > 0 && (
-              <span style={{ marginLeft: 5, fontSize: 10, background: prelimScore >= 70 ? '#16a34a' : '#d97706', color: '#fff', borderRadius: 10, padding: '1px 6px' }}>
-                {prelimScore}
-              </span>
-            )}
+            🎤 Voice Mode
           </button>
-          <button
-            onClick={() => { setShowGrantDrawer(d => !d); setShowPrelimDrawer(false) }}
-            style={{ ...ghostBtn, fontSize: 12, background: showGrantDrawer ? '#f0f0f0' : '#fff', position: 'relative' }}
-            title="Find funded NIH grants"
-          >
-            🔍 Grants
-            {referenceGrants.length > 0 && (
-              <span style={{ marginLeft: 5, fontSize: 10, background: '#111', color: '#fff', borderRadius: 10, padding: '1px 6px' }}>
-                {referenceGrants.length}/5
-              </span>
-            )}
-          </button>
-          <button onClick={() => save()} style={ghostBtn}>Save</button>
+
           <div style={{ position: 'relative' }}>
             <button
               onClick={() => setShowExportDropdown(d => !d)}
@@ -1098,77 +1104,7 @@ export default function GrantEditor({ project, onSave, onBack }) {
               </div>
             )}
           </div>
-          {sections.aims && sections.aims.length > 50 && (
-            <button
-              onClick={() => aimsOptData && !aimsOptLoading ? setAimsOptModal('results') : handleOptimizeAims()}
-              disabled={aimsOptLoading}
-              style={{ ...ghostBtn, fontSize: 12, background: aimsOptData ? '#f0fdf4' : '#fff', borderColor: aimsOptData ? '#86efac' : undefined }}
-              title="Score and optimize your Specific Aims"
-            >
-              🎯 {aimsOptLoading ? 'Scoring…' : 'Optimize Aims'}
-            </button>
-          )}
-          <button
-            onClick={() => studySectionResults ? setStudySectionModal('results') : handleRunStudySectionClick()}
-            style={{ ...ghostBtn, fontSize: 12 }}
-            title="Simulate NIH study section review"
-          >
-            🔬 {studySectionResults ? 'Review' : 'Study Section'}
-          </button>
-          <button
-            onClick={() => pdReviewResults ? setPdReviewModal('results') : handleRunPDReviewClick()}
-            style={{ ...ghostBtn, fontSize: 12 }}
-            title="Get Program Director fundability assessment"
-          >
-            📋 {pdReviewResults ? 'PD Review' : 'PD Review'}
-          </button>
-          <button
-            onClick={() => councilResults ? setCouncilModal('results') : handleRunAdvisoryCouncilClick()}
-            style={{ ...ghostBtn, fontSize: 12 }}
-            title="Get Advisory Council funding recommendation"
-          >
-            🏛️ Council
-          </button>
-          {m.needsCommercial && (
-            <button
-              onClick={() => commercialReviewResults ? setCommercialReviewModal('results') : handleRunCommercialReviewClick()}
-              style={{ ...ghostBtn, fontSize: 12 }}
-              title="Get expert commercialization review"
-            >
-              💰 {commercialReviewResults ? 'Comm Review' : 'Comm Review'}
-            </button>
-          )}
-          <button
-            onClick={() => setShowBibliography(d => !d)}
-            style={{ ...ghostBtn, fontSize: 12, background: showBibliography ? '#f0f0f0' : '#fff' }}
-            title="Manage your bibliography"
-          >
-            📚 Bibliography
-          </button>
-          <button
-            onClick={async () => {
-              if (checklistData) { setShowChecklist(true); return }
-              setChecklistLoading(true)
-              try {
-                const cl = await api.getSubmissionChecklist(project.id)
-                setChecklistData(cl)
-                setShowChecklist(true)
-              } catch (e) { alert('Failed to load checklist: ' + e.message) }
-              setChecklistLoading(false)
-            }}
-            disabled={checklistLoading}
-            style={{ ...ghostBtn, fontSize: 12 }}
-            title="View submission checklist with ownership statement"
-          >
-            {checklistLoading ? '⟳' : '📋'} Checklist
-          </button>
-          <button
-            onClick={() => setShowVoiceMode(true)}
-            style={{ ...ghostBtn, fontSize: 12, background: '#0e7490', color: '#fff', borderColor: '#0e7490' }}
-            title="Talk to your grant with AI voice assistant"
-          >
-            🎤 Voice Mode
-          </button>
+
           <button
             onClick={() => setShowCollabPanel(p => !p)}
             style={{ ...ghostBtn, fontSize: 12, background: '#7c3aed', color: '#fff', borderColor: '#7c3aed', position: 'relative' }}
@@ -1180,8 +1116,118 @@ export default function GrantEditor({ project, onSave, onBack }) {
             )}
           </button>
         </div>
+      </div>
 
-        {/* Top tabs */}
+      {/* ── BODY: LEFT PANEL + RIGHT PANEL ──────────────────────────────────── */}
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+
+        {/* ── LEFT PANEL ────────────────────────────────────────────────────── */}
+        <div style={{ width: 220, flexShrink: 0, borderRight: '0.5px solid #e5e7eb', overflowY: 'auto', background: '#fafafa', display: 'flex', flexDirection: 'column' }}>
+
+          {/* Setup row */}
+          <div
+            onClick={() => setActiveTab('setup')}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', cursor: 'pointer', background: activeTab === 'setup' ? '#e0f2fe' : 'transparent', borderLeft: `3px solid ${activeTab === 'setup' ? '#0e7490' : 'transparent'}`, color: activeTab === 'setup' ? '#0e7490' : '#374151', fontSize: 13, fontWeight: activeTab === 'setup' ? 600 : 400 }}
+          >
+            <span>⚙️</span>
+            <span>Setup</span>
+          </div>
+
+          {/* SECTIONS header */}
+          <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.08em', padding: '8px 12px 4px', marginTop: 4 }}>Sections</div>
+
+          {LEFT_PANEL_SECTIONS.filter(s => {
+            if (s.needsCommercial && !m.needsCommercial) return false
+            return true
+          }).map(sec => {
+            const content = sections[sec.id] || ''
+            const wordCount = content.trim().split(/\s+/).filter(Boolean).length
+            const hasContent = wordCount > 100
+            const hasAny = content.length > 0
+            const isActive = activeTab === 'writer' && activeSec === sec.id
+            const statusIcon = hasContent ? '✅' : hasAny ? '⏳' : '●'
+            return (
+              <div
+                key={sec.id}
+                onClick={() => { setActiveTab('writer'); setActiveSec(sec.id) }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', cursor: 'pointer', background: isActive ? '#e0f2fe' : 'transparent', borderLeft: `3px solid ${isActive ? '#0e7490' : 'transparent'}`, color: isActive ? '#0e7490' : '#374151', fontSize: 12 }}
+              >
+                <span style={{ fontSize: 11, flexShrink: 0 }}>{statusIcon}</span>
+                <span style={{ flex: 1, fontWeight: isActive ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sec.label}</span>
+                {hasAny && <span style={{ fontSize: 10, color: '#9ca3af', flexShrink: 0 }}>{wordCount}w</span>}
+              </div>
+            )
+          })}
+
+          {/* REVIEWS header */}
+          <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.08em', padding: '8px 12px 4px', marginTop: 8 }}>Reviews</div>
+
+          {[
+            { icon: '🔬', label: 'Study Section', onClick: () => studySectionResults ? setStudySectionModal('results') : handleRunStudySectionClick(), badge: studySectionResults ? `${studySectionResults.overall_score || ''}` : null },
+            { icon: '📋', label: 'PD Review', onClick: () => pdReviewResults ? setPdReviewModal('results') : handleRunPDReviewClick(), badge: pdReviewResults ? 'Done' : null },
+            { icon: '🏛️', label: 'Advisory Council', onClick: () => councilResults ? setCouncilModal('results') : handleRunAdvisoryCouncilClick(), badge: councilResults ? 'Done' : null },
+            ...(m.needsCommercial ? [{ icon: '💼', label: 'Commercial Review', onClick: () => commercialReviewResults ? setCommercialReviewModal('results') : handleRunCommercialReviewClick(), badge: commercialReviewResults ? 'Done' : null }] : []),
+          ].map((item, i) => (
+            <div
+              key={i}
+              onClick={item.onClick}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', cursor: 'pointer', color: '#374151', fontSize: 12 }}
+            >
+              <span>{item.icon}</span>
+              <span style={{ flex: 1 }}>{item.label}</span>
+              {item.badge && <span style={{ fontSize: 10, background: '#e0f2fe', color: '#0369a1', padding: '1px 6px', borderRadius: 8, fontWeight: 600 }}>{item.badge}</span>}
+            </div>
+          ))}
+
+          {/* TOOLS header */}
+          <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.08em', padding: '8px 12px 4px', marginTop: 8 }}>Tools</div>
+
+          {[
+            { icon: '🎯', label: 'Aims Optimizer', onClick: () => aimsOptData && !aimsOptLoading ? setAimsOptModal('results') : handleOptimizeAims(), badge: aimsOptData ? `${aimsOptData.overall_score || ''}` : null },
+            { icon: '📎', label: 'Prelim Data', onClick: () => { setShowPrelimDrawer(d => !d); setShowGrantDrawer(false) }, badge: prelimScore > 0 ? `${prelimScore}` : null },
+            { icon: '🔍', label: 'Grant Search', onClick: () => { setShowGrantDrawer(d => !d); setShowPrelimDrawer(false) }, badge: referenceGrants.length > 0 ? `${referenceGrants.length}/5` : null },
+            { icon: '📚', label: 'Bibliography', onClick: () => setShowBibliography(d => !d) },
+            { icon: '✍️', label: 'Rewrite', onClick: () => {}, badge: pkgCyclesRemaining > 0 ? `${pkgCyclesRemaining} cycles` : null },
+            { icon: '✅', label: 'Quality Review', onClick: () => {}, badge: project.quality_certified ? '✓ Certified' : null },
+            { icon: '📋', label: 'Checklist', onClick: async () => {
+              if (checklistData) { setShowChecklist(true); return }
+              setChecklistLoading(true)
+              try {
+                const cl = await api.getSubmissionChecklist(project.id)
+                setChecklistData(cl)
+                setShowChecklist(true)
+              } catch (e) { alert('Failed to load checklist: ' + e.message) }
+              setChecklistLoading(false)
+            }},
+          ].map((item, i) => (
+            <div
+              key={i}
+              onClick={item.onClick}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', cursor: 'pointer', color: '#374151', fontSize: 12 }}
+            >
+              <span>{item.icon}</span>
+              <span style={{ flex: 1 }}>{item.label}</span>
+              {item.badge && <span style={{ fontSize: 10, background: '#f3f4f6', color: '#374151', padding: '1px 6px', borderRadius: 8, fontWeight: 600 }}>{item.badge}</span>}
+            </div>
+          ))}
+
+          {/* Full Grant & Resubmission links */}
+          <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.08em', padding: '8px 12px 4px', marginTop: 8 }}>Views</div>
+          <div onClick={() => setActiveTab('full')} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', cursor: 'pointer', background: activeTab === 'full' ? '#e0f2fe' : 'transparent', borderLeft: `3px solid ${activeTab === 'full' ? '#0e7490' : 'transparent'}`, color: activeTab === 'full' ? '#0e7490' : '#374151', fontSize: 12, fontWeight: activeTab === 'full' ? 600 : 400 }}>
+            <span>📄</span><span>Full Grant</span>
+          </div>
+          {setup.is_resubmission && (
+            <div onClick={() => setActiveTab('resubmission')} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', cursor: 'pointer', background: activeTab === 'resubmission' ? '#e0f2fe' : 'transparent', borderLeft: `3px solid ${activeTab === 'resubmission' ? '#0e7490' : 'transparent'}`, color: activeTab === 'resubmission' ? '#0e7490' : '#374151', fontSize: 12, fontWeight: activeTab === 'resubmission' ? 600 : 400 }}>
+              <span>🔄</span><span>Resubmission</span>
+            </div>
+          )}
+        </div>
+
+        {/* ── RIGHT PANEL ───────────────────────────────────────────────────── */}
+        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: 1, minWidth: 0, padding: '1.5rem', maxWidth: (showGrantDrawer || showPrelimDrawer) ? 'none' : 860, margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
+
+        {/* Top tabs — kept inside right panel */}
         <div style={tabRow}>
           {['setup', 'writer', 'full', ...(setup.is_resubmission ? ['resubmission'] : [])].map(t => (
             <button key={t} onClick={() => setActiveTab(t)} style={tabBtn(activeTab === t)}>
@@ -1765,14 +1811,13 @@ export default function GrantEditor({ project, onSave, onBack }) {
             )}
           </div>
         )}
+          </div>
+        </div>
       </div>
 
-      {/* Preliminary Data Drawer */}
+      {/* Preliminary Data Drawer — fixed overlay */}
       {showPrelimDrawer && (
-        <div style={{
-          width: 400, flexShrink: 0, borderLeft: '0.5px solid #e5e5e5', marginLeft: 20,
-          paddingLeft: 20, maxHeight: '90vh', overflowY: 'auto',
-        }}>
+        <div style={{ position: 'fixed', right: 0, top: 0, bottom: 0, width: 420, background: '#fff', boxShadow: '-4px 0 20px rgba(0,0,0,0.1)', overflowY: 'auto', zIndex: 900, padding: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
             <div style={{ fontWeight: 600, fontSize: 14 }}>Preliminary Data</div>
             <button onClick={() => setShowPrelimDrawer(false)} style={{ ...ghostBtn, padding: '4px 10px', fontSize: 12 }}>✕</button>
@@ -1788,22 +1833,24 @@ export default function GrantEditor({ project, onSave, onBack }) {
         </div>
       )}
 
-      {/* Grant Search Drawer */}
+      {/* Grant Search Drawer — fixed overlay */}
       {showGrantDrawer && (
-        <GrantSearchDrawer
-          query={grantSearchQuery}
-          onQueryChange={setGrantSearchQuery}
-          results={grantSearchResults}
-          loading={grantSearchLoading}
-          error={grantSearchError}
-          onSearch={handleGrantSearch}
-          onUseAsReference={handleUseAsReference}
-          analyzingGrant={analyzingGrant}
-          addedGrants={addedGrants}
-          referenceCount={referenceGrants.length}
-          onClose={() => setShowGrantDrawer(false)}
-          mech={mech}
-        />
+        <div style={{ position: 'fixed', right: 0, top: 0, bottom: 0, width: 460, background: '#fff', boxShadow: '-4px 0 20px rgba(0,0,0,0.1)', overflowY: 'auto', zIndex: 900 }}>
+          <GrantSearchDrawer
+            query={grantSearchQuery}
+            onQueryChange={setGrantSearchQuery}
+            results={grantSearchResults}
+            loading={grantSearchLoading}
+            error={grantSearchError}
+            onSearch={handleGrantSearch}
+            onUseAsReference={handleUseAsReference}
+            analyzingGrant={analyzingGrant}
+            addedGrants={addedGrants}
+            referenceCount={referenceGrants.length}
+            onClose={() => setShowGrantDrawer(false)}
+            mech={mech}
+          />
+        </div>
       )}
 
       {/* Aims Optimizer Loading */}

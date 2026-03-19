@@ -1,14 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useUser } from '@clerk/clerk-react'
 import { useApi } from '../hooks/useApi'
-import GrantEditor from './GrantEditor'
-import Scorer from './Scorer'
-import GrantWizard from './GrantWizard'
-import BiosketchGenerator from './BiosketchGenerator'
 import UsageMeter from './UsageMeter'
-import CommandStation from './CommandStation'
-import LettersGenerator from './LettersGenerator'
-import AppShell from './AppShell'
 
 const STATUS_CONFIG = {
   draft:            { label: 'Draft',           color: '#6b7280', bg: '#f3f4f6', border: '#d1d5db' },
@@ -55,12 +48,10 @@ function DeadlineBadge({ dateStr }) {
   )
 }
 
-export default function Dashboard() {
+export default function Dashboard({ onOpenProject, onNewGrant, initialView = 'projects' }) {
   const { user } = useUser()
   const api = useApi()
   const [projects, setProjects] = useState([])
-  const [activeProject, setActiveProject] = useState(null)
-  const [activeView, setActiveView] = useState('projects')
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [sharedProjects, setSharedProjects] = useState([])
@@ -78,11 +69,13 @@ export default function Dashboard() {
   const [draggingId, setDraggingId] = useState(null)
   const [deadlineBanner, setDeadlineBanner] = useState([])
 
+  // View: 'projects' or 'pipeline'
+  const view = initialView
+
   useEffect(() => {
     api.listProjects()
       .then(data => {
         setProjects(data)
-        // Check for upcoming deadlines
         const soon = data.filter(p => {
           const days = deadlineUrgency(p.next_deadline)
           return days !== null && days >= 0 && days <= 7
@@ -91,7 +84,6 @@ export default function Dashboard() {
       })
       .catch(console.error)
       .finally(() => setLoading(false))
-    // Load collaboration data
     api.getSharedProjects().then(d => setSharedProjects(d.projects || [])).catch(() => {})
     api.getPendingInvitations().then(d => setPendingInvitations(d.invitations || [])).catch(() => {})
   }, [])
@@ -107,7 +99,7 @@ export default function Dashboard() {
       const proj = await api.createProject({ title: 'Untitled grant', mechanism: 'STTR-I', sections: {}, scores: {} })
       const full = await api.getProject(proj.id)
       setProjects(prev => [{ ...proj, status: 'draft', priority: 'medium', completion_pct: 0 }, ...prev])
-      setActiveProject(full)
+      if (onOpenProject) onOpenProject(full)
     } catch (e) { alert('Error creating project: ' + e.message) }
     setCreating(false)
   }
@@ -115,34 +107,14 @@ export default function Dashboard() {
   async function openProject(id) {
     try {
       const proj = await api.getProject(id)
-      setActiveProject(proj)
-      setActiveView('editor')
+      if (onOpenProject) onOpenProject(proj)
     } catch (e) { alert('Error loading project: ' + e.message) }
-  }
-
-  async function saveProject(data) {
-    try {
-      await api.updateProject(activeProject.id, data)
-      setProjects(prev => prev.map(p => p.id === activeProject.id ? { ...p, title: data.title, mechanism: data.mechanism } : p))
-      setActiveProject(prev => ({ ...prev, ...data }))
-    } catch (e) { console.error('Save failed:', e) }
   }
 
   async function deleteProject(id) {
     if (!confirm('Delete this project?')) return
     await api.deleteProject(id)
     setProjects(prev => prev.filter(p => p.id !== id))
-    if (activeProject?.id === id) setActiveProject(null)
-  }
-
-  async function handleWizardComplete(projectData) {
-    try {
-      const proj = await api.createProject(projectData)
-      const full = await api.getProject(proj.id)
-      setProjects(prev => [{ ...proj, status: 'draft', priority: 'medium', completion_pct: 0 }, ...prev])
-      setActiveProject(full)
-      setActiveView('editor')
-    } catch (e) { alert('Error creating project: ' + e.message) }
   }
 
   async function handleStatusSave() {
@@ -211,12 +183,11 @@ export default function Dashboard() {
     }
     if (sortBy === 'status') return (a.status || '').localeCompare(b.status || '')
     if (sortBy === 'mechanism') return (a.mechanism || '').localeCompare(b.mechanism || '')
-    return b.updated_at - a.updated_at // last-modified
+    return b.updated_at - a.updated_at
   })
 
   const allMechs = [...new Set(projects.map(p => p.mechanism).filter(Boolean))]
 
-  // Stats
   const stats = {
     total: projects.length,
     in_progress: projects.filter(p => p.status === 'in_progress').length,
@@ -226,31 +197,10 @@ export default function Dashboard() {
     not_funded: projects.filter(p => p.status === 'not_funded').length,
   }
 
-  // ── Single return — everything inside AppShell ───────────────────────────
   return (
-    <AppShell activeView={activeView} setActiveView={setActiveView} activeProject={activeProject}>
-
-      {/* ── Grant Editor ─────────────────────────────────────────────────── */}
-      {activeView === 'editor' && activeProject ? (
-        <GrantEditor project={activeProject} onSave={saveProject} onBack={() => { setActiveProject(null); setActiveView('projects') }} />
-
-      ) : activeView === 'scorer' ? (
-        <Scorer onBack={() => setActiveView('projects')} />
-
-      ) : activeView === 'wizard' ? (
-        <GrantWizard onComplete={handleWizardComplete} onCancel={() => setActiveView('projects')} />
-
-      ) : activeView === 'biosketch' ? (
-        <BiosketchGenerator onBack={() => setActiveView('projects')} />
-
-      ) : activeView === 'command' ? (
-        <CommandStation onBack={() => setActiveView('projects')} />
-
-      ) : activeView === 'letters' ? (
-        <LettersGenerator projects={projects} />
-
-      ) : activeView === 'pipeline' ? (
-        /* ── Pipeline (kanban / calendar / list) ──────────────────────── */
+    <>
+      {/* ── Pipeline View ──────────────────────────────────────────────────────── */}
+      {view === 'pipeline' ? (
         <div style={{ padding: '1rem 1.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
             <div style={{ display: 'flex', gap: 6 }}>
@@ -258,7 +208,7 @@ export default function Dashboard() {
                 <button key={v} onClick={() => changePipelineView(v)} style={{ ...btnStyle, background: pipelineView === v ? '#1e293b' : '#fff', color: pipelineView === v ? '#fff' : '#111', borderColor: pipelineView === v ? '#1e293b' : '#ccc' }}>{label}</button>
               ))}
             </div>
-            <button onClick={newProject} disabled={creating} style={{ ...btnStyle, background: '#0e7490', color: '#fff', border: 'none' }}>{creating ? 'Creating…' : '+ New Grant'}</button>
+            <button onClick={onNewGrant} style={{ ...btnStyle, background: '#0e7490', color: '#fff', border: 'none' }}>+ New Grant</button>
           </div>
           {loading ? (
             <p style={{ fontSize: 13, color: '#666' }}>Loading…</p>
@@ -272,7 +222,7 @@ export default function Dashboard() {
         </div>
 
       ) : (
-        /* ── My Grants (projects view) ────────────────────────────────── */
+        /* ── My Grants (projects view) ────────────────────────────────────────── */
         <div style={{ padding: '1.5rem' }}>
           <UsageMeter />
 
@@ -338,8 +288,10 @@ export default function Dashboard() {
               {projects.length > 0 ? `${projects.length} grant${projects.length !== 1 ? 's' : ''}` : ''}
             </div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              <button onClick={() => setActiveView('scorer')} style={btnStyle}>📊 Scorer</button>
-              <button onClick={newProject} disabled={creating} style={{ ...btnStyle, background: '#0e7490', color: '#fff', border: 'none' }}>{creating ? 'Creating…' : '+ New Grant'}</button>
+              {onNewGrant && (
+                <button onClick={onNewGrant} style={{ ...btnStyle, background: '#0e7490', color: '#fff', border: 'none' }}>✨ New Grant</button>
+              )}
+              <button onClick={newProject} disabled={creating} style={btnStyle}>{creating ? 'Creating…' : '+ Blank Grant'}</button>
             </div>
           </div>
 
@@ -350,7 +302,9 @@ export default function Dashboard() {
               <div style={{ fontSize: 36, marginBottom: 12 }}>📋</div>
               <div style={{ fontSize: 18, fontWeight: 600, color: '#111', marginBottom: 8 }}>No grants yet</div>
               <div style={{ fontSize: 14, color: '#6b7280', marginBottom: 20 }}>Start writing your first NIH grant application.</div>
-              <button onClick={() => setActiveView('wizard')} style={{ ...btnStyle, background: '#0e7490', color: '#fff', border: 'none', padding: '10px 20px', fontSize: 14 }}>✨ Use Grant Wizard</button>
+              {onNewGrant && (
+                <button onClick={onNewGrant} style={{ ...btnStyle, background: '#0e7490', color: '#fff', border: 'none', padding: '10px 20px', fontSize: 14 }}>✨ Start with Wizard</button>
+              )}
               <span style={{ display: 'inline-block', margin: '0 12px', color: '#d1d5db' }}>or</span>
               <button onClick={newProject} disabled={creating} style={{ ...btnStyle, padding: '10px 20px', fontSize: 14 }}>{creating ? 'Creating…' : 'Blank Grant'}</button>
             </div>
@@ -390,7 +344,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Status Modal — always rendered at top level inside AppShell */}
+      {/* Status Modal */}
       {statusModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div style={{ background: '#fff', borderRadius: 12, padding: 28, maxWidth: 480, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
@@ -439,8 +393,7 @@ export default function Dashboard() {
           </div>
         </div>
       )}
-
-    </AppShell>
+    </>
   )
 }
 
@@ -572,7 +525,6 @@ function CalendarView({ projects, month, setMonth, onOpen, onStatus }) {
   const daysInMonth = new Date(year, mo + 1, 0).getDate()
   const monthName = new Date(year, mo, 1).toLocaleString('default', { month: 'long', year: 'numeric' })
 
-  // Map date string -> projects
   const deadlineMap = {}
   projects.forEach(p => {
     if (!p.next_deadline) return
@@ -625,7 +577,6 @@ function CalendarView({ projects, month, setMonth, onOpen, onStatus }) {
         })}
       </div>
 
-      {/* No-deadline projects */}
       {projectsWithNoDeadline.length > 0 && (
         <div style={{ marginTop: 20, padding: '12px 16px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8 }}>
           <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 8 }}>No deadline set ({projectsWithNoDeadline.length})</div>
