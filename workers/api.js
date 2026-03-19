@@ -728,9 +728,10 @@ async function handleHealth(req, env) {
 async function handleFeedback(req, env, userId, userEmail) {
   const body = await req.json()
   const emailDomain = userEmail.includes('@') ? userEmail.split('@')[1] : ''
+  const now = Math.floor(Date.now() / 1000)
   await env.DB.prepare(
-    'INSERT INTO feedback_log (user_id, email_domain, feedback_type, message, page, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-  ).bind(userId, emailDomain, body.feedback_type || 'general', body.message || '', body.page || '', Math.floor(Date.now() / 1000)).run()
+    'INSERT INTO feedback_log (user_id, email_domain, feedback_type, message, page, nps_score, nps_week, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(userId, emailDomain, body.feedback_type || body.type || 'general', body.message || '', body.page || '', body.nps_score ?? null, body.nps_week || null, now).run()
   return json({ ok: true })
 }
 
@@ -2475,54 +2476,24 @@ PRESERVE scientific facts, structure, and word count (±10%). Return ONLY the po
   return json({ polished, section_id })
 }
 
-// ── Commercial Reviewer Panel ─────────────────────────────────────────────────
-const COMMERCIAL_REVIEWER_SYSTEM = `You are a senior commercialization expert and venture capitalist who has evaluated over 500 SBIR/STTR applications and funded 40+ life science startups. You have deep expertise in NIH SBIR/STTR commercialization requirements and private market realities.
+// ── NIH Commercial Reviewer Panel (v6.0.0 — 3-reviewer consensus) ────────────
+const NIH_COMMERCIAL_REVIEWER_SYSTEM = `You are Dr. Patricia Osei, a Senior Scientific Review Officer at NIH who specializes in SBIR/STTR Phase II applications. You have reviewed over 800 SBIR/STTR applications over 22 years. You evaluate commercialization plans with the rigor of an NIH study section. You score using the NIH 1-9 scale where 1 is Exceptional and 9 is Poor. For commercialization plans you pay particular attention to how well the Approach and Environment criteria are addressed commercially — regulatory pathway realism, revenue model credibility, IP completeness, and team commercial capability.`
 
-YOUR ROLE: Provide a frank, expert commercialization review that tells the applicant exactly how compelling (or not) their commercialization plan is — both for NIH reviewers and real investors.
+const NIH_SCORE_LABELS = { 1: 'Exceptional', 2: 'Outstanding', 3: 'Excellent', 4: 'Very Good', 5: 'Good', 6: 'Satisfactory', 7: 'Fair', 8: 'Marginal', 9: 'Poor' }
 
-You are reviewing the COMPLETE grant application — every section is provided in full with word counts. You cannot score Investigators without reading about the team, you cannot score Environment without reading about facilities, you cannot score Significance without reading the Aims. Score based on what you actually read.
-
-PACKAGE AUDIT: For any section marked [BRIEF] or [NOT GENERATED], note this in your critique and explain how the missing content affects your ability to score that dimension. Identify what a complete commercialization submission should contain.
-
-SCORING RUBRIC (each dimension 0-20 points):
-- Market Assessment: Is the market real, large, and well-defined? Are TAM/SAM/SOM credible?
-- IP Strategy: Is there a defensible IP position? Freedom to operate addressed?
-- Regulatory Pathway: Is the regulatory strategy realistic? FDA pathway identified?
-- Revenue Model: Is the revenue model credible? Pricing, reimbursement, payer landscape?
-- Commercial Team: Does the team have the commercial experience to execute?
-
-CRITERION-LEVEL INCOMPLETENESS DETECTION: For each dimension, check if sufficient content is present to score reliably. Set scoreable: false (score: null) if the relevant section is absent, truncated, under 50 words where 200+ is expected, or missing a key required element.
-
-EVIDENCE REQUIREMENT: For each dimension's evidence field, quote or closely paraphrase actual text from the grant — specific TAM figures, named FDA pathways, quoted revenue projections, named team members with credentials.
-
-SCORE RATIONALE: Step-by-step — why this score (0-20) not one point higher or lower.
-
-Return ONLY valid JSON:
-{
-  "viability": "high|medium|low|not_viable",
-  "overall_score": number or null if 3+ dimensions unscorable,
-  "market": {"score": number or null, "evidence": "direct quote/paraphrase from grant", "score_rationale": "why this score vs one point better/worse", "confidence": "high|medium|low", "scoreable": true/false, "unscorable_reason": null or "...", "feedback":"string","tam_estimate":"string","key_insight":"string"},
-  "ip": {"score": number or null, "evidence": "...", "score_rationale": "...", "confidence": "high|medium|low", "scoreable": true/false, "unscorable_reason": null or "...", "feedback":"string","ip_strength":"strong|moderate|weak","key_insight":"string"},
-  "regulatory": {"score": number or null, "evidence": "...", "score_rationale": "...", "confidence": "high|medium|low", "scoreable": true/false, "unscorable_reason": null or "...", "feedback":"string","pathway":"string","timeline_estimate":"string"},
-  "revenue_model": {"score": number or null, "evidence": "...", "score_rationale": "...", "confidence": "high|medium|low", "scoreable": true/false, "unscorable_reason": null or "...", "feedback":"string","model_type":"string","key_insight":"string"},
-  "commercial_team": {"score": number or null, "evidence": "...", "score_rationale": "...", "confidence": "high|medium|low", "scoreable": true/false, "unscorable_reason": null or "...", "feedback":"string","gaps":["string"]},
-  "investor_readiness": "series_a_ready|seed_stage|pre_seed|not_ready",
-  "strengths": ["string"],
-  "critical_weaknesses": ["string"],
-  "top_improvements": ["string"],
-  "phase3_readiness": "string",
-  "bottom_line": "string",
-  "missing_components": [
-    {
-      "component": "string",
-      "expected_location": "string",
-      "why_it_matters": "string",
-      "impact_on_score": "string",
-      "severity": "critical|major|minor"
-    }
-  ],
-  "package_completeness_critique": "string (frank investor/reviewer assessment of what is missing)"
-}`
+async function callCommercialReviewer(focus, fullGrantContext, mechanism, env) {
+  const userMsg = `Review this SBIR/STTR commercialization plan focusing on ${focus} Full plan:\n\n${fullGrantContext}\n\nReturn ONLY valid JSON: { "significance": { "score": <1-9>, "evidence": "...", "score_rationale": "...", "scoreable": true, "confidence": "high|medium|low", "strengths": [...], "weaknesses": [...] }, "investigators": { "score": <1-9>, "evidence": "...", "score_rationale": "...", "scoreable": true, "confidence": "high|medium|low", "strengths": [...], "weaknesses": [...] }, "overall_impact_score": <10-99>, "impact_rationale": "...", "missing_components": [{"component": "...", "why_it_matters": "...", "impact_on_score": "...", "severity": "critical|major|minor"}], "package_completeness_critique": "..." }`
+  const resp = await callAnthropicWithFallback({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 2000,
+    system: NIH_COMMERCIAL_REVIEWER_SYSTEM,
+    messages: [{ role: 'user', content: userMsg }],
+  }, env)
+  if (resp._fallback) return null
+  const r = await resp.json()
+  const text = r.content?.[0]?.text || ''
+  return { parsed: safeParseJSON(text), usage: r.usage }
+}
 
 async function handleCommercialReview(req, env, userId, projectId) {
   const project = await env.DB.prepare(
@@ -2538,35 +2509,87 @@ async function handleCommercialReview(req, env, userId, projectId) {
     project, sections, setup,
     { phase1: project.fast_track_phase1_sections, phase2: project.fast_track_phase2_sections }
   )
+  const mechanism = project.mechanism || 'STTR-I'
 
-  const userMsg = `Review the commercialization plan and full application for this ${project.mechanism || 'STTR-I'} grant.
+  // Three parallel Sonnet calls — NIH 1-9 scale
+  const [call1, call2, call3] = await Promise.all([
+    callCommercialReviewer(
+      'Significance (market size, unmet need, differentiation) and Investigators (commercial team capability, business experience, regulatory track record).',
+      fullGrantContext, mechanism, env
+    ),
+    callCommercialReviewer(
+      'Approach (regulatory pathway realism, CMC strategy, clinical development plan, go-to-market timeline) and Environment (manufacturing facilities, CDMO partnerships, regulatory affairs capability, GMP compliance readiness).',
+      fullGrantContext, mechanism, env
+    ),
+    callCommercialReviewer(
+      'Innovation (technology differentiation, competitive landscape analysis, patent position, freedom to operate) and the IP strategy as it relates to Approach (licensing strategy, IP protection timeline, competitive barriers).',
+      fullGrantContext, mechanism, env
+    ),
+  ])
 
-${fullGrantContext}
+  if (!call1 && !call2 && !call3) return json({ error: 'ai_unavailable' }, 503)
 
-Provide a complete commercialization review. Return ONLY valid JSON.`
+  // Extract scores
+  const r1 = call1?.parsed || {}
+  const r2 = call2?.parsed || {}
+  const r3 = call3?.parsed || {}
 
-  const resp = await callAnthropicWithFallback({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 2000,
-    system: COMMERCIAL_REVIEWER_SYSTEM,
-    messages: [{ role: 'user', content: userMsg }],
-  }, env)
-  if (resp._fallback) return json({ error: 'ai_unavailable' }, 503)
-  const r = await resp.json()
-  const text = r.content?.[0]?.text || ''
+  const sigScore = r1?.significance?.score || 5
+  const invScore = r1?.investigators?.score || 5
+  const appScore = r2?.significance?.score || 5  // approach focus reuses significance slot
+  const innScore = r3?.significance?.score || 5  // innovation focus reuses significance slot
 
-  let result = null
-  const jm = text.match(/\{[\s\S]*\}/)
-  if (jm) { result = safeParseJSON(jm[0]) }
-  if (!result) result = { viability: 'medium', overall_score: 50, market: { score: 10, feedback: text, tam_estimate: 'N/A', key_insight: '' }, ip: { score: 10, feedback: '', ip_strength: 'moderate', key_insight: '' }, regulatory: { score: 10, feedback: '', pathway: '', timeline_estimate: '' }, revenue_model: { score: 10, feedback: '', model_type: '', key_insight: '' }, commercial_team: { score: 10, feedback: '', gaps: [] }, investor_readiness: 'seed_stage', strengths: [], critical_weaknesses: [], top_improvements: [], phase3_readiness: '', bottom_line: 'Review could not be parsed — see raw assessment.', missing_components: [], package_completeness_critique: '' }
+  // Consensus impact score: average of all three overall_impact_scores
+  const impactScores = [r1?.overall_impact_score, r2?.overall_impact_score, r3?.overall_impact_score].filter(s => s != null && s >= 10 && s <= 99)
+  const consensusImpact = impactScores.length > 0 ? Math.round(impactScores.reduce((a, b) => a + b, 0) / impactScores.length) : 50
 
-  const inputTokens = r.usage?.input_tokens || 0
-  const outputTokens = r.usage?.output_tokens || 0
+  // Combine strengths/weaknesses/missing
+  const allStrengths = [
+    ...(r1?.significance?.strengths || []),
+    ...(r1?.investigators?.strengths || []),
+    ...(r2?.significance?.strengths || []),
+    ...(r3?.significance?.strengths || []),
+  ].filter(Boolean)
+  const allWeaknesses = [
+    ...(r1?.significance?.weaknesses || []),
+    ...(r1?.investigators?.weaknesses || []),
+    ...(r2?.significance?.weaknesses || []),
+    ...(r3?.significance?.weaknesses || []),
+  ].filter(Boolean)
+  const allMissing = [...(r1?.missing_components || []), ...(r2?.missing_components || []), ...(r3?.missing_components || [])]
+  // Dedupe missing by component name
+  const seenComponents = new Set()
+  const dedupedMissing = allMissing.filter(m => { if (!m?.component || seenComponents.has(m.component)) return false; seenComponents.add(m.component); return true })
+
+  const result = {
+    reviewer: 'Dr. Patricia Osei (NIH SRO) — 3-reviewer consensus',
+    scale_note: 'NIH 1-9 scale: 1=Exceptional, 9=Poor. Impact score 10-99: lower is better.',
+    criteria: {
+      significance: { score: sigScore, label: NIH_SCORE_LABELS[sigScore] || 'Good', strengths: r1?.significance?.strengths || [], weaknesses: r1?.significance?.weaknesses || [] },
+      investigators: { score: invScore, label: NIH_SCORE_LABELS[invScore] || 'Good', strengths: r1?.investigators?.strengths || [], weaknesses: r1?.investigators?.weaknesses || [] },
+      approach: { score: appScore, label: NIH_SCORE_LABELS[appScore] || 'Good', strengths: r2?.significance?.strengths || [], weaknesses: r2?.significance?.weaknesses || [] },
+      innovation: { score: innScore, label: NIH_SCORE_LABELS[innScore] || 'Good', strengths: r3?.significance?.strengths || [], weaknesses: r3?.significance?.weaknesses || [] },
+    },
+    consensus_impact_score: consensusImpact,
+    impact_rationale: [r1?.impact_rationale, r2?.impact_rationale, r3?.impact_rationale].filter(Boolean).join(' | '),
+    strengths: allStrengths.slice(0, 10),
+    weaknesses: allWeaknesses.slice(0, 10),
+    missing_components: dedupedMissing,
+    package_completeness_critique: [r1?.package_completeness_critique, r2?.package_completeness_critique, r3?.package_completeness_critique].filter(Boolean).join(' '),
+  }
+
+  // Log usage for all three calls
   const pricing = PRICING['claude-sonnet-4-20250514']
-  const cost = (inputTokens / 1e6) * pricing.input + (outputTokens / 1e6) * pricing.output
+  let totalIn = 0, totalOut = 0
+  for (const call of [call1, call2, call3]) {
+    if (!call?.usage) continue
+    totalIn += call.usage.input_tokens || 0
+    totalOut += call.usage.output_tokens || 0
+  }
+  const cost = (totalIn / 1e6) * pricing.input + (totalOut / 1e6) * pricing.output
   await env.DB.prepare('INSERT INTO usage_log (id, user_id, action, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .bind(crypto.randomUUID(), userId, 'commercial_review', 'claude-sonnet-4-20250514', inputTokens, outputTokens, 0, 0, Math.floor(Date.now() / 1000)).run()
-  await trackUserActivity(userId, '', env, true, inputTokens + outputTokens, cost)
+    .bind(crypto.randomUUID(), userId, 'commercial_review', 'claude-sonnet-4-20250514', totalIn, totalOut, 0, 0, Math.floor(Date.now() / 1000)).run()
+  await trackUserActivity(userId, '', env, true, totalIn + totalOut, cost)
 
   try {
     await env.DB.prepare('UPDATE projects SET commercial_review_results = ? WHERE id = ? AND user_id = ?')
@@ -4487,6 +4510,142 @@ async function handleSharedGrant(req, env, token) {
   return json({ title: project.title, mechanism: project.mechanism, pi_name: setup.pi || setup.pi_name || '', institution: setup.partner || setup.institution || '', sections, scores, expires_at: project.share_expires_at })
 }
 
+// ── Client Intake (v6.0.0) ────────────────────────────────────────────────────
+
+function getUpfrontFee(mechanism) {
+  if (!mechanism) return 2500
+  const m = mechanism.toUpperCase()
+  if (m.includes('FAST TRACK') || m.includes('FAST-TRACK')) return 5000
+  if (m.includes('PHASE II') || m.includes('-II')) return 4500
+  if (m === 'R01') return 3500
+  if (m === 'R21') return 2000
+  return 2500 // Phase I default
+}
+
+async function handleIntakeCreatePaymentIntent(req, env) {
+  const body = await req.json()
+  const { client_name, client_email, client_institution, mechanism, institute, research_description, pi_name, contact_phone } = body
+  if (!client_name || !client_email || !research_description) return err('Missing required fields', 400)
+  const amount = getUpfrontFee(mechanism)
+  if (!env.STRIPE_SECRET_KEY) {
+    return json({ ok: false, error: 'stripe_not_configured', amount, message: 'Payment processing not yet configured. Use direct intake.' })
+  }
+  const stripeRes = await fetch('https://api.stripe.com/v1/payment_intents', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      amount: amount * 100,
+      currency: 'usd',
+      'metadata[client_name]': client_name,
+      'metadata[client_email]': client_email,
+      'metadata[mechanism]': mechanism || '',
+      'metadata[institute]': institute || '',
+    }).toString()
+  })
+  if (!stripeRes.ok) { const e = await stripeRes.text(); throw new Error('Stripe error: ' + e) }
+  const pi = await stripeRes.json()
+  return json({ client_secret: pi.client_secret, payment_intent_id: pi.id, amount })
+}
+
+async function handleIntakeDirect(req, env) {
+  const body = await req.json()
+  const { client_name, client_email, client_institution, mechanism, institute, research_description, preliminary_data_description, pi_name, contact_phone } = body
+  if (!client_name || !client_email || !research_description) return err('Missing required fields', 400)
+  const amount = getUpfrontFee(mechanism)
+  const now = Math.floor(Date.now() / 1000)
+  const result = await env.DB.prepare(
+    'INSERT INTO service_clients (client_name, client_email, client_institution, mechanism, institute, research_description, preliminary_data_description, pi_name, contact_phone, status, upfront_fee_paid, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(client_name, client_email, client_institution || null, mechanism || null, institute || null, research_description, preliminary_data_description || null, pi_name || null, contact_phone || null, 'intake_received', 0, now).run()
+
+  if (env.RESEND_API_KEY) {
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: `FrankGrant <${env.FROM_EMAIL || 'onboarding@resend.dev'}>`,
+        to: ['eddie@bannermanmenson.com'],
+        subject: `New FrankGrant intake — ${client_name} — ${mechanism || 'Unknown'} — $${amount}`,
+        html: `<p>New intake received:</p><ul><li>Name: ${client_name}</li><li>Email: ${client_email}</li><li>Institution: ${client_institution || 'N/A'}</li><li>Mechanism: ${mechanism || 'N/A'}</li><li>PI: ${pi_name || 'N/A'}</li><li>Upfront fee: $${amount}</li></ul><p>Research: ${research_description.substring(0, 500)}...</p>`
+      })
+    }).catch(() => {})
+  }
+  return json({ ok: true, client_id: result.meta?.last_row_id })
+}
+
+async function handleIntakeWebhook(req, env) {
+  const body = await req.text()
+  let event
+  try { event = JSON.parse(body) } catch { return err('Invalid JSON', 400) }
+  if (event.type === 'payment_intent.succeeded') {
+    const pi = event.data.object
+    const meta = pi.metadata || {}
+    const now = Math.floor(Date.now() / 1000)
+    const amount = pi.amount / 100
+    await env.DB.prepare(
+      'INSERT INTO service_clients (client_name, client_email, mechanism, institute, status, upfront_fee_paid, upfront_fee_paid_at, stripe_payment_intent, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(meta.client_name || 'Unknown', meta.client_email || 'Unknown', meta.mechanism || null, meta.institute || null, 'intake_received', amount, now, pi.id, now).run().catch(() => {})
+    if (env.RESEND_API_KEY) {
+      await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from: `FrankGrant <${env.FROM_EMAIL || 'onboarding@resend.dev'}>`, to: ['eddie@bannermanmenson.com'], subject: `New FrankGrant client — ${meta.client_name} — ${meta.mechanism} — $${amount} paid`, html: `<p>Payment received from ${meta.client_name} (${meta.client_email}) for ${meta.mechanism} — $${amount}.</p>` })
+      }).catch(() => {})
+    }
+  }
+  return new Response('ok', { status: 200, headers: CORS })
+}
+
+async function handleCommandClients(req, env) {
+  const clients = await env.DB.prepare('SELECT * FROM service_clients ORDER BY created_at DESC').all()
+  return json({ clients: clients.results || [] })
+}
+
+async function handleCommandClientPatch(req, env, clientId) {
+  const body = await req.json()
+  const { status, project_id, admin_notes, award_number, expected_award_amount } = body
+  const now = Math.floor(Date.now() / 1000)
+  let successFee = null
+  if (status === 'funded' && expected_award_amount) {
+    const client = await env.DB.prepare('SELECT success_fee_percentage FROM service_clients WHERE id = ?').bind(parseInt(clientId)).first()
+    successFee = (expected_award_amount * (client?.success_fee_percentage || 3.0)) / 100
+  }
+  await env.DB.prepare('UPDATE service_clients SET status = COALESCE(?, status), project_id = COALESCE(?, project_id), admin_notes = COALESCE(?, admin_notes), award_number = COALESCE(?, award_number), expected_award_amount = COALESCE(?, expected_award_amount), success_fee_amount = COALESCE(?, success_fee_amount) WHERE id = ?')
+    .bind(status || null, project_id || null, admin_notes || null, award_number || null, expected_award_amount || null, successFee, parseInt(clientId)).run()
+  const updated = await env.DB.prepare('SELECT * FROM service_clients WHERE id = ?').bind(parseInt(clientId)).first()
+  return json(updated)
+}
+
+async function handleCommandClientMarkFunded(req, env, clientId) {
+  const body = await req.json()
+  const { award_number, award_amount, award_notification_date } = body
+  const client = await env.DB.prepare('SELECT * FROM service_clients WHERE id = ?').bind(parseInt(clientId)).first()
+  if (!client) return err('Client not found', 404)
+  const successFee = (award_amount * (client.success_fee_percentage || 3.0)) / 100
+  const now = Math.floor(Date.now() / 1000)
+  await env.DB.prepare('UPDATE service_clients SET status = ?, award_number = ?, expected_award_amount = ?, success_fee_amount = ?, success_fee_status = ?, award_notification_date = ? WHERE id = ?')
+    .bind('funded', award_number || null, award_amount, successFee, 'due', award_notification_date || null, parseInt(clientId)).run()
+  if (env.RESEND_API_KEY && client.client_email) {
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: `FrankGrant <${env.FROM_EMAIL || 'onboarding@resend.dev'}>`, to: [client.client_email], subject: `Congratulations — Your NIH Grant Has Been Funded!`, html: `<div style="font-family:Georgia,serif;max-width:600px;margin:0 auto;padding:24px;"><h2 style="color:#0d9488;">Congratulations, ${client.client_name}!</h2><p>We are thrilled to hear that your NIH grant application has been funded.</p><p>Per our service agreement, a success fee of <strong>$${successFee.toLocaleString()}</strong> (3% of the $${award_amount.toLocaleString()} award) is due within 30 days of your Notice of Award. This fee is payable from your operating funds, not from grant funds.</p><p>Award number: ${award_number || 'N/A'}</p><p>Please contact us at <a href="mailto:eddie@bannermanmenson.com">eddie@bannermanmenson.com</a> to arrange payment.</p><p>Thank you for trusting FrankGrant with your grant application.</p></div>` })
+    }).catch(() => {})
+  }
+  const updated = await env.DB.prepare('SELECT * FROM service_clients WHERE id = ?').bind(parseInt(clientId)).first()
+  return json(updated)
+}
+
+async function handleCommandNPS(req, env) {
+  const responses = await env.DB.prepare("SELECT nps_score, nps_week, message, created_at FROM feedback_log WHERE nps_score IS NOT NULL ORDER BY created_at DESC LIMIT 100").all()
+  const rows = responses.results || []
+  const total = rows.length
+  const promoters = rows.filter(r => r.nps_score >= 9).length
+  const passives = rows.filter(r => r.nps_score >= 7 && r.nps_score <= 8).length
+  const detractors = rows.filter(r => r.nps_score <= 6).length
+  const nps = total > 0 ? Math.round(((promoters - detractors) / total) * 100) : null
+  return json({ nps, total, promoters, passives, detractors, responses: rows.slice(0, 20) })
+}
+
 // ── Main fetch handler ────────────────────────────────────────────────────────
 export default {
   async fetch(req, env, ctx) {
@@ -4514,6 +4673,11 @@ export default {
       if (path === '/api/status' && req.method === 'GET') {
         return handleAppStatus(req, env)
       }
+
+      // Intake routes (public — no auth) (v6.0.0)
+      if (path === '/api/intake/create-payment-intent' && req.method === 'POST') return handleIntakeCreatePaymentIntent(req, env)
+      if (path === '/api/intake/direct' && req.method === 'POST') return handleIntakeDirect(req, env)
+      if (path === '/api/intake/webhook' && req.method === 'POST') return handleIntakeWebhook(req, env)
 
       // Public shared grant endpoint (no auth required) (v5.7.0)
       const sharedGrantMatch = path.match(/^\/api\/shared\/([a-f0-9]+)$/)
@@ -5015,15 +5179,8 @@ export default {
         if (req.method === 'DELETE') return handleShareDelete(req, env, userId, shareMatch[1])
       }
 
-      // Feedback (for trial requests)
-      if (path === '/api/feedback' && req.method === 'POST') {
-        const body = await req.json()
-        const now = Math.floor(Date.now() / 1000)
-        await env.DB.prepare(
-          'INSERT INTO feedback_log (user_id, feedback_type, message, created_at) VALUES (?, ?, ?, ?)'
-        ).bind(userId, body.type || 'general', body.message || '', now).run()
-        return json({ ok: true })
-      }
+      // Feedback (duplicate route — delegates to handleFeedback)
+      // Note: primary feedback route is handled above at line ~4579
 
       // ── Admin routes ──────────────────────────────────────────────────────
       if (path.startsWith('/api/command')) {
@@ -5049,6 +5206,13 @@ export default {
         const feedbackMatch = path.match(/^\/api\/command\/feedback\/(\d+)$/)
         if (feedbackMatch && req.method === 'PATCH') return handleCommandFeedbackPatch(req, env, feedbackMatch[1])
         if (path === '/api/command/feedback/cluster' && req.method === 'POST') return handleCommandFeedbackCluster(req, env)
+        // Client intake admin routes (v6.0.0)
+        if (path === '/api/command/clients' && req.method === 'GET') return handleCommandClients(req, env)
+        const commandClientMatch = path.match(/^\/api\/command\/clients\/(\d+)$/)
+        if (commandClientMatch && req.method === 'PATCH') return handleCommandClientPatch(req, env, commandClientMatch[1])
+        const commandClientFundedMatch = path.match(/^\/api\/command\/clients\/(\d+)\/mark-funded$/)
+        if (commandClientFundedMatch && req.method === 'POST') return handleCommandClientMarkFunded(req, env, commandClientFundedMatch[1])
+        if (path === '/api/command/nps' && req.method === 'GET') return handleCommandNPS(req, env)
         if (path === '/api/admin/maintenance' && req.method === 'GET') return handleMaintenanceGet(req, env)
         if (path === '/api/admin/maintenance' && req.method === 'POST') return handleMaintenanceSet(req, env)
         if (path === '/api/admin/backup' && req.method === 'POST') return handleAdminBackup(req, env)

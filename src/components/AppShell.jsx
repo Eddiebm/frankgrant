@@ -252,6 +252,15 @@ export default function AppShell({ activeView, setActiveView, activeProject, chi
             )}
           </div>
 
+          {/* Footer links */}
+          {!collapsed && (
+            <div style={{ padding: '8px 12px', fontSize: 11, color: '#9ca3af', borderTop: '1px solid #f3f4f6', textAlign: 'center' }}>
+              © 2026 FrankGrant ·{' '}
+              <a href="/#/terms" style={{ color: '#0e7490', textDecoration: 'none' }}>Terms</a> ·{' '}
+              <a href="/#/privacy" style={{ color: '#0e7490', textDecoration: 'none' }}>Privacy</a>
+            </div>
+          )}
+
           {/* Collapse toggle */}
           <button
             onClick={() => setCollapsed(v => !v)}

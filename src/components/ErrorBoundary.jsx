@@ -16,60 +16,23 @@ export default class ErrorBoundary extends Component {
 
   render() {
     if (this.state.hasError) {
+      const isProd = import.meta.env.PROD
       return (
-        <div style={{
-          minHeight: '100vh',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '2rem',
-          textAlign: 'center'
-        }}>
-          <div style={{
-            maxWidth: 500,
-            padding: '2rem',
-            border: '0.5px solid #e5e5e5',
-            borderRadius: 12,
-            background: '#fafafa'
-          }}>
-            <h1 style={{ fontSize: 20, fontWeight: 500, marginBottom: '0.5rem' }}>
-              Something went wrong
-            </h1>
-            <p style={{ fontSize: 14, color: '#666', marginBottom: '1.5rem', lineHeight: 1.6 }}>
-              An unexpected error occurred. Please refresh the page and try again.
-            </p>
-            <div style={{
-              padding: '0.75rem',
-              background: '#fff',
-              border: '0.5px solid #e5e5e5',
-              borderRadius: 6,
-              fontSize: 12,
-              fontFamily: 'monospace',
-              color: '#dc2626',
-              textAlign: 'left',
-              marginBottom: '1.5rem',
-              maxHeight: 200,
-              overflowY: 'auto'
-            }}>
+        <div style={{ padding: 40, textAlign: 'center' }}>
+          <div style={{ fontSize: 40, marginBottom: 16 }}>⚠️</div>
+          <h2>Something went wrong.</h2>
+          <p style={{ color: '#6b7280', marginBottom: 16 }}>Please refresh the page to continue.</p>
+          {!isProd && (
+            <pre style={{ color: '#dc2626', fontSize: 12, textAlign: 'left', maxWidth: 600, margin: '0 auto 16px', background: '#fef2f2', padding: 12, borderRadius: 6, overflowX: 'auto' }}>
               {this.state.error?.toString()}
-            </div>
-            <button
-              onClick={() => window.location.reload()}
-              style={{
-                padding: '10px 20px',
-                fontSize: 14,
-                fontWeight: 500,
-                border: 'none',
-                borderRadius: 8,
-                cursor: 'pointer',
-                background: '#111',
-                color: '#fff'
-              }}
-            >
-              Reload Page
-            </button>
-          </div>
+            </pre>
+          )}
+          <button
+            onClick={() => window.location.reload()}
+            style={{ padding: '10px 20px', background: '#0e7490', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: 500 }}
+          >
+            Refresh Page
+          </button>
         </div>
       )
     }

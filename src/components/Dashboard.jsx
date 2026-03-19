@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { useUser } from '@clerk/clerk-react'
+import { useAuth } from '@clerk/clerk-react'
 import { useApi } from '../hooks/useApi'
 import UsageMeter from './UsageMeter'
+
+const API_BASE = import.meta.env.VITE_WORKER_URL || '/api'
 
 const STATUS_CONFIG = {
   draft:            { label: 'Draft',           color: '#6b7280', bg: '#f3f4f6', border: '#d1d5db' },
@@ -50,12 +53,19 @@ function DeadlineBadge({ dateStr }) {
 
 export default function Dashboard({ onOpenProject, onNewGrant, initialView = 'projects' }) {
   const { user } = useUser()
+  const { getToken } = useAuth()
   const api = useApi()
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [sharedProjects, setSharedProjects] = useState([])
   const [pendingInvitations, setPendingInvitations] = useState([])
+
+  // NPS widget state
+  const [npsVisible, setNpsVisible] = useState(false)
+  const [npsScore, setNpsScore] = useState(null)
+  const [npsComment, setNpsComment] = useState('')
+  const [npsSubmitted, setNpsSubmitted] = useState(false)
 
   // Pipeline view
   const [pipelineView, setPipelineView] = useState(() => localStorage.getItem('fg_pipeline_view') || 'list')
@@ -86,6 +96,13 @@ export default function Dashboard({ onOpenProject, onNewGrant, initialView = 'pr
       .finally(() => setLoading(false))
     api.getSharedProjects().then(d => setSharedProjects(d.projects || [])).catch(() => {})
     api.getPendingInvitations().then(d => setPendingInvitations(d.invitations || [])).catch(() => {})
+
+    // NPS: show after 7-day gap
+    const lastShown = localStorage.getItem('fg_last_nps_shown')
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
+    if (!lastShown || parseInt(lastShown) < sevenDaysAgo) {
+      setTimeout(() => setNpsVisible(true), 3000)
+    }
   }, [])
 
   function changePipelineView(v) {
@@ -225,6 +242,63 @@ export default function Dashboard({ onOpenProject, onNewGrant, initialView = 'pr
         /* ── My Grants (projects view) ────────────────────────────────────────── */
         <div style={{ padding: '1.5rem' }}>
           <UsageMeter />
+
+          {/* NPS Widget */}
+          {npsVisible && !npsSubmitted && (
+            <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '16px 20px', marginBottom: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#111', marginBottom: 12 }}>How likely are you to recommend FrankGrant to a colleague?</div>
+              <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+                {[0,1,2,3,4,5,6,7,8,9,10].map(n => {
+                  const bg = n <= 6 ? (npsScore === n ? '#dc2626' : '#fee2e2') : n <= 8 ? (npsScore === n ? '#d97706' : '#fef3c7') : (npsScore === n ? '#15803d' : '#dcfce7')
+                  const color = n <= 6 ? '#dc2626' : n <= 8 ? '#d97706' : '#15803d'
+                  return (
+                    <button key={n} onClick={() => setNpsScore(n)} style={{ width: 36, height: 36, borderRadius: 6, border: `2px solid ${npsScore === n ? color : 'transparent'}`, background: bg, color, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                      {n}
+                    </button>
+                  )
+                })}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#9ca3af', marginBottom: 12 }}>
+                <span>Not likely</span><span>Extremely likely</span>
+              </div>
+              {npsScore !== null && (
+                <div style={{ marginBottom: 12 }}>
+                  <input
+                    placeholder="What's the main reason for your score? (optional)"
+                    value={npsComment}
+                    onChange={e => setNpsComment(e.target.value)}
+                    style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }}
+                  />
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={async () => {
+                    if (npsScore !== null) {
+                      const token = await getToken().catch(() => null)
+                      if (token) {
+                        await fetch(`${API_BASE}/feedback`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                          body: JSON.stringify({ type: 'nps', nps_score: npsScore, message: npsComment, nps_week: new Date().toISOString().slice(0, 10) })
+                        }).catch(() => {})
+                      }
+                    }
+                    localStorage.setItem('fg_last_nps_shown', Date.now().toString())
+                    setNpsSubmitted(true)
+                    setTimeout(() => setNpsVisible(false), 2000)
+                  }}
+                  disabled={npsScore === null}
+                  style={{ padding: '8px 16px', background: npsScore === null ? '#e5e7eb' : '#0e7490', color: npsScore === null ? '#9ca3af' : '#fff', border: 'none', borderRadius: 6, cursor: npsScore === null ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600 }}
+                >Submit</button>
+                <button
+                  onClick={() => { localStorage.setItem('fg_last_nps_shown', Date.now().toString()); setNpsVisible(false) }}
+                  style={{ padding: '8px 12px', background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }}
+                >Skip</button>
+              </div>
+              {npsSubmitted && <div style={{ fontSize: 13, color: '#15803d', marginTop: 8 }}>Thank you — your feedback helps us improve FrankGrant.</div>}
+            </div>
+          )}
 
           {/* Deadline Banner */}
           {deadlineBanner.length > 0 && (

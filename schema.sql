@@ -236,3 +236,36 @@ ALTER TABLE projects ADD COLUMN delivery_ready INTEGER DEFAULT 0;
 ALTER TABLE projects ADD COLUMN share_token TEXT;
 ALTER TABLE projects ADD COLUMN share_enabled INTEGER DEFAULT 0;
 ALTER TABLE projects ADD COLUMN share_expires_at INTEGER;
+
+-- ─── CLIENT INTAKE (v6.0.0) ──────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS service_clients (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  client_name TEXT NOT NULL,
+  client_email TEXT NOT NULL,
+  client_institution TEXT,
+  mechanism TEXT,
+  institute TEXT,
+  research_description TEXT,
+  preliminary_data_description TEXT,
+  pi_name TEXT,
+  contact_phone TEXT,
+  status TEXT DEFAULT 'intake_received',
+  upfront_fee_paid REAL DEFAULT 0,
+  upfront_fee_paid_at INTEGER,
+  stripe_payment_intent TEXT,
+  success_fee_percentage REAL DEFAULT 3.0,
+  expected_award_amount REAL,
+  success_fee_amount REAL,
+  success_fee_status TEXT DEFAULT 'pending',
+  success_fee_paid_at INTEGER,
+  award_number TEXT,
+  award_notification_date TEXT,
+  project_id TEXT,
+  admin_notes TEXT,
+  agreement_version TEXT DEFAULT 'v1.0',
+  created_at INTEGER DEFAULT (unixepoch())
+);
+
+-- ─── NPS (v6.0.0) ────────────────────────────────────────────────────────────
+ALTER TABLE feedback_log ADD COLUMN nps_score INTEGER;
+ALTER TABLE feedback_log ADD COLUMN nps_week TEXT;

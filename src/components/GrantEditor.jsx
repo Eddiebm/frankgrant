@@ -3380,112 +3380,146 @@ function downloadTxt(secs, sections, title, mech) {
   a.click()
 }
 
-// ── Commercial Review Modal ────────────────────────────────────────────────────
+// ── Commercial Review Modal (v6.0.0 — NIH 1-9 scale) ─────────────────────────
 function CommercialReviewModal({ results, onClose, onRerun, onRewrite }) {
-  const viabilityConfig = {
-    high: { bg: '#dcfce7', border: '#86efac', text: '#15803d', label: '✅ HIGH VIABILITY' },
-    medium: { bg: '#fef9c3', border: '#fde047', text: '#854d0e', label: '⚠️ MEDIUM VIABILITY' },
-    low: { bg: '#ffedd5', border: '#fdba74', text: '#9a3412', label: '🔶 LOW VIABILITY' },
-    not_viable: { bg: '#fee2e2', border: '#fca5a5', text: '#991b1b', label: '❌ NOT VIABLE' },
-  }
-  const vc = viabilityConfig[results.viability] || viabilityConfig.medium
-  const invConfig = { series_a_ready: { label: 'Series A Ready', color: '#15803d' }, seed_stage: { label: 'Seed Stage', color: '#1d4ed8' }, pre_seed: { label: 'Pre-Seed', color: '#92400e' }, not_ready: { label: 'Not Investor Ready', color: '#991b1b' } }
-  const inv = invConfig[results.investor_readiness] || { label: results.investor_readiness || 'Unknown', color: '#6b7280' }
+  // Detect v6 format (has criteria.significance.score) vs legacy (has market/ip/etc)
+  const isV6 = results?.criteria != null
 
-  function ScoreDimension({ label, dim }) {
-    const [showEvidence, setShowEvidence] = React.useState(false)
-    if (!dim) return null
-    const scoreable = dim.scoreable !== false
-    const pct = scoreable && dim.score != null ? (dim.score / 20) * 100 : 0
-    const color = pct >= 70 ? '#16a34a' : pct >= 40 ? '#d97706' : '#dc2626'
-    const confColor = { high: '#16a34a', medium: '#d97706', low: '#dc2626' }[dim.confidence] || '#6b7280'
+  function NIHCriterionCard({ label, criterion }) {
+    const [expanded, setExpanded] = React.useState(false)
+    if (!criterion) return null
+    const score = criterion.score
+    const scoreColor = score == null ? '#9ca3af' : score <= 3 ? '#16a34a' : score <= 5 ? '#2563eb' : score <= 7 ? '#d97706' : '#dc2626'
+    const NIH_LABELS = { 1: 'Exceptional', 2: 'Outstanding', 3: 'Excellent', 4: 'Very Good', 5: 'Good', 6: 'Satisfactory', 7: 'Fair', 8: 'Marginal', 9: 'Poor' }
     return (
-      <div style={{ marginBottom: 14 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 13 }}>
-          <span style={{ fontWeight: 600 }}>{label}</span>
-          <span style={{ fontWeight: 700, color: scoreable ? color : '#9ca3af' }}>{scoreable && dim.score != null ? `${dim.score}/20` : '—/20'}</span>
+      <div style={{ border: '0.5px solid #e5e5e5', borderRadius: 8, marginBottom: 8, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#f8f8f8', cursor: 'pointer' }} onClick={() => setExpanded(v => !v)}>
+          <div style={{ fontSize: 22, fontWeight: 700, minWidth: 32, color: scoreColor }}>{score ?? '—'}</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>{label}</div>
+            {score != null && <div style={{ fontSize: 11, color: scoreColor, fontWeight: 600 }}>{NIH_LABELS[score] || ''}</div>}
+          </div>
+          <span style={{ color: '#9ca3af', fontSize: 11 }}>{expanded ? '▲' : '▼'}</span>
         </div>
-        {scoreable ? (
-          <>
-            <div style={{ height: 6, background: '#e5e7eb', borderRadius: 3, marginBottom: 8 }}>
-              <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 3 }} />
-            </div>
-            {dim.confidence && <div style={{ fontSize: 10, color: confColor, fontWeight: 600, marginBottom: 4 }}>{dim.confidence.toUpperCase()} CONFIDENCE</div>}
-            <div style={{ fontSize: 12, color: '#374151', lineHeight: 1.5 }}>{dim.feedback}</div>
-            {dim.key_insight && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 4, fontStyle: 'italic' }}>{dim.key_insight}</div>}
-            {(dim.evidence || dim.score_rationale) && (
-              <button onClick={() => setShowEvidence(v => !v)} style={{ ...ghostBtn, fontSize: 10, marginTop: 6, padding: '2px 8px' }}>
-                {showEvidence ? '▲ Hide' : '▼ Why this score'}
-              </button>
-            )}
-            {showEvidence && (
-              <div style={{ marginTop: 8, padding: '10px 12px', background: '#f9fafb', borderRadius: 6, fontSize: 12 }}>
-                {dim.evidence && (
-                  <div style={{ marginBottom: 8 }}>
-                    <div style={{ fontWeight: 600, color: '#374151', marginBottom: 3 }}>Evidence from grant</div>
-                    <div style={{ color: '#374151', lineHeight: 1.6, fontStyle: 'italic', borderLeft: '2px solid #d1d5db', paddingLeft: 10 }}>{dim.evidence}</div>
-                  </div>
-                )}
-                {dim.score_rationale && (
-                  <div>
-                    <div style={{ fontWeight: 600, color: '#374151', marginBottom: 3 }}>Score rationale</div>
-                    <div style={{ color: '#555', lineHeight: 1.6 }}>{dim.score_rationale}</div>
-                  </div>
-                )}
+        {expanded && (
+          <div style={{ padding: '10px 14px', background: '#fff', borderTop: '0.5px solid #e5e5e5', fontSize: 12 }}>
+            {(criterion.strengths || []).length > 0 && (
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ fontWeight: 600, color: '#15803d', marginBottom: 4 }}>Strengths</div>
+                {criterion.strengths.map((s, i) => <div key={i} style={{ paddingLeft: 10, borderLeft: '2px solid #86efac', marginBottom: 3, color: '#374151' }}>{s}</div>)}
               </div>
             )}
-          </>
-        ) : (
-          <div style={{ padding: '8px 12px', background: '#f9fafb', border: '0.5px solid #e5e5e5', borderRadius: 6, marginBottom: 4 }}>
-            <div style={{ fontSize: 12, color: '#6b7280', fontWeight: 500 }}>⚠ Complete this section to receive a score</div>
-            {dim.unscorable_reason && <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 3, fontStyle: 'italic' }}>{dim.unscorable_reason}</div>}
+            {(criterion.weaknesses || []).length > 0 && (
+              <div>
+                <div style={{ fontWeight: 600, color: '#dc2626', marginBottom: 4 }}>Weaknesses</div>
+                {criterion.weaknesses.map((w, i) => <div key={i} style={{ paddingLeft: 10, borderLeft: '2px solid #fca5a5', marginBottom: 3, color: '#374151' }}>{w}</div>)}
+              </div>
+            )}
           </div>
         )}
       </div>
     )
   }
 
+  // Legacy 0-100 scale display (for old results stored in DB)
+  function LegacyScoreDimension({ label, dim }) {
+    const [showEvidence, setShowEvidence] = React.useState(false)
+    if (!dim) return null
+    const scoreable = dim.scoreable !== false
+    const pct = scoreable && dim.score != null ? (dim.score / 20) * 100 : 0
+    const color = pct >= 70 ? '#16a34a' : pct >= 40 ? '#d97706' : '#dc2626'
+    return (
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 13 }}>
+          <span style={{ fontWeight: 600 }}>{label}</span>
+          <span style={{ fontWeight: 700, color: scoreable ? color : '#9ca3af' }}>{scoreable && dim.score != null ? `${dim.score}/20` : '—/20'}</span>
+        </div>
+        {scoreable && (
+          <>
+            <div style={{ height: 6, background: '#e5e7eb', borderRadius: 3, marginBottom: 8 }}>
+              <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 3 }} />
+            </div>
+            <div style={{ fontSize: 12, color: '#374151', lineHeight: 1.5 }}>{dim.feedback}</div>
+            {(dim.evidence || dim.score_rationale) && (
+              <button onClick={() => setShowEvidence(v => !v)} style={{ ...ghostBtn, fontSize: 10, marginTop: 6, padding: '2px 8px' }}>
+                {showEvidence ? '▲ Hide' : '▼ Why this score'}
+              </button>
+            )}
+            {showEvidence && dim.evidence && (
+              <div style={{ marginTop: 8, padding: '10px 12px', background: '#f9fafb', borderRadius: 6, fontSize: 12 }}>
+                <div style={{ fontWeight: 600, color: '#374151', marginBottom: 3 }}>Evidence from grant</div>
+                <div style={{ color: '#374151', lineHeight: 1.6, fontStyle: 'italic', borderLeft: '2px solid #d1d5db', paddingLeft: 10 }}>{dim.evidence}</div>
+              </div>
+            )}
+          </>
+        )}
+        {!scoreable && (
+          <div style={{ padding: '8px 12px', background: '#f9fafb', border: '0.5px solid #e5e5e5', borderRadius: 6 }}>
+            <div style={{ fontSize: 12, color: '#6b7280' }}>⚠ Complete this section to receive a score</div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const impactScore = isV6 ? results.consensus_impact_score : results.overall_score
+  const impactColor = isV6
+    ? (impactScore <= 20 ? '#16a34a' : impactScore <= 40 ? '#2563eb' : impactScore <= 60 ? '#d97706' : '#dc2626')
+    : ((impactScore || 0) >= 70 ? '#15803d' : (impactScore || 0) >= 50 ? '#d97706' : '#dc2626')
+
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1000, overflowY: 'auto', padding: '2rem 1rem' }}>
       <div style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 680 }}>
         <div style={{ padding: '1.25rem 1.5rem', borderBottom: '0.5px solid #e5e5e5', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 17 }}>💰 Commercial Review</div>
-            <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>VC & Commercialization Expert Assessment</div>
+            <div style={{ fontWeight: 700, fontSize: 17 }}>🏛️ NIH Commercial Review</div>
+            <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>{results.reviewer || 'NIH Study Section Assessment'}</div>
           </div>
           <button onClick={onClose} style={{ ...ghostBtn, padding: '4px 10px', fontSize: 13 }}>✕</button>
         </div>
         <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          {/* Viability + Overall Score */}
-          <div style={{ display: 'flex', gap: 12 }}>
-            <div style={{ flex: 1, padding: '16px 20px', background: vc.bg, border: `1.5px solid ${vc.border}`, borderRadius: 10, textAlign: 'center' }}>
-              <div style={{ fontSize: 16, fontWeight: 700, color: vc.text }}>{vc.label}</div>
-            </div>
-            <div style={{ padding: '16px 20px', background: '#f8f8f8', borderRadius: 10, textAlign: 'center', minWidth: 100 }}>
-              <div style={{ fontSize: 11, color: '#888', marginBottom: 4, fontWeight: 600 }}>SCORE</div>
-              <div style={{ fontSize: 28, fontWeight: 700, color: (results.overall_score || 0) >= 70 ? '#15803d' : (results.overall_score || 0) >= 50 ? '#d97706' : '#dc2626' }}>{results.overall_score || 0}</div>
-              <div style={{ fontSize: 10, color: '#9ca3af' }}>/ 100</div>
-            </div>
-            <div style={{ padding: '16px 20px', background: '#f8f8f8', borderRadius: 10, textAlign: 'center', minWidth: 120 }}>
-              <div style={{ fontSize: 11, color: '#888', marginBottom: 4, fontWeight: 600 }}>INVESTOR READINESS</div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: inv.color }}>{inv.label}</div>
-            </div>
+
+          {/* Scale note */}
+          <div style={{ padding: '8px 12px', background: '#f0f9ff', border: '0.5px solid #7dd3fc', borderRadius: 8, fontSize: 12, color: '#0369a1' }}>
+            {results.scale_note || 'NIH scale: 1 = Exceptional, 9 = Poor. Impact score 10–99: lower is better.'}
           </div>
 
-          {/* 5 Dimension Scores */}
-          <div>
-            <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12 }}>Dimension Scores</div>
-            <ScoreDimension label="🏪 Market Assessment" dim={results.market} />
-            <ScoreDimension label="🔒 IP Strategy" dim={results.ip} />
-            <ScoreDimension label="🏥 Regulatory Pathway" dim={results.regulatory} />
-            <ScoreDimension label="💵 Revenue Model" dim={results.revenue_model} />
-            <ScoreDimension label="👥 Commercial Team" dim={results.commercial_team} />
-            {results.commercial_team?.gaps?.length > 0 && (
-              <div style={{ marginTop: -8, marginBottom: 14, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {results.commercial_team.gaps.map((g, i) => <span key={i} style={{ fontSize: 11, background: '#fee2e2', color: '#991b1b', padding: '2px 8px', borderRadius: 10 }}>{g}</span>)}
-              </div>
+          {/* Impact Score */}
+          <div style={{ textAlign: 'center', padding: '20px', background: '#f8f8f8', borderRadius: 10 }}>
+            <div style={{ fontSize: 11, color: '#888', fontWeight: 600, marginBottom: 4 }}>
+              {isV6 ? 'CONSENSUS IMPACT SCORE' : 'OVERALL SCORE'}
+            </div>
+            <div style={{ fontSize: 44, fontWeight: 800, color: impactColor, lineHeight: 1 }}>{impactScore ?? '—'}</div>
+            <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>
+              {isV6 ? 'NIH scale 10-99 · lower is better' : '/ 100'}
+            </div>
+            {results.impact_rationale && (
+              <div style={{ fontSize: 12, color: '#374151', marginTop: 10, lineHeight: 1.5, maxWidth: 400, margin: '10px auto 0' }}>{results.impact_rationale.split('|')[0]}</div>
             )}
           </div>
+
+          {/* v6 NIH Criteria */}
+          {isV6 && results.criteria && (
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12 }}>Criterion Scores (NIH 1-9 Scale)</div>
+              <NIHCriterionCard label="Significance" criterion={results.criteria.significance} />
+              <NIHCriterionCard label="Investigators" criterion={results.criteria.investigators} />
+              <NIHCriterionCard label="Approach" criterion={results.criteria.approach} />
+              <NIHCriterionCard label="Innovation" criterion={results.criteria.innovation} />
+            </div>
+          )}
+
+          {/* Legacy dimensions */}
+          {!isV6 && (
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12 }}>Dimension Scores</div>
+              <LegacyScoreDimension label="🏪 Market Assessment" dim={results.market} />
+              <LegacyScoreDimension label="🔒 IP Strategy" dim={results.ip} />
+              <LegacyScoreDimension label="🏥 Regulatory Pathway" dim={results.regulatory} />
+              <LegacyScoreDimension label="💵 Revenue Model" dim={results.revenue_model} />
+              <LegacyScoreDimension label="👥 Commercial Team" dim={results.commercial_team} />
+            </div>
+          )}
 
           {/* Strengths + Weaknesses */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -3495,42 +3529,21 @@ function CommercialReviewModal({ results, onClose, onRerun, onRewrite }) {
                 {results.strengths.map((s, i) => <div key={i} style={{ fontSize: 12, marginBottom: 6, paddingLeft: 12, borderLeft: '2px solid #86efac' }}>{s}</div>)}
               </div>
             )}
-            {(results.critical_weaknesses || []).length > 0 && (
+            {(results.weaknesses || results.critical_weaknesses || []).length > 0 && (
               <div>
-                <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 8, color: '#dc2626' }}>Critical Weaknesses</div>
-                {results.critical_weaknesses.map((w, i) => <div key={i} style={{ fontSize: 12, marginBottom: 6, paddingLeft: 12, borderLeft: '2px solid #fca5a5' }}>{w}</div>)}
+                <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 8, color: '#dc2626' }}>Weaknesses</div>
+                {(results.weaknesses || results.critical_weaknesses || []).map((w, i) => <div key={i} style={{ fontSize: 12, marginBottom: 6, paddingLeft: 12, borderLeft: '2px solid #fca5a5' }}>{w}</div>)}
               </div>
             )}
           </div>
 
-          {/* Top Improvements */}
-          {(results.top_improvements || []).length > 0 && (
-            <div>
-              <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 8 }}>Top Improvements to Make</div>
-              {results.top_improvements.map((imp, i) => (
-                <div key={i} style={{ display: 'flex', gap: 8, padding: '8px 12px', background: '#fffbeb', borderRadius: 8, fontSize: 12, marginBottom: 6 }}>
-                  <span style={{ fontWeight: 700, color: '#d97706' }}>{i + 1}.</span>
-                  <span>{imp}</span>
-                </div>
-              ))}
+          {/* Bottom line (legacy only) */}
+          {!isV6 && results.bottom_line && (
+            <div style={{ padding: '12px 16px', background: '#1e293b', borderRadius: 8 }}>
+              <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4, fontWeight: 600 }}>BOTTOM LINE</div>
+              <div style={{ fontSize: 12, color: '#f1f5f9', lineHeight: 1.5 }}>{results.bottom_line}</div>
             </div>
           )}
-
-          {/* Phase 3 readiness + bottom line */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            {results.phase3_readiness && (
-              <div style={{ padding: '12px 16px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8 }}>
-                <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4, fontWeight: 600 }}>PHASE III READINESS</div>
-                <div style={{ fontSize: 12 }}>{results.phase3_readiness}</div>
-              </div>
-            )}
-            {results.bottom_line && (
-              <div style={{ padding: '12px 16px', background: '#1e293b', borderRadius: 8 }}>
-                <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4, fontWeight: 600 }}>BOTTOM LINE</div>
-                <div style={{ fontSize: 12, color: '#f1f5f9', lineHeight: 1.5 }}>{results.bottom_line}</div>
-              </div>
-            )}
-          </div>
 
           <MissingComponentsPanel missingComponents={results.missing_components} packageCritique={results.package_completeness_critique} />
         </div>

@@ -57,7 +57,9 @@ export default function CommandStation({ onBack }) {
     { id: 'grants', label: 'Grant Intelligence' },
     { id: 'product', label: 'Product Health' },
     { id: 'security', label: 'Security' },
-    { id: 'feedback', label: 'Feedback' }
+    { id: 'feedback', label: 'Feedback' },
+    { id: 'clients', label: 'Clients' },
+    { id: 'nps', label: 'NPS' },
   ]
 
   return (
@@ -112,6 +114,8 @@ export default function CommandStation({ onBack }) {
           {activeTab === 'product' && <ProductPanel data={data.product} />}
           {activeTab === 'security' && <SecurityPanel data={data.security} />}
           {activeTab === 'feedback' && <FeedbackPanel data={data.feedback} api={api} onRefresh={loadAllData} />}
+          {activeTab === 'clients' && <ClientsPanel api={api} />}
+          {activeTab === 'nps' && <NPSPanel api={api} />}
         </>
       )}
     </div>
@@ -889,6 +893,243 @@ function FeedbackPanel({ data, api, onRefresh }) {
             )}
           </div>
         </div>
+      )}
+    </div>
+  )
+}
+
+// ── CLIENTS PANEL (v6.0.0) ───────────────────────────────────────────────────
+function ClientsPanel({ api }) {
+  const [clients, setClients] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [fundedModal, setFundedModal] = useState(null)
+  const [fundedForm, setFundedForm] = useState({ award_number: '', award_amount: '', award_notification_date: '' })
+
+  useEffect(() => { loadClients() }, [])
+
+  async function loadClients() {
+    setLoading(true)
+    try {
+      const res = await fetch(`${import.meta.env.VITE_WORKER_URL}/command/clients`, {
+        headers: { Authorization: `Bearer ${await api.getToken()}` }
+      })
+      const data = await res.json()
+      setClients(data.clients || [])
+    } catch (e) { alert('Failed to load clients: ' + e.message) }
+    setLoading(false)
+  }
+
+  async function patchClient(id, body) {
+    await fetch(`${import.meta.env.VITE_WORKER_URL}/command/clients/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await api.getToken()}` },
+      body: JSON.stringify(body)
+    })
+    loadClients()
+  }
+
+  async function markFunded() {
+    if (!fundedModal) return
+    await fetch(`${import.meta.env.VITE_WORKER_URL}/command/clients/${fundedModal.id}/mark-funded`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await api.getToken()}` },
+      body: JSON.stringify(fundedForm)
+    })
+    setFundedModal(null)
+    loadClients()
+  }
+
+  const STATUS_COLORS = {
+    intake_received: { bg: '#eff6ff', color: '#2563eb' },
+    in_progress: { bg: '#f0fdf4', color: '#15803d' },
+    draft_sent: { bg: '#fef9c3', color: '#92400e' },
+    submitted: { bg: '#f5f3ff', color: '#7c3aed' },
+    funded: { bg: '#dcfce7', color: '#166534' },
+    closed: { bg: '#f9fafb', color: '#6b7280' },
+  }
+
+  const total = clients.length
+  const inProgress = clients.filter(c => c.status === 'in_progress').length
+  const funded = clients.filter(c => c.status === 'funded').length
+  const totalRevenue = clients.reduce((s, c) => s + (c.upfront_fee_paid || 0) + (c.success_fee_amount && c.success_fee_status === 'paid' ? c.success_fee_amount : 0), 0)
+
+  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: '#666' }}>Loading clients...</div>
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem' }}>
+        <StatCard label="Total Clients" value={total} />
+        <StatCard label="In Progress" value={inProgress} />
+        <StatCard label="Funded" value={funded} />
+        <StatCard label="Total Revenue" value={`$${totalRevenue.toLocaleString()}`} />
+      </div>
+
+      {clients.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '3rem', color: '#888', border: '1px dashed #e5e7eb', borderRadius: 8 }}>No clients yet — intake submissions will appear here.</div>
+      ) : (
+        <Section title="Service Clients">
+          <table style={tableStyle}>
+            <thead>
+              <tr>
+                <th style={thStyle}>Name / Email</th>
+                <th style={thStyle}>Mechanism</th>
+                <th style={thStyle}>Status</th>
+                <th style={thStyle}>Upfront Fee</th>
+                <th style={thStyle}>Success Fee</th>
+                <th style={thStyle}>Date</th>
+                <th style={thStyle}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {clients.map(c => {
+                const sc = STATUS_COLORS[c.status] || STATUS_COLORS.intake_received
+                return (
+                  <tr key={c.id}>
+                    <td style={tdStyle}>
+                      <div style={{ fontWeight: 600, fontSize: 13 }}>{c.client_name}</div>
+                      <div style={{ fontSize: 11, color: '#888' }}>{c.client_email}</div>
+                      {c.client_institution && <div style={{ fontSize: 11, color: '#888' }}>{c.client_institution}</div>}
+                    </td>
+                    <td style={tdStyle}>{c.mechanism || '—'}</td>
+                    <td style={tdStyle}>
+                      <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: sc.bg, color: sc.color, fontWeight: 600 }}>{c.status?.replace(/_/g, ' ')}</span>
+                    </td>
+                    <td style={tdStyle}>{c.upfront_fee_paid > 0 ? `$${c.upfront_fee_paid.toLocaleString()} paid` : '—'}</td>
+                    <td style={tdStyle}>
+                      {c.success_fee_amount ? (
+                        <span style={{ fontSize: 11 }}>${c.success_fee_amount.toLocaleString()} ({c.success_fee_status})</span>
+                      ) : '—'}
+                    </td>
+                    <td style={tdStyle}>{new Date(c.created_at * 1000).toLocaleDateString()}</td>
+                    <td style={tdStyle}>
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        <select
+                          value={c.status}
+                          onChange={e => patchClient(c.id, { status: e.target.value })}
+                          style={{ fontSize: 11, padding: '3px 6px', border: '1px solid #e5e7eb', borderRadius: 4, cursor: 'pointer' }}
+                        >
+                          {['intake_received', 'in_progress', 'draft_sent', 'submitted', 'funded', 'closed'].map(s => (
+                            <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
+                          ))}
+                        </select>
+                        {c.status !== 'funded' && (
+                          <button onClick={() => { setFundedModal(c); setFundedForm({ award_number: '', award_amount: '', award_notification_date: '' }) }} style={{ fontSize: 11, padding: '3px 8px', background: '#dcfce7', color: '#166534', border: '1px solid #86efac', borderRadius: 4, cursor: 'pointer' }}>
+                            Mark Funded
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </Section>
+      )}
+
+      {fundedModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: '#fff', borderRadius: 12, padding: 28, maxWidth: 420, width: '90%' }}>
+            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 16 }}>Mark as Funded — {fundedModal.client_name}</div>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Award Number</div>
+              <input value={fundedForm.award_number} onChange={e => setFundedForm(f => ({ ...f, award_number: e.target.value }))} style={{ width: '100%', padding: '8px 10px', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} placeholder="e.g. 1R43CA123456-01" />
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Award Amount ($)</div>
+              <input type="number" value={fundedForm.award_amount} onChange={e => setFundedForm(f => ({ ...f, award_amount: e.target.value }))} style={{ width: '100%', padding: '8px 10px', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} placeholder="e.g. 300000" />
+            </div>
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Notification Date</div>
+              <input type="date" value={fundedForm.award_notification_date} onChange={e => setFundedForm(f => ({ ...f, award_notification_date: e.target.value }))} style={{ width: '100%', padding: '8px 10px', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
+            </div>
+            {fundedForm.award_amount && (
+              <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 6, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#15803d' }}>
+                Success fee: ${(parseFloat(fundedForm.award_amount) * 0.03).toLocaleString(undefined, { maximumFractionDigits: 0 })} (3% of award)
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setFundedModal(null)} style={{ ...backBtn, flex: 1 }}>Cancel</button>
+              <button onClick={markFunded} style={{ flex: 1, padding: '8px', background: '#15803d', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Confirm Funded</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── NPS PANEL (v6.0.0) ───────────────────────────────────────────────────────
+function NPSPanel({ api }) {
+  const [npsData, setNpsData] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true)
+      try {
+        const res = await fetch(`${import.meta.env.VITE_WORKER_URL}/command/nps`, {
+          headers: { Authorization: `Bearer ${await api.getToken()}` }
+        })
+        setNpsData(await res.json())
+      } catch (e) { console.error(e) }
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: '#666' }}>Loading NPS data...</div>
+  if (!npsData) return null
+
+  const { nps, total, promoters, passives, detractors, responses } = npsData
+  const npsColor = nps == null ? '#9ca3af' : nps >= 50 ? '#15803d' : nps >= 0 ? '#d97706' : '#dc2626'
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem' }}>
+        <div style={{ padding: '1rem', border: '0.5px solid #e5e5e5', borderRadius: 8, background: '#fff', textAlign: 'center' }}>
+          <div style={{ fontSize: 11, color: '#666', marginBottom: 4, textTransform: 'uppercase' }}>NPS Score</div>
+          <div style={{ fontSize: 40, fontWeight: 700, color: npsColor }}>{nps ?? '—'}</div>
+          <div style={{ fontSize: 11, color: '#9ca3af' }}>Net Promoter Score</div>
+        </div>
+        <StatCard label="Total Responses" value={total} />
+        <StatCard label="Promoters (9-10)" value={promoters} />
+        <StatCard label="Passives (7-8)" value={passives} />
+        <StatCard label="Detractors (0-6)" value={detractors} />
+      </div>
+
+      {(responses || []).length > 0 && (
+        <Section title="Recent NPS Responses">
+          <table style={tableStyle}>
+            <thead>
+              <tr>
+                <th style={thStyle}>Score</th>
+                <th style={thStyle}>Comment</th>
+                <th style={thStyle}>Week</th>
+                <th style={thStyle}>Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {responses.map((r, i) => {
+                const sc = r.nps_score >= 9 ? '#15803d' : r.nps_score >= 7 ? '#d97706' : '#dc2626'
+                return (
+                  <tr key={i}>
+                    <td style={tdStyle}>
+                      <span style={{ fontWeight: 700, color: sc, fontSize: 15 }}>{r.nps_score}</span>
+                    </td>
+                    <td style={tdStyle}>{r.message || '—'}</td>
+                    <td style={tdStyle}>{r.nps_week || '—'}</td>
+                    <td style={tdStyle}>{new Date(r.created_at * 1000).toLocaleDateString()}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </Section>
+      )}
+
+      {total === 0 && (
+        <div style={{ textAlign: 'center', padding: '3rem', color: '#888', border: '1px dashed #e5e7eb', borderRadius: 8 }}>No NPS responses yet — the widget will appear on user dashboards after 7 days.</div>
       )}
     </div>
   )

@@ -1,8 +1,8 @@
 # FrankGrant Status Document
 
 **Last Updated:** 2026-03-19
-**Version:** 5.8.0
-**Status:** Production (Internal COARE Tool)
+**Version:** 6.0.0
+**Status:** Launch Ready
 
 ---
 
@@ -11,7 +11,7 @@
 | Resource | URL/ID | Status |
 |----------|--------|--------|
 | **Frontend (Pages)** | https://frankgrant.pages.dev | ✅ Live |
-| **Latest Preview** | https://f159de0c.frankgrant.pages.dev | ✅ Live |
+| **Latest Preview** | https://ee4588d3.frankgrant.pages.dev | ✅ Live |
 | **R2 Bucket** | frankgrant-backups | ✅ Live |
 | **API Worker** | https://frankgrant-worker.eddie-781pagesdev.workers.dev | ✅ Live |
 | **D1 Database** | frankgrant-db | ✅ Live |
@@ -23,6 +23,27 @@
 ---
 
 ## ✅ Features: Built & Deployed
+
+### **v6.0.0 — Unified NIH Scoring, Client Intake, NPS, Terms/Privacy, Polish**
+
+- ✅ **NIH Commercial Reviewer — 3-reviewer consensus** — `handleCommercialReview` now runs 3 parallel Sonnet calls using `Dr. Patricia Osei` (NIH SRO) persona; each call focuses on a different criterion pair (Significance+Investigators, Approach+Environment, Innovation+IP); results synthesized into consensus impact score (NIH 10-99 scale) plus per-criterion scores (NIH 1-9)
+- ✅ **NIH_COMMERCIAL_REVIEWER_SYSTEM** exported from `personas.js`; also inlined in `api.js` as `NIH_COMMERCIAL_REVIEWER_SYSTEM` const
+- ✅ **CommercialReviewModal redesigned** — auto-detects v6 format (criteria.significance) vs legacy (market/ip); v6 shows NIH 1-9 criterion cards with strengths/weaknesses per criterion; scale note banner explains 1=Exceptional, 9=Poor
+- ✅ **Client Intake Portal** — public page at `/#/hire` (no auth); form with mechanism selector, fee calculator, research description, preliminary data; submits to `POST /api/intake/direct`; admin notification email via Resend
+- ✅ **service_clients table** — migrated to remote D1; tracks intake status, upfront fee, success fee (3%), award data
+- ✅ **Command Station Clients tab** — fetches all clients, shows stats (total/in-progress/funded/revenue), table with status dropdown + Mark Funded modal; mark-funded auto-calculates 3% success fee and sends congratulations email
+- ✅ **Intake routes** (public, no auth): `POST /api/intake/create-payment-intent`, `POST /api/intake/direct`, `POST /api/intake/webhook`
+- ✅ **Admin routes**: `GET /api/command/clients`, `PATCH /api/command/clients/:id`, `POST /api/command/clients/:id/mark-funded`
+- ✅ **Voice Mode pricing gate** — already implemented in VoiceMode.jsx (checks `/api/users/me` voice_enabled); upgrade modal shown when disabled (v4.4.0+)
+- ✅ **NPS widget** — appears on Dashboard after 7-day gap; 0-10 scale with color coding; submits to `/api/feedback` with nps_score + nps_week; localStorage throttle
+- ✅ **NPS in Command Station** — new NPS tab; fetches `/api/command/nps`; shows score, promoters/passives/detractors breakdown, recent responses table
+- ✅ **feedback_log NPS columns** — `nps_score INTEGER` and `nps_week TEXT` migrated to remote DB
+- ✅ **handleFeedback updated** — now inserts nps_score and nps_week columns
+- ✅ **Terms of Service page** — `/#/terms` (public, no auth); covers platform + done-for-you service, IP ownership, payment terms, success fee, limitation of liability, Oklahoma law
+- ✅ **Privacy Policy page** — `/#/privacy` (public, no auth); covers data collection, storage (Cloudflare D1 USA), retention (2 years), GDPR/CCPA rights
+- ✅ **App.jsx routing** — `/#/hire`, `/#/terms`, `/#/privacy` all checked before Clerk auth gate
+- ✅ **AppShell footer** — Terms + Privacy links in sidebar (desktop, non-collapsed)
+- ✅ **ErrorBoundary** — production mode hides stack trace; dev mode shows colored pre block
 
 ### **Complete Navigation Rebuild — AppShell, Responsive Mobile, Editor Redesign (v5.8.0)**
 - ✅ **App.jsx refactored as router** — `AppRouter` component manages `currentView` state ('dashboard' | 'editor' | 'wizard' | 'biosketch' | 'letters' | 'pipeline' | 'command' | 'scorer') and `activeProject`; all view transitions happen here

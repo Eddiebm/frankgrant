@@ -12,6 +12,9 @@ import FeedbackButton from './components/FeedbackButton'
 import CommandStation from './components/CommandStation'
 import GrantWizard from './components/GrantWizard'
 import Scorer from './components/Scorer'
+import IntakePage from './components/IntakePage'
+import TermsPage from './components/TermsPage'
+import PrivacyPage from './components/PrivacyPage'
 import { useApi } from './hooks/useApi'
 
 const API_BASE = import.meta.env.VITE_WORKER_URL || '/api'
@@ -156,6 +159,11 @@ export default function App() {
   const sharedMatch = window.location.hash.match(/^#\/shared\/([a-f0-9]+)$/)
   const sharedToken = sharedMatch?.[1] || null
 
+  // Public pages (no auth required) — v6.0.0
+  const isTermsPage = window.location.hash === '#/terms'
+  const isPrivacyPage = window.location.hash === '#/privacy'
+  const isHirePage = window.location.hash === '#/hire' || window.location.hash.startsWith('#/hire')
+
   useEffect(() => {
     if (isStatusPage || sharedToken) return
     async function checkHealth() {
@@ -197,6 +205,9 @@ export default function App() {
 
   if (isStatusPage) return <StatusPage />
   if (sharedToken) return <SharedGrantView token={sharedToken} />
+  if (isTermsPage) return <TermsPage />
+  if (isPrivacyPage) return <PrivacyPage />
+  if (isHirePage) return <IntakePage />
 
   if (maintenanceData) {
     return <MaintenancePage message={maintenanceData.message} eta={maintenanceData.eta} />
