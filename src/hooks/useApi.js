@@ -170,6 +170,12 @@ export function useApi() {
   // Reference Verification
   async function verifyReferences(projectId, sectionName, content) { return request('POST', `/projects/${projectId}/verify-references`, { section_name: sectionName, content }) }
 
+  // Quality Review (v5.5.0)
+  async function runQualityAll(projectId) { return request('POST', `/projects/${projectId}/quality/run-all`, {}) }
+  async function runQualityPass1(projectId) { return request('POST', `/projects/${projectId}/quality/pass1`, {}) }
+  async function runQualityPass2(projectId) { return request('POST', `/projects/${projectId}/quality/pass2`, {}) }
+  async function runQualityPass3(projectId) { return request('POST', `/projects/${projectId}/quality/pass3`, {}) }
+
   return {
     callAI, listProjects, createProject, getProject, updateProject, deleteProject, getUsage,
     parseFOA, searchGrants, analyzeGrant, saveReference, getCompliance, getToken,
@@ -183,5 +189,6 @@ export function useApi() {
     assignSection, createSnapshot, getVersions, getVersion, restoreVersion,
     getAnthropicStatus, getAppStatus,
     getSubmissionPackage, activateSubmissionPackage, rewriteGrant, verifyReferences,
+    runQualityAll, runQualityPass1, runQualityPass2, runQualityPass3,
   }
 }

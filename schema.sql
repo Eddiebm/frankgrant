@@ -220,3 +220,14 @@ CREATE TABLE IF NOT EXISTS submission_packages (
 
 CREATE INDEX IF NOT EXISTS idx_submission_packages_user ON submission_packages(user_id);
 CREATE INDEX IF NOT EXISTS idx_submission_packages_project ON submission_packages(project_id);
+
+-- ─── THREE-PASS QUALITY REVIEW (v5.5.0) ─────────────────────────────────────
+ALTER TABLE projects ADD COLUMN quality_pass1_results TEXT;
+ALTER TABLE projects ADD COLUMN quality_pass2_results TEXT;
+ALTER TABLE projects ADD COLUMN quality_pass3_results TEXT;
+ALTER TABLE projects ADD COLUMN quality_pass1_at INTEGER;
+ALTER TABLE projects ADD COLUMN quality_pass2_at INTEGER;
+ALTER TABLE projects ADD COLUMN quality_pass3_at INTEGER;
+ALTER TABLE projects ADD COLUMN quality_certified INTEGER DEFAULT 0;
+ALTER TABLE projects ADD COLUMN quality_certified_at INTEGER;
+ALTER TABLE projects ADD COLUMN delivery_ready INTEGER DEFAULT 0;

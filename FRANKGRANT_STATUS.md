@@ -1,7 +1,7 @@
 # FrankGrant Status Document
 
 **Last Updated:** 2026-03-19
-**Version:** 5.4.0
+**Version:** 5.5.0
 **Status:** Production (Internal COARE Tool)
 
 ---
@@ -11,7 +11,7 @@
 | Resource | URL/ID | Status |
 |----------|--------|--------|
 | **Frontend (Pages)** | https://frankgrant.pages.dev | ✅ Live |
-| **Latest Preview** | https://b61043ef.frankgrant.pages.dev | ✅ Live |
+| **Latest Preview** | https://f159de0c.frankgrant.pages.dev | ✅ Live |
 | **R2 Bucket** | frankgrant-backups | ✅ Live |
 | **API Worker** | https://frankgrant-worker.eddie-781pagesdev.workers.dev | ✅ Live |
 | **D1 Database** | frankgrant-db | ✅ Live |
@@ -23,6 +23,20 @@
 ---
 
 ## ✅ Features: Built & Deployed
+
+### **Three-Pass Quality Review + Five-Database Reference Verification + Delivery Gate (v5.5.0)**
+- ✅ **Five-database reference verification** - PubMed, CrossRef, Semantic Scholar, OpenAlex, Europe PMC checked in parallel via Promise.allSettled; 200ms delay between citations; verified/likely_real/not_found/needs_manual_check statuses with confidence scores
+- ✅ **Pass 1 — Scientific Accuracy** - Sonnet checks for invented claims, unverified numbers, misrepresented methods; Haiku extracts all citations and verifies each against 5 databases; any hallucinated citation blocks certification
+- ✅ **Pass 2 — NIH Compliance** - Programmatic page limit checks (Research Strategy, Specific Aims, Commercialization); required section presence; Haiku content checks (rigor/reproducibility, timeline, go/no-go criteria, IACUC references)
+- ✅ **Pass 3 — Reviewer Simulation** - Full 3-reviewer study section + commercial review for SBIR/STTR; blocks delivery if impact score >40 or any criterion ≥7
+- ✅ **Three-Pass Orchestrator** - Sequential passes, stops at first failure, certifies and sets delivery_ready=1 if all pass
+- ✅ **Quality certification resets on edit** - PUT /projects/:id resets quality_certified=0 and delivery_ready=0 when sections change
+- ✅ **QualityReviewPanel** - Collapsible panel in writer tab with pass status indicators, certified/failed banners, database grids for hallucinated citations, re-certification notice
+- ✅ **Delivery gate** - NIH Package (.zip) export disabled until quality_certified=1; tooltip explains requirement
+- ✅ **Updated ReferenceVerifier** - Multi-database grid showing all 5 databases per citation, reliability badge (HIGH/MEDIUM/LOW), matched records with PMID/DOI links
+- ✅ **Command Station quality metrics** - Health panel shows certified-this-month, delivery-ready count, avg scores, failing-quality grant list
+- ✅ **D1 schema** - 9 new quality columns on projects table
+- ✅ **Worker routes** - POST /quality/pass1, /pass2, /pass3, /run-all
 
 ### **Post-Review Rewrite + Track Changes + Reference Checking + Submission Package (v5.4.0)**
 - ✅ **Post-Review Rewrite** - Sonnet rewrites all grant sections based on reviewer feedback (study section, PD review, advisory council, commercial review, aims optimizer, compliance)

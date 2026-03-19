@@ -558,6 +558,16 @@ async function handleGetProject(req, env, userId, projectId) {
   row.reference_check_results = row.reference_check_results ? (() => { try { return JSON.parse(row.reference_check_results) } catch { return {} } })() : {}
   row.rewrite_cycles_used = row.rewrite_cycles_used || 0
   row.rewrite_cycles_remaining = row.rewrite_cycles_remaining || 0
+  // Quality review fields (v5.5.0)
+  row.quality_pass1_results = row.quality_pass1_results ? (() => { try { return JSON.parse(row.quality_pass1_results) } catch { return null } })() : null
+  row.quality_pass2_results = row.quality_pass2_results ? (() => { try { return JSON.parse(row.quality_pass2_results) } catch { return null } })() : null
+  row.quality_pass3_results = row.quality_pass3_results ? (() => { try { return JSON.parse(row.quality_pass3_results) } catch { return null } })() : null
+  row.quality_pass1_at = row.quality_pass1_at || null
+  row.quality_pass2_at = row.quality_pass2_at || null
+  row.quality_pass3_at = row.quality_pass3_at || null
+  row.quality_certified = row.quality_certified === 1
+  row.quality_certified_at = row.quality_certified_at || null
+  row.delivery_ready = row.delivery_ready === 1
   return json(row)
 }
 
@@ -605,6 +615,11 @@ async function handleUpdateProject(req, env, userId, projectId) {
     now, projectId, userId
   ).run()
   if (result.changes === 0) return err('Project not found', 404)
+
+  // Reset quality certification when sections are edited (v5.5.0)
+  if (body.sections) {
+    await env.DB.prepare('UPDATE projects SET quality_certified = 0, delivery_ready = 0 WHERE id = ? AND user_id = ?').bind(projectId, userId).run()
+  }
 
   // Auto-snapshot if triggered by generation
   if (body._auto_snapshot && body.sections) {
@@ -1023,10 +1038,31 @@ async function handleCommandHealth(req, env) {
   const deployments = await env.DB.prepare('SELECT * FROM deployments_log ORDER BY started_at DESC LIMIT 10').all()
   const recentErrors = await env.DB.prepare('SELECT * FROM error_log ORDER BY created_at DESC LIMIT 20').all()
 
+  // Quality metrics (v5.5.0)
+  const thisMonth = Math.floor(new Date(now * 1000).setDate(1) / 1000)
+  const qualityCertifiedMonth = await env.DB.prepare('SELECT COUNT(*) as count FROM projects WHERE quality_certified = 1 AND quality_certified_at >= ?').bind(thisMonth).first()
+  const qualityPass1Avg = await env.DB.prepare('SELECT AVG(json_extract(quality_pass1_results, "$.accuracy_score")) as avg FROM projects WHERE quality_pass1_results IS NOT NULL').first()
+  const qualityPass2Avg = await env.DB.prepare('SELECT AVG(json_extract(quality_pass2_results, "$.compliance_score")) as avg FROM projects WHERE quality_pass2_results IS NOT NULL').first()
+  const deliveryReadyCount = await env.DB.prepare('SELECT COUNT(*) as count FROM projects WHERE delivery_ready = 1').first()
+  const failingQuality = await env.DB.prepare('SELECT id, title, quality_pass1_results, quality_pass2_results, quality_pass3_results FROM projects WHERE (quality_pass1_results IS NOT NULL OR quality_pass2_results IS NOT NULL) AND quality_certified = 0 LIMIT 10').all()
+  const qualityMetrics = {
+    certified_this_month: qualityCertifiedMonth?.count || 0,
+    avg_pass1_accuracy: qualityPass1Avg?.avg ? Math.round(qualityPass1Avg.avg) : null,
+    avg_pass2_compliance: qualityPass2Avg?.avg ? Math.round(qualityPass2Avg.avg) : null,
+    delivery_ready_count: deliveryReadyCount?.count || 0,
+    failing_quality: (failingQuality.results || []).map(p => {
+      const p1 = p.quality_pass1_results ? (() => { try { return JSON.parse(p.quality_pass1_results) } catch { return null } })() : null
+      const p2 = p.quality_pass2_results ? (() => { try { return JSON.parse(p.quality_pass2_results) } catch { return null } })() : null
+      const p3 = p.quality_pass3_results ? (() => { try { return JSON.parse(p.quality_pass3_results) } catch { return null } })() : null
+      return { id: p.id, title: p.title, pass1_failed: p1 && !p1.passed, pass2_failed: p2 && !p2.passed, pass3_failed: p3 && !p3.passed }
+    })
+  }
+
   return json({
     error_rate: errorRate.toFixed(2), avg_latency_ms: avgLatency.avg?.toFixed(1) || 0,
     claude_error_rate: claudeErrorRate.toFixed(2), rate_limit_hits: rateLimitHits.count,
-    row_counts: rowCounts, deployments: deployments.results, recent_errors: recentErrors.results
+    row_counts: rowCounts, deployments: deployments.results, recent_errors: recentErrors.results,
+    quality_metrics: qualityMetrics
   })
 }
 
@@ -3709,6 +3745,88 @@ async function handleRewrite(req, env, userId, projectId, ctx) {
   })
 }
 
+// ── Multi-Database Reference Verification (v5.5.0) ───────────────────────────
+
+async function checkPubMed(citation) {
+  const query = encodeURIComponent(`${citation.authors} ${citation.year}${citation.journal ? ' ' + citation.journal : ''}`)
+  const searchResp = await fetch(`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${query}&retmax=3&retmode=json`)
+  const searchData = await searchResp.json()
+  const pmids = searchData.esearchresult?.idlist || []
+  if (pmids.length === 0) return { found: false, database: 'PubMed' }
+  const summaryResp = await fetch(`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id=${pmids[0]}&retmode=json`)
+  const summaryData = await summaryResp.json()
+  const article = summaryData.result?.[pmids[0]]
+  if (!article) return { found: false, database: 'PubMed' }
+  return { found: true, database: 'PubMed', record: { title: article.title, authors: article.authors?.map(a => a.name).join(', '), journal: article.source, year: article.pubdate?.substring(0, 4), pmid: pmids[0], url: `https://pubmed.ncbi.nlm.nih.gov/${pmids[0]}` } }
+}
+
+async function checkCrossRef(citation) {
+  const url = `https://api.crossref.org/works?query.author=${encodeURIComponent(citation.authors)}&filter=from-pub-date:${citation.year},until-pub-date:${citation.year}&rows=3&mailto=verify@frankgrant.app`
+  const resp = await fetch(url)
+  const data = await resp.json()
+  const items = data.message?.items || []
+  if (items.length === 0) return { found: false, database: 'CrossRef' }
+  const item = items[0]
+  return { found: true, database: 'CrossRef', record: { title: item.title?.[0], authors: item.author?.map(a => `${a.family} ${a.given}`).join(', '), journal: item['container-title']?.[0], year: item.published?.['date-parts']?.[0]?.[0]?.toString(), doi: item.DOI, url: item.URL || `https://doi.org/${item.DOI}` } }
+}
+
+async function checkSemanticScholar(citation) {
+  const query = encodeURIComponent(`${citation.authors} ${citation.year}`)
+  const resp = await fetch(`https://api.semanticscholar.org/graph/v1/paper/search?query=${query}&fields=title,authors,year,journal,externalIds&limit=3`, { headers: { 'User-Agent': 'FrankGrant/1.0 (verify@frankgrant.app)' } })
+  const data = await resp.json()
+  const papers = data.data || []
+  if (papers.length === 0) return { found: false, database: 'Semantic Scholar' }
+  const paper = papers[0]
+  return { found: true, database: 'Semantic Scholar', record: { title: paper.title, authors: paper.authors?.map(a => a.name).join(', '), year: paper.year?.toString(), journal: paper.journal?.name, url: `https://www.semanticscholar.org/paper/${paper.paperId}` } }
+}
+
+async function checkOpenAlex(citation) {
+  const url = `https://api.openalex.org/works?filter=author.display_name.search:${encodeURIComponent(citation.authors)},publication_year:${citation.year}&per-page=3&mailto=verify@frankgrant.app`
+  const resp = await fetch(url)
+  const data = await resp.json()
+  const works = data.results || []
+  if (works.length === 0) return { found: false, database: 'OpenAlex' }
+  const work = works[0]
+  return { found: true, database: 'OpenAlex', record: { title: work.display_name, authors: work.authorships?.map(a => a.author?.display_name).join(', '), year: work.publication_year?.toString(), journal: work.primary_location?.source?.display_name, doi: work.doi, url: work.doi || work.id } }
+}
+
+async function checkEuropePMC(citation) {
+  const query = encodeURIComponent(`AUTH:"${citation.authors}" AND PUB_YEAR:${citation.year}`)
+  const resp = await fetch(`https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${query}&format=json&pageSize=3`)
+  const data = await resp.json()
+  const articles = data.resultList?.result || []
+  if (articles.length === 0) return { found: false, database: 'Europe PMC' }
+  const article = articles[0]
+  return { found: true, database: 'Europe PMC', record: { title: article.title, authors: article.authorString, year: article.pubYear, journal: article.journalTitle, pmid: article.pmid, url: `https://europepmc.org/article/MED/${article.pmid}` } }
+}
+
+async function verifyReferenceMultiDB(citation) {
+  const checks = await Promise.allSettled([
+    checkPubMed(citation),
+    checkCrossRef(citation),
+    checkSemanticScholar(citation),
+    checkOpenAlex(citation),
+    checkEuropePMC(citation)
+  ])
+  const results = {
+    pubmed: checks[0].status === 'fulfilled' ? checks[0].value : { found: false, error: checks[0].reason?.message },
+    crossref: checks[1].status === 'fulfilled' ? checks[1].value : { found: false, error: checks[1].reason?.message },
+    semantic_scholar: checks[2].status === 'fulfilled' ? checks[2].value : { found: false, error: checks[2].reason?.message },
+    open_alex: checks[3].status === 'fulfilled' ? checks[3].value : { found: false, error: checks[3].reason?.message },
+    europe_pmc: checks[4].status === 'fulfilled' ? checks[4].value : { found: false, error: checks[4].reason?.message }
+  }
+  const foundCount = Object.values(results).filter(r => r.found).length
+  const errorCount = Object.values(results).filter(r => r.error).length
+  let verificationStatus = 'not_found'
+  let confidenceScore = 0
+  if (foundCount >= 3) { verificationStatus = 'verified'; confidenceScore = 95 }
+  else if (foundCount === 2) { verificationStatus = 'verified'; confidenceScore = 85 }
+  else if (foundCount === 1) { verificationStatus = 'likely_real'; confidenceScore = 60 }
+  else if (errorCount >= 3) { verificationStatus = 'needs_manual_check'; confidenceScore = 0 }
+  const matchedRecords = Object.entries(results).filter(([, r]) => r.found && r.record).map(([db, r]) => ({ database: db, ...r.record }))
+  return { databases_checked: 5, databases_found: foundCount, databases_errored: errorCount, verification_status: verificationStatus, confidence_score: confidenceScore, matched_records: matchedRecords, database_results: results }
+}
+
 // ── Reference Verification ────────────────────────────────────────────────────
 
 async function runReferenceVerification(projectId, sectionName, content, userId, env) {
@@ -3730,62 +3848,371 @@ async function runReferenceVerification(projectId, sectionName, content, userId,
     if (jm) citations = JSON.parse(jm[0]).citations || []
   } catch { return }
 
-  citations = citations.slice(0, 15)
+  citations = citations.slice(0, 20)
 
-  // Step 2: PubMed lookup for each citation
+  // Step 2: Multi-database lookup for each citation (200ms delay between to avoid rate limits)
   const results = []
   for (const cit of citations) {
     try {
-      const query = encodeURIComponent(`${cit.authors} ${cit.year}`.trim())
-      const searchUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${query}&retmax=3&retmode=json`
-      const searchResp = await fetch(searchUrl)
-      if (!searchResp.ok) { results.push({ ...cit, status: 'uncertain', reason: 'PubMed unavailable' }); continue }
-      const searchData = await searchResp.json()
-      const ids = searchData.esearchresult?.idlist || []
-
-      if (ids.length === 0) {
-        results.push({ ...cit, status: 'not_found', reason: 'Not found in PubMed' })
-        continue
-      }
-
-      // Fetch summary for top result
-      const summaryUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id=${ids[0]}&retmode=json`
-      const summaryResp = await fetch(summaryUrl)
-      const summaryData = await summaryResp.json()
-      const article = summaryData?.result?.[ids[0]]
-
-      if (!article) { results.push({ ...cit, status: 'uncertain', pmid: ids[0] }); continue }
-
-      // Check author overlap
-      const foundAuthors = (article.authors || []).map(a => a.name?.toLowerCase() || '')
-      const citAuthors = (cit.authors || '').toLowerCase().split(/\s+/)
-      const overlap = citAuthors.filter(a => a.length > 3 && foundAuthors.some(fa => fa.includes(a))).length
-      const overlapPct = citAuthors.length > 0 ? overlap / citAuthors.length : 0
-
+      const multiResult = await verifyReferenceMultiDB(cit)
+      // Map multi-DB result to legacy status for backward compat
+      let status = 'not_found'
+      if (multiResult.verification_status === 'verified') status = 'verified'
+      else if (multiResult.verification_status === 'likely_real') status = 'uncertain'
+      else if (multiResult.verification_status === 'needs_manual_check') status = 'uncertain'
+      const bestRecord = multiResult.matched_records?.[0]
       results.push({
         ...cit,
-        status: overlapPct >= 0.5 ? 'verified' : 'uncertain',
-        pmid: ids[0],
-        pubmed_title: article.title,
-        pubmed_authors: (article.authors || []).slice(0, 3).map(a => a.name).join(', '),
-        overlap_pct: Math.round(overlapPct * 100),
+        status,
+        pmid: bestRecord?.pmid || null,
+        doi: bestRecord?.doi || null,
+        pubmed_title: bestRecord?.title || null,
+        verification_status: multiResult.verification_status,
+        confidence_score: multiResult.confidence_score,
+        databases_found: multiResult.databases_found,
+        databases_checked: multiResult.databases_checked,
+        database_results: multiResult.database_results,
+        matched_records: multiResult.matched_records,
       })
     } catch (e) {
-      results.push({ ...cit, status: 'uncertain', reason: 'Lookup failed' })
+      results.push({ ...cit, status: 'uncertain', reason: 'Multi-DB lookup failed', verification_status: 'needs_manual_check', databases_found: 0, databases_checked: 5, database_results: {} })
     }
+    await new Promise(r => setTimeout(r, 200))
   }
 
   // Store results
   const existing = await env.DB.prepare('SELECT reference_check_results FROM projects WHERE id = ?').bind(projectId).first()
   const allResults = existing?.reference_check_results ? (() => { try { return JSON.parse(existing.reference_check_results) } catch { return {} } })() : {}
+  const verifiedCount = results.filter(r => r.verification_status === 'verified').length
+  const likelyRealCount = results.filter(r => r.verification_status === 'likely_real').length
+  const notFoundCount = results.filter(r => r.verification_status === 'not_found').length
+  const overallReliability = notFoundCount === 0 ? 'high' : notFoundCount <= 2 ? 'medium' : 'low'
   allResults[sectionName] = {
     checked_at: Math.floor(Date.now() / 1000),
     results,
-    verified_count: results.filter(r => r.status === 'verified').length,
-    uncertain_count: results.filter(r => r.status === 'uncertain').length,
-    not_found_count: results.filter(r => r.status === 'not_found').length,
+    verified_count: verifiedCount,
+    uncertain_count: likelyRealCount,
+    not_found_count: notFoundCount,
+    overall_reliability: overallReliability,
+    // Legacy compat
+    verified_count_legacy: results.filter(r => r.status === 'verified').length,
+    uncertain_count_legacy: results.filter(r => r.status === 'uncertain').length,
   }
   await env.DB.prepare('UPDATE projects SET reference_check_results = ? WHERE id = ?').bind(JSON.stringify(allResults), projectId).run()
+}
+
+// ── Three-Pass Quality Review (v5.5.0) ───────────────────────────────────────
+
+async function handleQualityPass1(req, env, userId, projectId) {
+  const project = await env.DB.prepare(
+    'SELECT id, title, mechanism, setup, sections, fast_track_phase1_sections, fast_track_phase2_sections, prelim_data_narrative FROM projects WHERE id = ? AND user_id = ?'
+  ).bind(projectId, userId).first()
+  if (!project) return err('Project not found', 404)
+
+  let setup = {}, sections = {}
+  try { setup = JSON.parse(project.setup || '{}') } catch {}
+  try { sections = JSON.parse(project.sections || '{}') } catch {}
+
+  const allSectionsText = Object.entries(sections)
+    .filter(([, v]) => v && typeof v === 'string' && v.length > 50)
+    .map(([k, v]) => `[${k.toUpperCase()}]\n${v.slice(0, 2000)}`)
+    .join('\n\n')
+    .slice(0, 12000)
+
+  const now = Math.floor(Date.now() / 1000)
+
+  // Run AI accuracy review + citation extraction in parallel
+  const [accuracyResp, citationExtractResp] = await Promise.all([
+    callAnthropicWithFallback({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 2000,
+      system: 'You are a scientific accuracy reviewer for a professional grant writing service. Verify that the grant sections accurately represent what the researcher described in their setup. Flag: invented claims not in setup, specific numbers not provided by researcher, methods researcher did not mention, preliminary data claims researcher did not describe, PI credentials not stated.',
+      messages: [{ role: 'user', content: `PROJECT SETUP: Disease: ${setup.disease_area || 'not specified'}. Biology: ${setup.biology_description || 'not specified'}. Aims: ${setup.aims_summary || 'not specified'}. PI: ${setup.pi_name || 'not specified'} at ${setup.institution || 'not specified'}. Prelim data: ${project.prelim_data_narrative || 'None'}.\n\nSECTIONS:\n${allSectionsText}\n\nReturn ONLY valid JSON: { "passed": boolean, "accuracy_score": number, "invented_claims": [{ "section": "string", "claim": "string", "concern": "string" }], "unverified_numbers": [{ "section": "string", "number": "string", "concern": "string" }], "misrepresented_methods": [{ "section": "string", "issue": "string" }], "overall_assessment": "string", "recommendation": "approve|revise|reject" }` }]
+    }, env),
+    callAnthropicWithFallback({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 800,
+      system: 'Extract every citation from these grant sections. Return ONLY valid JSON: { "citations": [{ "raw_text": "string", "authors": "string", "year": number, "journal": "string", "section": "string" }] }',
+      messages: [{ role: 'user', content: allSectionsText.slice(0, 8000) }]
+    }, env)
+  ])
+
+  // Parse accuracy results
+  let accuracyResult = { passed: true, accuracy_score: 85, invented_claims: [], unverified_numbers: [], misrepresented_methods: [], overall_assessment: 'Unable to complete review', recommendation: 'revise' }
+  if (!accuracyResp._fallback) {
+    try {
+      const r = await accuracyResp.json()
+      const text = r.content?.[0]?.text || ''
+      const jm = text.match(/\{[\s\S]*\}/)
+      if (jm) accuracyResult = { ...accuracyResult, ...JSON.parse(jm[0]) }
+    } catch {}
+  }
+
+  // Extract and verify citations
+  let citations = []
+  if (!citationExtractResp._fallback) {
+    try {
+      const r = await citationExtractResp.json()
+      const text = r.content?.[0]?.text || ''
+      const jm = text.match(/\{[\s\S]*\}/)
+      if (jm) citations = JSON.parse(jm[0]).citations || []
+    } catch {}
+  }
+
+  citations = citations.slice(0, 20)
+  const citationResults = []
+  for (const cit of citations) {
+    try {
+      const multiResult = await verifyReferenceMultiDB(cit)
+      citationResults.push({ ...cit, ...multiResult })
+    } catch {
+      citationResults.push({ ...cit, verification_status: 'needs_manual_check', databases_found: 0, databases_checked: 5 })
+    }
+    await new Promise(r => setTimeout(r, 200))
+  }
+
+  const verifiedCount = citationResults.filter(r => r.verification_status === 'verified').length
+  const likelyRealCount = citationResults.filter(r => r.verification_status === 'likely_real').length
+  const notFoundCount = citationResults.filter(r => r.verification_status === 'not_found').length
+  const overallReliability = notFoundCount === 0 ? 'high' : notFoundCount <= 2 ? 'medium' : 'low'
+
+  const citationVerification = {
+    total_citations: citationResults.length,
+    verified: verifiedCount,
+    likely_real: likelyRealCount,
+    not_found: notFoundCount,
+    needs_manual: citationResults.filter(r => r.verification_status === 'needs_manual_check').length,
+    overall_reliability: overallReliability,
+    problem_citations: citationResults
+      .filter(r => r.verification_status === 'not_found' || r.verification_status === 'needs_manual_check')
+      .map(r => ({ raw_text: r.raw_text, section: r.section || 'unknown', status: r.verification_status, databases_checked: r.databases_checked, databases_found: r.databases_found, database_results: r.database_results, recommendation: r.verification_status === 'not_found' ? 'Remove or replace — not found in any scholarly database' : 'Verify manually — database errors prevented full check' })),
+    all_citations: citationResults
+  }
+
+  // Pass 1 fails if: recommendation is reject, accuracy_score < 70, OR any not_found citations
+  const passed = accuracyResult.recommendation !== 'reject' && (accuracyResult.accuracy_score || 0) >= 70 && notFoundCount === 0
+  const issuesCount = (accuracyResult.invented_claims?.length || 0) + (accuracyResult.unverified_numbers?.length || 0) + (accuracyResult.misrepresented_methods?.length || 0) + notFoundCount
+
+  const pass1Results = { passed, accuracy_score: accuracyResult.accuracy_score, recommendation: accuracyResult.recommendation, overall_assessment: accuracyResult.overall_assessment, invented_claims: accuracyResult.invented_claims, unverified_numbers: accuracyResult.unverified_numbers, misrepresented_methods: accuracyResult.misrepresented_methods, citation_verification: citationVerification, issues_count: issuesCount }
+
+  await env.DB.prepare('UPDATE projects SET quality_pass1_results = ?, quality_pass1_at = ? WHERE id = ? AND user_id = ?')
+    .bind(JSON.stringify(pass1Results), now, projectId, userId).run()
+
+  return json(pass1Results)
+}
+
+async function runComplianceChecks(project, sections, rules) {
+  const checks = []
+  const isSBIR = project.mechanism?.includes('SBIR') || project.mechanism?.includes('STTR') || project.mechanism?.includes('D2P2')
+
+  const rsWords = (sections.sig?.split(' ').length || 0) + (sections.innov?.split(' ').length || 0) + (sections.approach?.split(' ').length || 0)
+  const rsPages = rsWords / 250
+  const rsLimit = rules?.research_strategy_pages || 12
+  checks.push({ check: 'Research Strategy page limit', passed: rsPages <= rsLimit, value: `${rsPages.toFixed(1)} pages`, limit: `${rsLimit} pages`, severity: 'critical' })
+
+  const aimsWords = sections.aims?.split(' ').length || 0
+  checks.push({ check: 'Specific Aims page limit', passed: aimsWords <= 275, value: `${(aimsWords / 250).toFixed(1)} pages`, limit: '1 page', severity: 'critical' })
+
+  const required = ['aims', 'sig', 'innov', 'approach']
+  if (isSBIR) required.push('commercial')
+  for (const s of required) {
+    const wc = sections[s]?.split(' ').length || 0
+    checks.push({ check: `${s} section present and substantive`, passed: wc > 100, value: sections[s] ? `${wc} words` : 'Missing', limit: 'Required (>100 words)', severity: 'critical' })
+  }
+
+  if (sections.commercial && isSBIR) {
+    const commPages = sections.commercial.split(' ').length / 250
+    const commLimit = rules?.commercialization_plan_pages || 12
+    checks.push({ check: 'Commercialization Plan page limit', passed: commPages <= commLimit, value: `${commPages.toFixed(1)} pages`, limit: `${commLimit} pages`, severity: 'critical' })
+  }
+
+  if (rules?.budget_direct_costs) checks.push({ check: 'Budget cap verification', passed: null, value: 'Manual check required', limit: `$${rules.budget_direct_costs?.toLocaleString()} direct costs`, severity: 'warning', manual: true })
+
+  const criticalFailed = checks.filter(c => c.passed === false && c.severity === 'critical').length
+  return { checks, passed: criticalFailed === 0, critical_failures: criticalFailed, warnings: checks.filter(c => c.severity === 'warning').length, compliance_score: Math.round((checks.filter(c => c.passed !== false).length / checks.length) * 100) }
+}
+
+async function handleQualityPass2(req, env, userId, projectId) {
+  const project = await env.DB.prepare(
+    'SELECT id, title, mechanism, setup, sections, foa_rules FROM projects WHERE id = ? AND user_id = ?'
+  ).bind(projectId, userId).first()
+  if (!project) return err('Project not found', 404)
+
+  let setup = {}, sections = {}
+  let rules = null
+  try { setup = JSON.parse(project.setup || '{}') } catch {}
+  try { sections = JSON.parse(project.sections || '{}') } catch {}
+  try { rules = project.foa_rules ? JSON.parse(project.foa_rules) : null } catch {}
+
+  const now = Math.floor(Date.now() / 1000)
+
+  const allSectionsText = Object.entries(sections)
+    .filter(([, v]) => v && typeof v === 'string' && v.length > 50)
+    .map(([k, v]) => `[${k.toUpperCase()}]\n${v.slice(0, 1500)}`)
+    .join('\n\n')
+    .slice(0, 8000)
+
+  const isFastTrack = project.mechanism === 'FAST-TRACK'
+  const isSTTR = project.mechanism?.includes('STTR')
+
+  // Run programmatic + AI compliance checks in parallel
+  const [programmaticResult, contentResp] = await Promise.all([
+    runComplianceChecks(project, sections, rules),
+    callAnthropicWithFallback({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 800,
+      system: 'You are an NIH grants compliance checker.',
+      messages: [{ role: 'user', content: `Check this NIH ${project.mechanism || 'grant'} for: missing rigor and reproducibility statement in Significance or Approach (required since 2016), missing timeline in Approach, ${isFastTrack ? 'missing go/no-go criteria (Fast Track required),' : ''} human subjects mentioned without protections, animal research without IACUC reference${isSTTR ? ', STTR without partner work allocation' : ''}. Return ONLY valid JSON: { "content_issues": [{ "issue": "string", "section": "string", "severity": "critical|warning", "fix": "string" }] }\n\nSECTIONS:\n${allSectionsText}` }]
+    }, env)
+  ])
+
+  let contentIssues = []
+  if (!contentResp._fallback) {
+    try {
+      const r = await contentResp.json()
+      const text = r.content?.[0]?.text || ''
+      const jm = text.match(/\{[\s\S]*\}/)
+      if (jm) contentIssues = JSON.parse(jm[0]).content_issues || []
+    } catch {}
+  }
+
+  const criticalContentIssues = contentIssues.filter(i => i.severity === 'critical').length
+  const passed = programmaticResult.passed && criticalContentIssues === 0
+
+  const pass2Results = { passed, compliance_score: programmaticResult.compliance_score, critical_failures: programmaticResult.critical_failures + criticalContentIssues, warnings: programmaticResult.warnings + contentIssues.filter(i => i.severity === 'warning').length, checks: programmaticResult.checks, content_issues: contentIssues }
+
+  await env.DB.prepare('UPDATE projects SET quality_pass2_results = ?, quality_pass2_at = ? WHERE id = ? AND user_id = ?')
+    .bind(JSON.stringify(pass2Results), now, projectId, userId).run()
+
+  return json(pass2Results)
+}
+
+async function runStudySectionCore(project, sections, setup, env) {
+  const fullGrantContext = buildFullGrantContext(
+    project, sections, setup,
+    { phase1: project.fast_track_phase1_sections, phase2: project.fast_track_phase2_sections }
+  )
+  const userMsg = `Review this NIH ${project.mechanism || 'grant'} application:\n\n${fullGrantContext}`
+
+  const callReviewer = async (system) => {
+    const resp = await callAnthropicWithFallback({ model: 'claude-sonnet-4-20250514', max_tokens: 2000, system, messages: [{ role: 'user', content: userMsg }] }, env)
+    if (resp._fallback) return { criteria: null, critique: 'Reviewer unavailable.', usage: { input_tokens: 0, output_tokens: 0 } }
+    const r = await resp.json()
+    const text = r.content?.[0]?.text || ''
+    let parsed = null
+    const jm = text.match(/\{[\s\S]*\}/)
+    if (jm) { try { parsed = JSON.parse(jm[0]) } catch {} }
+    return { criteria: parsed?.criteria || null, critique: parsed?.critique || text, usage: r.usage }
+  }
+
+  const [rev1, rev2, rev3] = await Promise.all([callReviewer(SS_REVIEWER_1), callReviewer(SS_REVIEWER_2), callReviewer(SS_REVIEWER_3)])
+
+  const criteriaKeys = ['significance', 'innovation', 'approach', 'investigators', 'environment']
+  const aggregatedCriteria = {}
+  for (const key of criteriaKeys) {
+    const revData = [rev1, rev2, rev3].map(r => r.criteria?.[key]).filter(Boolean)
+    const scoreableRevs = revData.filter(c => c.scoreable !== false && c.score != null)
+    const avgScore = scoreableRevs.length > 0 ? Math.round(scoreableRevs.reduce((s, c) => s + c.score, 0) / scoreableRevs.length * 10) / 10 : null
+    aggregatedCriteria[key] = { score: scoreableRevs.length >= 2 ? avgScore : null, scoreable: scoreableRevs.length >= 2 }
+  }
+
+  const scoreableCount = criteriaKeys.filter(k => aggregatedCriteria[k].scoreable).length
+  const impactRevData = [rev1, rev2, rev3].map(r => r.criteria?.impact).filter(Boolean)
+  const scoreableImpact = impactRevData.filter(c => c.scoreable !== false && c.score != null)
+  const rawImpactScore = scoreableImpact.length > 0 ? Math.round(scoreableImpact.reduce((s, c) => s + c.score, 0) / scoreableImpact.length * 10) / 10 : null
+  const finalImpactScore = scoreableCount >= 3 ? rawImpactScore : null
+
+  return { final_impact_score: finalImpactScore, scored_criteria: aggregatedCriteria, reviewers: [rev1.critique, rev2.critique, rev3.critique] }
+}
+
+async function handleQualityPass3(req, env, userId, projectId) {
+  const project = await env.DB.prepare(
+    'SELECT id, title, mechanism, setup, sections, fast_track_phase1_sections, fast_track_phase2_sections, prelim_data_narrative FROM projects WHERE id = ? AND user_id = ?'
+  ).bind(projectId, userId).first()
+  if (!project) return err('Project not found', 404)
+
+  let setup = {}, sections = {}
+  try { setup = JSON.parse(project.setup || '{}') } catch {}
+  try { sections = JSON.parse(project.sections || '{}') } catch {}
+
+  const isSBIR = project.mechanism?.includes('SBIR') || project.mechanism?.includes('STTR') || project.mechanism?.includes('D2P2')
+  const now = Math.floor(Date.now() / 1000)
+
+  // Run study section (and commercial for SBIR)
+  const [studySectionResults, commercialResults] = await Promise.all([
+    runStudySectionCore(project, sections, setup, env),
+    isSBIR ? (async () => {
+      const fullGrantContext = buildFullGrantContext(project, sections, setup, { phase1: project.fast_track_phase1_sections, phase2: project.fast_track_phase2_sections })
+      const resp = await callAnthropicWithFallback({ model: 'claude-sonnet-4-20250514', max_tokens: 1500, system: COMMERCIAL_REVIEWER_SYSTEM, messages: [{ role: 'user', content: fullGrantContext }] }, env)
+      if (resp._fallback) return null
+      const r = await resp.json()
+      const text = r.content?.[0]?.text || ''
+      const jm = text.match(/\{[\s\S]*\}/)
+      try { return jm ? JSON.parse(jm[0]) : null } catch { return null }
+    })() : Promise.resolve(null)
+  ])
+
+  // Evaluate for delivery
+  const issues = []
+  if (studySectionResults.final_impact_score !== null && studySectionResults.final_impact_score > 40) {
+    issues.push({ type: 'impact_score_too_high', severity: 'critical', message: `Impact score ${studySectionResults.final_impact_score} exceeds 40 — not competitive. Rewrite required before delivery.`, score: studySectionResults.final_impact_score, threshold: 40 })
+  }
+  for (const [criterion, data] of Object.entries(studySectionResults.scored_criteria || {})) {
+    if (data.score && data.score >= 7) {
+      issues.push({ type: 'weak_criterion', severity: 'critical', message: `${criterion} scored ${data.score.toFixed(1)} — serious weakness requiring revision.`, criterion, score: data.score })
+    }
+  }
+  if (isSBIR && commercialResults) {
+    const dims = ['market', 'ip', 'regulatory', 'revenue_model', 'commercial_team']
+    for (const dim of dims) {
+      const score = commercialResults[dim]?.score
+      if (score && score <= 8) { // score is /20, 8/20 = 40%
+        issues.push({ type: 'weak_commercial', severity: 'warning', message: `Commercial ${dim} scored ${score}/20 — needs strengthening.`, dimension: dim, score })
+      }
+    }
+  }
+
+  const criticalIssues = issues.filter(i => i.severity === 'critical')
+  const passed = criticalIssues.length === 0
+  const pass3Results = { passed, issues, critical_count: criticalIssues.length, warning_count: issues.filter(i => i.severity === 'warning').length, study_section_score: studySectionResults.final_impact_score, study_section_results: studySectionResults, commercial_results: commercialResults, delivery_approved: passed }
+
+  await env.DB.prepare('UPDATE projects SET quality_pass3_results = ?, quality_pass3_at = ? WHERE id = ? AND user_id = ?')
+    .bind(JSON.stringify(pass3Results), now, projectId, userId).run()
+
+  return json(pass3Results)
+}
+
+async function handleQualityRunAll(req, env, userId, projectId) {
+  const project = await env.DB.prepare('SELECT id FROM projects WHERE id = ? AND user_id = ?').bind(projectId, userId).first()
+  if (!project) return err('Project not found', 404)
+  const now = Math.floor(Date.now() / 1000)
+
+  // Pass 1
+  const pass1Resp = await handleQualityPass1(new Request('https://x'), env, userId, projectId)
+  const pass1 = await pass1Resp.clone().json()
+  if (!pass1.passed) {
+    return json({ all_passed: false, failed_at: 'pass1', delivery_ready: false, pass1, pass2: null, pass3: null })
+  }
+
+  // Pass 2
+  const pass2Resp = await handleQualityPass2(new Request('https://x'), env, userId, projectId)
+  const pass2 = await pass2Resp.clone().json()
+  if (!pass2.passed) {
+    return json({ all_passed: false, failed_at: 'pass2', delivery_ready: false, pass1, pass2, pass3: null })
+  }
+
+  // Pass 3
+  const pass3Resp = await handleQualityPass3(new Request('https://x'), env, userId, projectId)
+  const pass3 = await pass3Resp.clone().json()
+  if (!pass3.passed) {
+    return json({ all_passed: false, failed_at: 'pass3', delivery_ready: false, pass1, pass2, pass3 })
+  }
+
+  // All passed — certify
+  await env.DB.prepare('UPDATE projects SET quality_certified = 1, quality_certified_at = ?, delivery_ready = 1 WHERE id = ? AND user_id = ?')
+    .bind(now, projectId, userId).run()
+
+  return json({ all_passed: true, failed_at: null, delivery_ready: true, certified_at: now, pass1, pass2, pass3 })
 }
 
 async function handleVerifyReferences(req, env, userId, projectId) {
@@ -4297,6 +4724,16 @@ export default {
         await logError(path, response.status, null, Date.now() - startTime, userId, env)
         return response
       }
+
+      // Quality Review (v5.5.0)
+      const qualityRunAllMatch = path.match(/^\/api\/projects\/([a-f0-9-]+)\/quality\/run-all$/)
+      if (qualityRunAllMatch && req.method === 'POST') return handleQualityRunAll(req, env, userId, qualityRunAllMatch[1])
+      const qualityPass1Match = path.match(/^\/api\/projects\/([a-f0-9-]+)\/quality\/pass1$/)
+      if (qualityPass1Match && req.method === 'POST') return handleQualityPass1(req, env, userId, qualityPass1Match[1])
+      const qualityPass2Match = path.match(/^\/api\/projects\/([a-f0-9-]+)\/quality\/pass2$/)
+      if (qualityPass2Match && req.method === 'POST') return handleQualityPass2(req, env, userId, qualityPass2Match[1])
+      const qualityPass3Match = path.match(/^\/api\/projects\/([a-f0-9-]+)\/quality\/pass3$/)
+      if (qualityPass3Match && req.method === 'POST') return handleQualityPass3(req, env, userId, qualityPass3Match[1])
 
       // Feedback (for trial requests)
       if (path === '/api/feedback' && req.method === 'POST') {

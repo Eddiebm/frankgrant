@@ -9,6 +9,7 @@ import BibliographyManager from './BibliographyManager'
 import TrackChangesViewer from './TrackChangesViewer'
 import SubmissionPackageModal from './SubmissionPackageModal'
 import ReferenceVerifier from './ReferenceVerifier'
+import QualityReviewPanel from './QualityReviewPanel'
 import { generateGrantDOCX } from '../lib/docxExport'
 import { generateSubmissionPackage } from '../lib/docxExportPackage'
 import {
@@ -1420,6 +1421,12 @@ export default function GrantEditor({ project, onSave, onBack }) {
             ))}
             </>
             )}
+
+            {/* Quality Review Panel */}
+            <QualityReviewPanel
+              project={{ ...project, quality_pass1_results: project.quality_pass1_results, quality_pass2_results: project.quality_pass2_results, quality_pass3_results: project.quality_pass3_results, quality_certified: project.quality_certified, quality_certified_at: project.quality_certified_at, delivery_ready: project.delivery_ready }}
+              onRewriteRequest={() => handleInitiateRewrite('compliance', project.compliance_results)}
+            />
           </div>
         )}
 
@@ -1447,8 +1454,13 @@ export default function GrantEditor({ project, onSave, onBack }) {
               <button style={ghostBtn} onClick={handleExportDOCX} disabled={exportingDocx}>
                 {exportingDocx ? 'Exporting…' : '📄 Combined DOCX'}
               </button>
-              <button style={ghostBtn} onClick={handleExportPackage} disabled={exportingPackage}>
-                {exportingPackage ? 'Packaging…' : '📦 NIH Package (.zip)'}
+              <button
+                style={{ ...ghostBtn, opacity: project.quality_certified ? 1 : 0.5, cursor: project.quality_certified ? 'pointer' : 'not-allowed' }}
+                onClick={project.quality_certified ? handleExportPackage : () => alert('Run Quality Review first to enable NIH Submission Package export.')}
+                disabled={exportingPackage}
+                title={project.quality_certified ? 'Download NIH submission package' : 'Run Quality Review first — certification required before delivery'}
+              >
+                {exportingPackage ? 'Packaging…' : project.quality_certified ? '📦 NIH Package (.zip)' : '🔒 NIH Package (Quality Review required)'}
               </button>
             </div>
           </div>

@@ -190,6 +190,35 @@ function HealthPanel({ data }) {
         </table>
       </Section>
 
+      {data.quality_metrics && (
+        <Section title="🔍 Quality Review Metrics">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
+            <StatCard label="Certified This Month" value={data.quality_metrics.certified_this_month} />
+            <StatCard label="Delivery Ready" value={data.quality_metrics.delivery_ready_count} />
+            {data.quality_metrics.avg_pass1_accuracy != null && <StatCard label="Avg Pass 1 Accuracy" value={`${data.quality_metrics.avg_pass1_accuracy}%`} />}
+            {data.quality_metrics.avg_pass2_compliance != null && <StatCard label="Avg Pass 2 Compliance" value={`${data.quality_metrics.avg_pass2_compliance}%`} />}
+          </div>
+          {(data.quality_metrics.failing_quality || []).length > 0 && (
+            <>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Grants Failing Quality Review</div>
+              <table style={tableStyle}>
+                <thead><tr><th style={thStyle}>Title</th><th style={thStyle}>Pass 1</th><th style={thStyle}>Pass 2</th><th style={thStyle}>Pass 3</th></tr></thead>
+                <tbody>
+                  {data.quality_metrics.failing_quality.map(g => (
+                    <tr key={g.id}>
+                      <td style={tdStyle}>{g.title || g.id}</td>
+                      <td style={{ ...tdStyle, color: g.pass1_failed ? '#dc2626' : '#16a34a' }}>{g.pass1_failed ? '✕ Failed' : '✓'}</td>
+                      <td style={{ ...tdStyle, color: g.pass2_failed ? '#dc2626' : '#16a34a' }}>{g.pass2_failed ? '✕ Failed' : '✓'}</td>
+                      <td style={{ ...tdStyle, color: g.pass3_failed ? '#dc2626' : '#16a34a' }}>{g.pass3_failed ? '✕ Failed' : '✓'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+        </Section>
+      )}
+
       <Section title="Recent Deployments">
         {(data.deployments || []).length === 0 ? (
           <p style={{ fontSize: 13, color: '#666' }}>No deployment history yet</p>
