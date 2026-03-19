@@ -68,6 +68,12 @@ export default function GrantEditor({ project, onSave, onBack }) {
   const [exportingPackage, setExportingPackage] = useState(false)
   const [showExportDropdown, setShowExportDropdown] = useState(false)
 
+  // D2P2 fields
+  const [d2p2FundingSource, setD2p2FundingSource] = useState(project.d2p2_funding_source || '')
+  const [d2p2EquivalencyPeriod, setD2p2EquivalencyPeriod] = useState(project.d2p2_equivalency_period || '')
+  const [d2p2MilestonesAchieved, setD2p2MilestonesAchieved] = useState(project.d2p2_milestones_achieved || '')
+  const [d2p2Rationale, setD2p2Rationale] = useState(project.d2p2_rationale || '')
+
   // Fast Track
   const [fastTrackPhase1Sections, setFastTrackPhase1Sections] = useState(() => {
     try { return JSON.parse(project.fast_track_phase1_sections || '{}') } catch { return {} }
@@ -145,6 +151,10 @@ export default function GrantEditor({ project, onSave, onBack }) {
       go_no_go_milestone: goNoGoMilestone,
       fast_track_phase1_sections: fastTrackPhase1Sections,
       fast_track_phase2_sections: fastTrackPhase2Sections,
+      d2p2_funding_source: d2p2FundingSource,
+      d2p2_equivalency_period: d2p2EquivalencyPeriod,
+      d2p2_milestones_achieved: d2p2MilestonesAchieved,
+      d2p2_rationale: d2p2Rationale,
     }
   }
 
@@ -162,6 +172,10 @@ export default function GrantEditor({ project, onSave, onBack }) {
         go_no_go_milestone: updatedMilestone !== undefined ? updatedMilestone : goNoGoMilestone,
         fast_track_phase1_sections: updatedFT1 !== undefined ? updatedFT1 : fastTrackPhase1Sections,
         fast_track_phase2_sections: updatedFT2 !== undefined ? updatedFT2 : fastTrackPhase2Sections,
+        d2p2_funding_source: d2p2FundingSource,
+        d2p2_equivalency_period: d2p2EquivalencyPeriod,
+        d2p2_milestones_achieved: d2p2MilestonesAchieved,
+        d2p2_rationale: d2p2Rationale,
       })
       setSaveState('saved')
     } catch {
@@ -860,6 +874,58 @@ export default function GrantEditor({ project, onSave, onBack }) {
                   onBlur={() => save(sections, scores, foaRules, fastTrackPhase1Sections, fastTrackPhase2Sections, goNoGoMilestone)}
                   placeholder="e.g., Achieve ≥80% tumor regression in at least 5 of 8 treated mice in the murine xenograft model by Month 18, with <10% off-target toxicity..."
                 />
+              </div>
+            )}
+
+            {/* D2P2: Phase I Equivalency fields */}
+            {m.is_d2p2 && (
+              <div style={{ marginTop: 12, padding: '12px 16px', background: '#eff6ff', border: '0.5px solid #3b82f6', borderRadius: 8 }}>
+                <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4, color: '#1e40af' }}>
+                  🔬 NCI Direct to Phase 2 — Phase I Equivalency
+                </div>
+                <div style={{ fontSize: 12, color: '#1e3a8a', marginBottom: 10 }}>
+                  Provide evidence that Phase I equivalent research was completed without federal SBIR/STTR funding. This information populates the Phase I Equivalency Documentation section and AI prompts.
+                </div>
+                <div style={{ marginBottom: 8 }}>
+                  <div style={secLabel}>Phase I Equivalency Funding Source <span style={{ color: '#dc2626' }}>*</span></div>
+                  <input
+                    style={inputStyle}
+                    value={d2p2FundingSource}
+                    onChange={e => { setD2p2FundingSource(e.target.value); setSaveState('unsaved') }}
+                    onBlur={() => save()}
+                    placeholder="e.g., NIH R01 CA123456, private foundation grant, company R&D funds, venture capital..."
+                  />
+                </div>
+                <div style={{ marginBottom: 8 }}>
+                  <div style={secLabel}>Phase I Equivalency Period <span style={{ color: '#dc2626' }}>*</span></div>
+                  <input
+                    style={inputStyle}
+                    value={d2p2EquivalencyPeriod}
+                    onChange={e => { setD2p2EquivalencyPeriod(e.target.value); setSaveState('unsaved') }}
+                    onBlur={() => save()}
+                    placeholder="e.g., January 2021 – December 2023"
+                  />
+                </div>
+                <div style={{ marginBottom: 8 }}>
+                  <div style={secLabel}>Key Phase I Milestones Achieved <span style={{ color: '#dc2626' }}>*</span></div>
+                  <textarea
+                    style={{ ...inputStyle, width: '100%', minHeight: 80, resize: 'vertical' }}
+                    value={d2p2MilestonesAchieved}
+                    onChange={e => { setD2p2MilestonesAchieved(e.target.value); setSaveState('unsaved') }}
+                    onBlur={() => save()}
+                    placeholder="e.g., Demonstrated proof-of-concept in 3 animal models; achieved IC50 <10 nM in cancer cell lines; completed IND-enabling toxicology studies..."
+                  />
+                </div>
+                <div>
+                  <div style={secLabel}>Why D2P2 (Rationale) <span style={{ color: '#dc2626' }}>*</span></div>
+                  <textarea
+                    style={{ ...inputStyle, width: '100%', minHeight: 70, resize: 'vertical' }}
+                    value={d2p2Rationale}
+                    onChange={e => { setD2p2Rationale(e.target.value); setSaveState('unsaved') }}
+                    onBlur={() => save()}
+                    placeholder="e.g., Pursuing D2P2 rather than standard Phase I because Phase I equivalent work was completed through non-federal funding and the technology is ready for Phase II development..."
+                  />
+                </div>
               </div>
             )}
 

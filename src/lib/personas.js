@@ -185,10 +185,20 @@ Generate a complete, properly formatted NIH biosketch ready to paste into the SF
 export function professorWritePrompt(secId, project, mechKey) {
   const m = MECHANISMS[mechKey] || MECHANISMS['STTR-I']
   const p = project
-  const phaseNote = mechKey.startsWith('STTR') || mechKey.startsWith('SBIR')
-    ? `Small business: ${p.pi || 'not specified'}. Academic partner: ${p.partner || 'not specified'}.`
+  const isD2P2 = mechKey === 'D2P2' || m.is_d2p2
+  const phaseNote = (mechKey.startsWith('STTR') || mechKey.startsWith('SBIR') || isD2P2)
+    ? `Small business: ${p.pi || 'not specified'}.${!isD2P2 && p.partner ? ` Academic partner: ${p.partner}.` : ''}`
     : ''
   const aimCount = mechKey === 'R21' || mechKey === 'STTR-I' || mechKey === 'SBIR-I' ? 2 : 3
+
+  // D2P2 context block
+  const d2p2Context = isD2P2 ? `
+D2P2 CONTEXT (Direct to Phase 2 — applicant has completed Phase I equivalent research without federal SBIR/STTR funding):
+Funding Source for Phase I Equivalent Work: ${p.d2p2_funding_source || 'not specified'}
+Phase I Equivalency Period: ${p.d2p2_equivalency_period || 'not specified'}
+Key Phase I Milestones Already Achieved: ${p.d2p2_milestones_achieved || 'not specified'}
+Why D2P2: ${p.d2p2_rationale || 'not specified'}
+` : ''
 
   // Reference grants context — inject patterns from funded grants for sig/innov/approach
   let referenceContext = ''
@@ -260,7 +270,9 @@ PROJECT CONTEXT:
 Title: ${p.title || 'Not specified'}
 Disease: ${p.disease || 'Not specified'}
 Biology: ${p.biology || 'Not specified'}
-${phaseNote}${referenceContext}
+${phaseNote}${d2p2Context}${referenceContext}
+${isD2P2 ? `D2P2 WRITING GUIDANCE — Significance: This is a D2P2 application. The applicant has ALREADY established feasibility with non-federal funds. Write Significance to build on proven feasibility, not to establish it. Reference completed Phase I equivalent work as established evidence supporting the need for full Phase II development. Do NOT present this as a discovery-stage project.
+` : ''}
 
 REQUIRED SUBSECTIONS:
 1. **Public Health Significance**
@@ -288,7 +300,9 @@ PROJECT CONTEXT:
 Title: ${p.title || 'Not specified'}
 Biology: ${p.biology || 'Not specified'}
 Aims: ${p.aims || 'Not specified'}
-${phaseNote}${referenceContext}
+${phaseNote}${d2p2Context}${referenceContext}
+${isD2P2 ? `D2P2 WRITING GUIDANCE — Innovation: Innovation has already been demonstrated at the feasibility level with non-federal funds. Focus on what is novel about the FULL DEVELOPMENT approach, scale-up strategy, manufacturing innovation, and path to commercialization. Do not claim novelty for the underlying concept — claim novelty for the Phase II development and translation approach.
+` : ''}
 
 WHAT TO INCLUDE:
 1. **Conceptual Innovation**: What existing paradigm are you challenging? Be specific.
@@ -317,7 +331,14 @@ Title: ${p.title || 'Not specified'}
 Disease: ${p.disease || 'Not specified'}
 Biology: ${p.biology || 'Not specified'}
 Aims: ${p.aims || 'Not specified'}
-${phaseNote}${referenceContext}${p.prelim_data_narrative ? `\nPRELIMINARY DATA (integrate naturally into Aim rationale sections):\n${p.prelim_data_narrative}\n` : ''}${p.prelim_data_gaps?.gaps?.filter(g => g.importance === 'high').length > 0 ? `\nCRITICAL DATA GAPS TO ADDRESS (weave into pitfalls/alternatives):\n${p.prelim_data_gaps.gaps.filter(g => g.importance === 'high').map(g => `- ${g.gap}: ${g.suggestion}`).join('\n')}\n` : ''}
+${phaseNote}${d2p2Context}${referenceContext}${p.prelim_data_narrative ? `\nPRELIMINARY DATA (integrate naturally into Aim rationale sections):\n${p.prelim_data_narrative}\n` : ''}${p.prelim_data_gaps?.gaps?.filter(g => g.importance === 'high').length > 0 ? `\nCRITICAL DATA GAPS TO ADDRESS (weave into pitfalls/alternatives):\n${p.prelim_data_gaps.gaps.filter(g => g.importance === 'high').map(g => `- ${g.gap}: ${g.suggestion}`).join('\n')}\n` : ''}${isD2P2 ? `
+D2P2 WRITING GUIDANCE — Approach: This is a Phase II DEVELOPMENT approach for a D2P2 application. Assume ALL Phase I feasibility milestones have already been met. DO NOT describe feasibility experiments — these are complete. Instead:
+- Reference Phase I equivalent milestones as the confirmed starting point
+- Describe a full 2-year development plan (${p.d2p2_milestones_achieved ? 'building on: ' + p.d2p2_milestones_achieved.slice(0, 200) : 'building on completed feasibility work'})
+- Include scale-up strategy, manufacturing considerations, and regulatory milestones
+- Define explicit go/no-go criteria for Phase III readiness
+- Aims should be development, optimization, validation, and Phase III preparation — not feasibility demonstration
+` : ''}
 
 FOR EACH SPECIFIC AIM, INCLUDE:
 
@@ -869,6 +890,57 @@ Address throughout: biological replicates, blinding, randomization, statistical 
 Clearly delineate small business vs. academic partner responsibilities. Show integration and complementary expertise for Phase II scale.
 
 STYLE: Comprehensive, rigorous, and confident. Show mastery of Phase II development. Inspire reviewer confidence in the team's ability to complete full development.`,
+
+    phase1_equivalency: `You are an elite NIH grant writer preparing the Phase I Equivalency Documentation section for an NCI Direct to Phase 2 (D2P2) SBIR application.
+
+HARD LIMIT: 2-3 pages (~550-825 words). This section will be HEAVILY scrutinized by reviewers.
+
+PURPOSE: Convince reviewers that the applicant has already completed work equivalent to an NIH Phase I without any federal SBIR/STTR funding.
+
+PROJECT CONTEXT:
+Title: ${p.title || 'Not specified'}
+PI / Small Business: ${p.pi || 'Not specified'}
+Disease: ${p.disease || 'Not specified'}
+Funding Source for Phase I Equivalent Work: ${p.d2p2_funding_source || 'not specified'}
+Phase I Equivalency Period: ${p.d2p2_equivalency_period || 'not specified'}
+Key Phase I Milestones Already Achieved: ${p.d2p2_milestones_achieved || 'not specified'}
+Why D2P2: ${p.d2p2_rationale || 'not specified'}
+
+REQUIRED SUBSECTIONS:
+
+1. **Overview of Phase I Equivalent Research**
+   - Clear, confident statement of what work was completed and when
+   - Scope of the feasibility program (what scientific questions were addressed)
+   - Summary of the research team and institutional resources used
+
+2. **Funding Source and Independence from Federal SBIR/STTR**
+   - Explicit statement that ALL feasibility work was funded by ${p.d2p2_funding_source || '[funding source]'}
+   - Confirm NO federal SBIR/STTR funds were used
+   - Describe the level of investment (dollar amount if possible) — this demonstrates commercial commitment
+   - Timeline of funding and milestones funded
+
+3. **Key Phase I Milestones Achieved**
+   - DETAILED description of each milestone with specific quantitative results and data
+   - Include: experiments performed, methods used, outcome metrics, values achieved
+   - Connect each milestone to standard NIH Phase I feasibility criteria
+   - Use specific numbers: "achieved 78% inhibition at 10nM IC50" not "promising results"
+
+4. **Comparison to Standard NIH Phase I Criteria**
+   Explicitly address how completed work satisfies each standard Phase I criterion:
+   - Technical Merit: What was demonstrated?
+   - Commercial Potential: What commercial evidence exists?
+   - Scientific Innovation: What was novel about the approach?
+   - Feasibility of Proposed Phase II: Why is Phase II clearly achievable given Phase I equivalency?
+
+5. **Justification for Direct to Phase 2 Pathway**
+   - Why is the D2P2 pathway appropriate for this project?
+   - Why is repeating Phase I unnecessary?
+   - What does NCI funding for Phase II enable that would not otherwise be possible?
+   - State explicitly that the company has demonstrated commitment through its own investment
+
+WRITING TONE: Confident and definitive. The researcher has EARNED the right to skip Phase I. Use first-person active voice. Be specific. Reviewers will compare this to standard Phase I completion — you must demonstrate equivalence explicitly and quantitatively.
+
+DO NOT: Use hedge words, suggest results were preliminary, frame any finding as "initial" or "exploratory." The Phase I equivalent work is COMPLETE.`,
 
     project_timeline: `Write a Project Timeline narrative for this NIH ${m.label} application.
 

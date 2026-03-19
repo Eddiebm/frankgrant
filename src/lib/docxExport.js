@@ -92,8 +92,9 @@ function makeFooter() {
 export async function generateGrantDOCX(project, sections, scores, citations) {
   const mech = project.mechanism || 'STTR-I'
   const isFastTrack = mech === 'FAST-TRACK'
-  const isPhaseII = mech.includes('-II') || mech === 'NCI-IIB' || mech === 'FAST-TRACK'
-  const needsCommercial = mech.includes('STTR') || mech.includes('SBIR')
+  const isD2P2 = mech === 'D2P2'
+  const isPhaseII = mech.includes('-II') || mech === 'NCI-IIB' || mech === 'FAST-TRACK' || isD2P2
+  const needsCommercial = mech.includes('STTR') || mech.includes('SBIR') || isD2P2
   const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
   const setup = project.setup || {}
 
@@ -159,6 +160,20 @@ export async function generateGrantDOCX(project, sections, scores, citations) {
     children: [new TextRun({ text: today, font: FONT, size: 20, color: '777777' })],
   }))
 
+  // D2P2 special note
+  if (isD2P2) {
+    coverChildren.push(new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 240, after: 0 },
+      children: [new TextRun({ text: 'NCI Direct to Phase 2 (D2P2) Application', font: FONT, size: BODY_PT, bold: true, color: '1e40af' })],
+    }))
+    coverChildren.push(new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 60, after: 0 },
+      children: [new TextRun({ text: 'Applicant has completed Phase I equivalent research without federal SBIR/STTR funding', font: FONT, size: 20, color: '3730a3' })],
+    }))
+  }
+
   // Page break after cover
   coverChildren.push(pageBreakPara())
 
@@ -183,6 +198,13 @@ export async function generateGrantDOCX(project, sections, scores, citations) {
   if (sections.aims) {
     contentChildren.push(sectionHeading('SPECIFIC AIMS'))
     contentChildren.push(...textToParagraphs(sections.aims))
+    contentChildren.push(pageBreakPara())
+  }
+
+  // D2P2 Phase I Equivalency Documentation (before Research Strategy)
+  if (isD2P2 && sections.phase1_equivalency) {
+    contentChildren.push(sectionHeading('PHASE I EQUIVALENCY DOCUMENTATION'))
+    contentChildren.push(...textToParagraphs(sections.phase1_equivalency))
     contentChildren.push(pageBreakPara())
   }
 

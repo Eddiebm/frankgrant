@@ -94,8 +94,9 @@ export async function generateSubmissionPackage(project, sections, citations) {
   const title = project.title || 'Untitled Grant'
   const mech = project.mechanism || 'STTR-I'
   const isFastTrack = mech === 'FAST-TRACK'
-  const isPhaseII = mech.includes('-II') || mech === 'NCI-IIB' || mech === 'FAST-TRACK'
-  const needsCommercial = mech.includes('STTR') || mech.includes('SBIR')
+  const isD2P2 = mech === 'D2P2'
+  const isPhaseII = mech.includes('-II') || mech === 'NCI-IIB' || mech === 'FAST-TRACK' || isD2P2
+  const needsCommercial = mech.includes('STTR') || mech.includes('SBIR') || isD2P2
   const setup = project.setup || {}
 
   // Helper to add a doc if content exists
@@ -103,6 +104,11 @@ export async function generateSubmissionPackage(project, sections, citations) {
     if (!paragraphs || paragraphs.length === 0) return
     const buf = await makeSingleDoc(title, heading, paragraphs)
     zip.file(filename, buf)
+  }
+
+  // 0. D2P2 Phase I Equivalency Documentation (first, if D2P2)
+  if (isD2P2 && sections.phase1_equivalency) {
+    await addDoc('phase1_equivalency.docx', 'PHASE I EQUIVALENCY DOCUMENTATION', textToParagraphs(sections.phase1_equivalency))
   }
 
   // 1. Specific Aims

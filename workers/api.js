@@ -465,6 +465,10 @@ async function handleGetProject(req, env, userId, projectId) {
   row.fast_track_phase1_sections = row.fast_track_phase1_sections ? JSON.parse(row.fast_track_phase1_sections) : {}
   row.fast_track_phase2_sections = row.fast_track_phase2_sections ? JSON.parse(row.fast_track_phase2_sections) : {}
   row.go_no_go_milestone = row.go_no_go_milestone || ''
+  row.d2p2_funding_source = row.d2p2_funding_source || ''
+  row.d2p2_equivalency_period = row.d2p2_equivalency_period || ''
+  row.d2p2_milestones_achieved = row.d2p2_milestones_achieved || ''
+  row.d2p2_rationale = row.d2p2_rationale || ''
   return json(row)
 }
 
@@ -479,6 +483,7 @@ async function handleUpdateProject(req, env, userId, projectId) {
       foa_number = ?, foa_rules = ?, foa_fetched_at = ?, foa_valid = ?,
       reference_grants = ?, citation_suggestions = ?,
       go_no_go_milestone = ?, fast_track_phase1_sections = ?, fast_track_phase2_sections = ?,
+      d2p2_funding_source = ?, d2p2_equivalency_period = ?, d2p2_milestones_achieved = ?, d2p2_rationale = ?,
       updated_at = ?
      WHERE id = ? AND user_id = ?`
   ).bind(
@@ -502,6 +507,10 @@ async function handleUpdateProject(req, env, userId, projectId) {
     body.go_no_go_milestone || null,
     body.fast_track_phase1_sections ? JSON.stringify(body.fast_track_phase1_sections) : null,
     body.fast_track_phase2_sections ? JSON.stringify(body.fast_track_phase2_sections) : null,
+    body.d2p2_funding_source || null,
+    body.d2p2_equivalency_period || null,
+    body.d2p2_milestones_achieved || null,
+    body.d2p2_rationale || null,
     now, projectId, userId
   ).run()
   if (result.changes === 0) return err('Project not found', 404)
@@ -1614,7 +1623,19 @@ async function handleStudySection(req, env, userId, projectId) {
   try { setup = JSON.parse(project.setup || '{}') } catch {}
   try { sections = JSON.parse(project.sections || '{}') } catch {}
 
+  const isD2P2 = project.mechanism === 'D2P2'
+  const d2p2ReviewerNote = isD2P2 ? `
+
+IMPORTANT — D2P2 APPLICATION: This is an NCI Direct to Phase 2 application. The applicant claims to have completed Phase I equivalent research WITHOUT federal SBIR/STTR funding. Apply these additional review criteria:
+1. Is the Phase I Equivalency Documentation convincing? Does the completed work genuinely constitute Phase I equivalent research?
+2. Are the claimed milestones specific, quantitative, and sufficient to justify skipping a standard Phase I?
+3. Is the proposed Phase II development plan appropriately advanced given the claimed Phase I completion — or does it re-do feasibility work?
+4. Are go/no-go criteria for Phase III realistic and measurable?
+5. Is the Commercialization Plan appropriate for a company that has already been self-funding development?
+6. Does the applicant demonstrate genuine commercial commitment through their prior private investment?` : ''
+
   const grantText = [
+    sections.phase1_equivalency ? `PHASE I EQUIVALENCY DOCUMENTATION:\n${sections.phase1_equivalency.slice(0, 2000)}` : '',
     sections.aims ? `SPECIFIC AIMS:\n${sections.aims}` : '',
     sections.sig ? `SIGNIFICANCE:\n${sections.sig}` : '',
     sections.innov ? `INNOVATION:\n${sections.innov}` : '',
@@ -1630,10 +1651,11 @@ DISEASE/INDICATION: ${setup.disease || 'Not specified'}
 ${grantText.slice(0, 7000)}`
 
   const callReviewer = async (system) => {
+    const systemWithD2P2 = system + d2p2ReviewerNote
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 900, system, messages: [{ role: 'user', content: userMsg }] }),
+      body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 900, system: systemWithD2P2, messages: [{ role: 'user', content: userMsg }] }),
     })
     const r = await resp.json()
     return { text: r.content?.[0]?.text || '', usage: r.usage }

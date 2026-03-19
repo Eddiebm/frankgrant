@@ -1,7 +1,7 @@
 # FrankGrant Status Document
 
-**Last Updated:** 2026-03-19
-**Version:** 4.8.0
+**Last Updated:** 2026-03-18
+**Version:** 4.9.0
 **Status:** Production (Internal COARE Tool)
 
 ---
@@ -192,6 +192,16 @@
 - ✅ **KV session storage** - `voice:{project_id}:{user_id}` with 4h expiration
 - ✅ **Toolbar button** - "🎤 Voice Mode" teal/cyan button in project toolbar
 
+### **NCI Direct to Phase 2 (D2P2) Mechanism (v4.9.0)**
+- ✅ **D2P2 mechanism** — Added `D2P2` to MECHANISMS in nih.js: 12-page strategy, 12-page commercial, $2,097,580 budget cap, 24 months, NCI only, requires Phase I equivalency documentation
+- ✅ **Phase I Equivalency Documentation section** — 2-3 page section shown only for D2P2 mechanism, with phase1_equivalency prompt in personas.js (5 required subsections, confident "already proven" tone)
+- ✅ **D2P2 setup fields UI** — Blue box in Project Setup tab (shown when mechanism = D2P2): Phase I Equivalency Funding Source, Phase I Equivalency Period, Key Milestones Achieved (textarea), Why D2P2 Rationale (textarea)
+- ✅ **D2P2-specific AI prompts** — All sig/innov/approach prompts modified with D2P2 context block: funding source, equivalency period, milestones, rationale; tone is Phase II development (not feasibility)
+- ✅ **D2P2 Study Section reviewers** — 6 D2P2-specific criteria injected into all 3 reviewer system prompts: Phase I equivalency documentation quality, Phase II readiness, regulatory pathway, commercialization plan, budget justification, team experience
+- ✅ **DOCX export** — D2P2 cover page note (blue text), Phase I Equivalency section included in both Combined DOCX and NIH Submission Package (phase1_equivalency.docx)
+- ✅ **D1 schema** — 4 new columns: `d2p2_funding_source`, `d2p2_equivalency_period`, `d2p2_milestones_achieved`, `d2p2_rationale`
+- ✅ **isD2P2 flags** — Properly included in `isPhaseII` and `needsCommercial` checks throughout
+
 ### **Fast Track Dual Research Strategy (v4.8.0)**
 - ✅ **Go/No-Go Milestone field** — amber box in Project Setup tab (shown when mechanism = FAST-TRACK), required warning
 - ✅ **Dual section writer** — FastTrackWriter component replaces standard section list; shows Phase I group (6-page) + Go/No-Go milestone display box + Phase II group (12-page) + Other Sections
@@ -203,7 +213,7 @@
 - ✅ **nih.js flags** — `is_fast_track: true`, `phase1_research_strategy_pages: 6`, `phase2_research_strategy_pages: 12`
 
 ### **NIH Compliance**
-- ✅ **Mechanism Support** - STTR-I/II, SBIR-I/II, FAST-TRACK, NCI-IIB, R21, R01, K99
+- ✅ **Mechanism Support** - STTR-I/II, SBIR-I/II, FAST-TRACK, NCI-IIB, D2P2, R21, R01, K99
 - ✅ **Correct Page Limits** - SBIR/STTR Phase I: 6-page Research Strategy + 2-page Commercialization Potential; Phase II: 12-page + 12-page Commercialization Plan; R01: 12-page; R21: 6-page
 - ✅ **Phase-Aware Prompts** - Generation prompts distinguish Phase I feasibility from Phase II full development
 - ✅ **STTR Partner Requirements** - 40% minimum work to research institution (Phase I), 30% (Phase II)

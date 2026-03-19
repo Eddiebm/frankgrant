@@ -165,6 +165,24 @@ export const MECHANISMS = {
     dataManagement: 2,
     introduction: 1
   },
+  'D2P2':       {
+    label: 'NCI Direct to Phase 2 (D2P2)',
+    aims: 1,
+    strategy: 12,
+    commercial: 12,
+    needsCommercial: true,
+    commercialType: 'plan',
+    code: 'R44',
+    phase: 'II',
+    is_d2p2: true,
+    institutes: ['NCI'],
+    budget: 'up to $2,097,580 direct costs',
+    duration_months: 24,
+    requires_phase1_equivalency: true,
+    sttr_partner_required: false,
+    dataManagement: 2,
+    introduction: 1,
+  },
   'NCI-IIB':    {
     label: 'NCI Phase IIB Bridge',
     aims: 1,
@@ -221,6 +239,8 @@ export const SECTIONS = [
   { id: 'data_mgmt',        label: 'Data Management Plan',    pageLimit: 'dataManagement', partOfStrategy: false },
   { id: 'facilities',       label: 'Facilities',              pageLimit: null, partOfStrategy: false },
   { id: 'commercial',       label: 'Commercialization',       pageLimit: 'commercial', partOfStrategy: false },
+  // D2P2 unique section
+  { id: 'phase1_equivalency', label: 'Phase I Equivalency Documentation', pageLimit: null, partOfStrategy: false, showForMechanisms: ['D2P2'] },
   // Additional required sections (v4.6.0)
   { id: 'intro',            label: 'Introduction (Resubmission)', pageLimit: null, partOfStrategy: false, showWhen: 'is_resubmission' },
   { id: 'human_subjects',   label: 'Human Subjects',          pageLimit: null, partOfStrategy: false, showWhen: 'human_subjects_involved' },
