@@ -91,7 +91,8 @@ export default function Scorer({ onBack }) {
 
       const response = await api.callAI({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 4000,
+        max_tokens: 6000,
+        temperature: 0,
         messages: [{
           role: 'user',
           content: prompt
@@ -151,7 +152,7 @@ REVIEWER NARRATIVE:
 [2-3 paragraph synthesis of overall assessment, integration of criteria, and recommendation]
 
 Research Strategy text:
-${text.slice(0, 15000)}`
+${text.slice(0, 25000)}`
   }
 
   function buildCommercialPrompt(text) {
@@ -203,7 +204,7 @@ REVIEWER NARRATIVE:
 [2-3 paragraph assessment of overall commercialization readiness and recommendation]
 
 Commercialization Plan text:
-${text.slice(0, 15000)}`
+${text.slice(0, 25000)}`
   }
 
   function parseReview(text) {
