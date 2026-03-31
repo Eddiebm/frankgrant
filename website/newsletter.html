@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Payline — NIH Grant Writing Newsletter by FrankGrant</title>
+  <meta name="description" content="The Payline is a biweekly newsletter for NIH grant writers. Get study section insights, deadline intelligence, and one actionable piece of advice per issue." />
+  <link rel="icon" type="image/svg+xml" href="images/favicon.svg" />
+  <link rel="stylesheet" href="styles/global.css" />
+  <link rel="stylesheet" href="styles/nav.css" />
+  <link rel="stylesheet" href="styles/footer.css" />
+  <link rel="stylesheet" href="styles/newsletter.css" />
+  <script src="scripts/theme.js" defer></script>
+  <script src="scripts/nav.js" defer></script>
+  <script src="scripts/animations.js" defer></script>
+</head>
+<body>
+
+<!-- ── NAVIGATION ─────────────────────────────────────────────────── -->
+<nav class="site-nav" role="navigation" aria-label="Main navigation">
+  <div class="container">
+    <div class="nav-inner">
+      <a href="index.html" class="nav-logo" aria-label="FrankGrant home">
+        <svg width="36" height="36" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+          <circle cx="18" cy="18" r="17" fill="#0d9488"/>
+          <text x="18" y="24" font-family="Georgia,serif" font-size="18" font-weight="700" fill="white" text-anchor="middle">F</text>
+        </svg>
+        <span class="nav-logo-text">FrankGrant</span>
+      </a>
+      <ul class="nav-links" role="list">
+        <li><a href="index.html#how-it-works">How It Works</a></li>
+        <li><a href="pricing.html">Pricing</a></li>
+        <li><a href="hire.html">Book</a></li>
+        <li><a href="newsletter.html" class="active">Newsletter</a></li>
+        <li><a href="blog/index.html">Blog</a></li>
+        <li><a href="faq.html">FAQ</a></li>
+      </ul>
+      <div class="nav-actions">
+        <button class="theme-toggle" aria-label="Toggle theme">🌙</button>
+        <a href="https://frankgrant.pages.dev" class="btn btn-ghost btn-sm" target="_blank" rel="noopener">App</a>
+        <a href="hire.html" class="btn btn-primary btn-sm">Hire Us</a>
+      </div>
+      <button class="nav-hamburger" id="nav-hamburger" aria-label="Open menu" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </div>
+</nav>
+
+<div class="nav-overlay" id="nav-overlay" aria-modal="true" role="dialog">
+  <div class="nav-overlay-header">
+    <a href="index.html" class="nav-logo">
+      <svg width="36" height="36" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+        <circle cx="18" cy="18" r="17" fill="#0d9488"/>
+        <text x="18" y="24" font-family="Georgia,serif" font-size="18" font-weight="700" fill="white" text-anchor="middle">F</text>
+      </svg>
+      <span class="nav-logo-text">FrankGrant</span>
+    </a>
+    <button class="nav-overlay-close" id="nav-overlay-close" aria-label="Close menu">×</button>
+  </div>
+  <ul class="nav-overlay-links" role="list">
+    <li><a href="index.html#how-it-works">How It Works</a></li>
+    <li><a href="pricing.html">Pricing</a></li>
+    <li><a href="hire.html">Book a Call</a></li>
+    <li><a href="newsletter.html">Newsletter</a></li>
+    <li><a href="blog/index.html">Blog</a></li>
+    <li><a href="faq.html">FAQ</a></li>
+  </ul>
+  <div class="nav-overlay-actions">
+    <a href="https://frankgrant.pages.dev" class="btn btn-ghost" target="_blank" rel="noopener">Try FrankGrant App</a>
+    <a href="hire.html" class="btn btn-primary">Hire Us to Write Your Grant</a>
+  </div>
+</div>
+
+<!-- ── NEWSLETTER HERO ────────────────────────────────────────────── -->
+<section class="newsletter-hero">
+  <div class="container">
+    <div class="badge badge-teal" style="margin-bottom:20px">Biweekly · Free</div>
+    <h1>The <span class="newsletter-name">Payline</span></h1>
+    <p class="tagline">The newsletter for NIH grant writers who want to understand how reviewers actually think — not just what the FOA says.</p>
+    <form class="newsletter-signup-hero" id="newsletter-hero-form" aria-label="Subscribe to The Payline">
+      <input type="email" name="email" placeholder="your@email.edu" required aria-label="Your email address" />
+      <button type="submit" class="btn btn-primary">Subscribe Free →</button>
+    </form>
+    <p class="newsletter-proof">Join 500+ NIH researchers and grant writers · No spam · Unsubscribe anytime</p>
+  </div>
+</section>
+
+<!-- ── WHAT YOU GET ───────────────────────────────────────────────── -->
+<section class="section">
+  <div class="container">
+    <div class="section-header centered animate-on-scroll">
+      <h2 class="section-title">What's in Every Issue</h2>
+      <p class="section-subtitle">Four sections. Every issue. Consistently useful for researchers at every stage.</p>
+    </div>
+    <div class="newsletter-benefits">
+      <div class="benefit-card animate-on-scroll">
+        <div class="benefit-icon">🔬</div>
+        <h3 class="benefit-title">The Insight</h3>
+        <p class="benefit-desc">One deep-dive into reviewer psychology, study section dynamics, or a specific aspect of grant writing that most researchers get wrong. These are the things that separate triaged grants from funded ones — and we explain them clearly with real examples from funded and rejected applications.</p>
+      </div>
+      <div class="benefit-card animate-on-scroll" style="transition-delay:0.1s">
+        <div class="benefit-icon">📊</div>
+        <h3 class="benefit-title">Grant Intelligence</h3>
+        <p class="benefit-desc">Upcoming deadlines, new FOAs, IC-specific funding priorities, and payline updates from NIH. We monitor RePORTER, NIH Guide, and study section rosters so you do not have to. Includes a brief analysis of what new funding opportunities mean for your research area.</p>
+      </div>
+      <div class="benefit-card animate-on-scroll" style="transition-delay:0.15s">
+        <div class="benefit-icon">⚡</div>
+        <h3 class="benefit-title">FrankGrant Update</h3>
+        <p class="benefit-desc">New features, case studies from recent grant cycles (anonymized), and behind-the-scenes looks at how our Study Section simulation caught specific weaknesses. Includes data from our funded grant cohort — what approaches worked, what did not, and what we learned.</p>
+      </div>
+      <div class="benefit-card animate-on-scroll" style="transition-delay:0.2s">
+        <div class="benefit-icon">❓</div>
+        <h3 class="benefit-title">One Question Answered</h3>
+        <p class="benefit-desc">Each issue, we take a real question from a subscriber and answer it in depth. Questions like "Should I submit to NCI or NIDDK for my metabolic oncology research?" or "How do I handle a reviewer who misunderstood my innovation claim?" — answered honestly and completely.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── SAMPLE ISSUE ───────────────────────────────────────────────── -->
+<section class="section" style="background:var(--bg-surface)">
+  <div class="container">
+    <div class="section-header centered animate-on-scroll">
+      <h2 class="section-title">Sample Issue</h2>
+      <p class="section-subtitle">Here is what a typical Payline issue looks like.</p>
+    </div>
+    <div class="sample-issue animate-on-scroll">
+      <div class="sample-issue-header">
+        <div class="sample-issue-label">The Payline · Issue #14 · March 2026</div>
+        <div class="sample-issue-title">Why "Novel" Is the Most Dangerous Word in Your Innovation Section</div>
+      </div>
+      <div class="sample-issue-body">
+        <div class="sample-section">
+          <div class="sample-section-label">The Insight</div>
+          <h3 class="sample-section-title">Why "Novel" Is the Most Dangerous Word in Your Innovation Section</h3>
+          <p class="sample-section-content">Reviewers see "novel" more than any other word in Innovation sections — and it has lost almost all meaning. In an analysis of 47 Summary Statements from funded and unfunded SBIR Phase I grants across NCI and NIDDK study sections, grants that led with "novel" in their Innovation section scored an average of 4.2 points lower on the Innovation criterion than those that led with a specific mechanistic claim. Here is what to write instead...</p>
+        </div>
+        <div class="sample-section">
+          <div class="sample-section-label">Grant Intelligence</div>
+          <h3 class="sample-section-title">NCI Payline Update: Standard pool at 11th percentile for R01s</h3>
+          <p class="sample-section-content">NCI has announced that the R01 standard payline for fiscal year 2026 is at the 11th percentile for both new and renewal applications, down from the 13th percentile last year. SBIR Phase I paylines remain at the 35th percentile. Three new PARs relevant to immuno-oncology and early detection have opened this cycle...</p>
+        </div>
+        <div class="sample-section">
+          <div class="sample-section-label">One Question Answered</div>
+          <h3 class="sample-section-title">Q: My reviewer said my sample size was too small but I followed the FOA guidelines — what do I do for the resubmission?</h3>
+          <p class="sample-section-content">This is more common than you might think, and it reveals an important truth about NIH review: reviewer concerns often reflect their personal experience more than the objective requirements of the FOA. Here is how to address this in your Introduction to Resubmission without appearing defensive...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── ARCHIVE ────────────────────────────────────────────────────── -->
+<section class="section">
+  <div class="container">
+    <div class="section-header centered animate-on-scroll">
+      <h2 class="section-title">Recent Issues</h2>
+      <p class="section-subtitle">Browse recent issues to see the quality and depth of what you will receive.</p>
+    </div>
+    <div class="archive-grid">
+      <a href="blog/why-your-grant-got-triaged.html" class="archive-card animate-on-scroll">
+        <div class="archive-date">March 10, 2026 · Issue #15</div>
+        <div class="archive-title">Why Your Grant Got Triaged — The Five Most Common Reasons (And How to Fix Them)</div>
+        <div class="archive-excerpt">Triage is not random. Reviewers triage grants for predictable, fixable reasons. We analyzed 200+ Summary Statements to find the pattern.</div>
+      </a>
+      <a href="#" class="archive-card animate-on-scroll" style="transition-delay:0.1s">
+        <div class="archive-date">February 24, 2026 · Issue #14</div>
+        <div class="archive-title">Why "Novel" Is the Most Dangerous Word in Your Innovation Section</div>
+        <div class="archive-excerpt">Overused words signal lazy thinking to reviewers. Here is what to write instead — and why specificity wins every time.</div>
+      </a>
+      <a href="#" class="archive-card animate-on-scroll" style="transition-delay:0.2s">
+        <div class="archive-date">February 10, 2026 · Issue #13</div>
+        <div class="archive-title">The NCI SEP vs. the Standing Study Section: Which One Should You Target?</div>
+        <div class="archive-excerpt">Special Emphasis Panels have different dynamics than standing study sections. Here is how to read the room before you submit.</div>
+      </a>
+      <a href="#" class="archive-card animate-on-scroll" style="transition-delay:0.05s">
+        <div class="archive-date">January 27, 2026 · Issue #12</div>
+        <div class="archive-title">The Approach Section Is Where Most Grants Die — Here Is Why</div>
+        <div class="archive-excerpt">Reviewers spend 60% of their scoring time on Approach. Most grants fail here for three fixable reasons.</div>
+      </a>
+      <a href="#" class="archive-card animate-on-scroll" style="transition-delay:0.15s">
+        <div class="archive-date">January 13, 2026 · Issue #11</div>
+        <div class="archive-title">How to Write a Specific Aims Page That Reviewers Actually Read</div>
+        <div class="archive-excerpt">The Specific Aims page sets the tone for your entire application. Reviewers form their initial impression here — before reading anything else.</div>
+      </a>
+      <a href="#" class="archive-card animate-on-scroll" style="transition-delay:0.25s">
+        <div class="archive-date">December 16, 2025 · Issue #10</div>
+        <div class="archive-title">Understanding the Two-Phase Review System — What Happens After You Submit</div>
+        <div class="archive-excerpt">Most applicants have no idea what happens between submission and the Summary Statement. Here is the full timeline explained.</div>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ── INLINE CTA ─────────────────────────────────────────────────── -->
+<section class="section" style="background:var(--bg-surface)">
+  <div class="container">
+    <div class="newsletter-inline-cta animate-on-scroll">
+      <span class="badge badge-teal" style="margin-bottom:16px">Free · Biweekly</span>
+      <h2>Join 500+ NIH Grant Writers</h2>
+      <p>Get The Payline delivered to your inbox every other Monday. Free forever. No upsells in the newsletter.</p>
+      <form class="newsletter-inline-form" id="newsletter-inline-form" aria-label="Subscribe">
+        <input type="email" name="email" placeholder="your@email.edu" required aria-label="Email address" />
+        <button type="submit" class="btn btn-primary">Subscribe →</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- ── FOOTER ─────────────────────────────────────────────────────── -->
+<footer class="site-footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a href="index.html" class="footer-logo">
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+            <circle cx="16" cy="16" r="15" fill="#0d9488"/>
+            <text x="16" y="22" font-family="Georgia,serif" font-size="16" font-weight="700" fill="white" text-anchor="middle">F</text>
+          </svg>
+          <span class="footer-brand-name">FrankGrant</span>
+        </a>
+        <p class="footer-tagline">NIH grant writing powered by AI and 25 years of expertise. Your science, our expertise, your funding.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Product</h4>
+        <ul>
+          <li><a href="index.html#how-it-works">How It Works</a></li>
+          <li><a href="pricing.html">Pricing</a></li>
+          <li><a href="https://frankgrant.pages.dev" target="_blank" rel="noopener">App Login</a></li>
+          <li><a href="faq.html">FAQ</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Services</h4>
+        <ul>
+          <li><a href="hire.html">Done For You</a></li>
+          <li><a href="hire.html">Book a Call</a></li>
+          <li><a href="pricing.html">Phase I / II</a></li>
+          <li><a href="pricing.html">R01 / R21</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Resources</h4>
+        <ul>
+          <li><a href="newsletter.html">Newsletter</a></li>
+          <li><a href="blog/index.html">Blog</a></li>
+          <li><a href="faq.html">FAQ</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>The Payline</h4>
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">Biweekly NIH grant writing insights — free forever.</p>
+        <form class="footer-newsletter-form" onsubmit="event.preventDefault();this.innerHTML='<p style=\'color:var(--teal);font-size:14px;font-weight:600\'>Thanks! You\'re subscribed.</p>'">
+          <input type="email" placeholder="your@email.edu" required aria-label="Email address" />
+          <button type="submit">Subscribe</button>
+        </form>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p class="footer-copyright">© 2026 FrankGrant · COARE Holdings LLC · All rights reserved</p>
+      <div class="footer-social">
+        <a href="https://linkedin.com/company/frankgrant" target="_blank" rel="noopener">LinkedIn</a>
+        <a href="newsletter.html">Newsletter</a>
+        <a href="#">Terms</a>
+        <a href="#">Privacy</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script>
+  function handleNewsletterSubmit(formId) {
+    var form = document.getElementById(formId);
+    if (!form) return;
+    form.addEventListener('submit', function(e) {
+      e.preventDefault();
+      this.innerHTML = '<p style="color:var(--teal);font-size:16px;font-weight:600;padding:12px 0">You\'re subscribed! Welcome to The Payline. Check your inbox for a confirmation.</p>';
+    });
+  }
+  handleNewsletterSubmit('newsletter-hero-form');
+  handleNewsletterSubmit('newsletter-inline-form');
+</script>
+
+</body>
+</html>

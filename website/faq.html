@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FAQ — FrankGrant NIH Grant Writing</title>
+  <meta name="description" content="Frequently asked questions about FrankGrant's NIH grant writing service. Learn about ownership, the process, pricing, the success fee, and our Study Section simulation." />
+  <link rel="icon" type="image/svg+xml" href="images/favicon.svg" />
+  <link rel="stylesheet" href="styles/global.css" />
+  <link rel="stylesheet" href="styles/nav.css" />
+  <link rel="stylesheet" href="styles/footer.css" />
+  <link rel="stylesheet" href="styles/faq.css" />
+  <script src="scripts/theme.js" defer></script>
+  <script src="scripts/nav.js" defer></script>
+  <script src="scripts/animations.js" defer></script>
+</head>
+<body>
+
+<!-- ── NAVIGATION ─────────────────────────────────────────────────── -->
+<nav class="site-nav" role="navigation" aria-label="Main navigation">
+  <div class="container">
+    <div class="nav-inner">
+      <a href="index.html" class="nav-logo" aria-label="FrankGrant home">
+        <svg width="36" height="36" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+          <circle cx="18" cy="18" r="17" fill="#0d9488"/>
+          <text x="18" y="24" font-family="Georgia,serif" font-size="18" font-weight="700" fill="white" text-anchor="middle">F</text>
+        </svg>
+        <span class="nav-logo-text">FrankGrant</span>
+      </a>
+      <ul class="nav-links" role="list">
+        <li><a href="index.html#how-it-works">How It Works</a></li>
+        <li><a href="pricing.html">Pricing</a></li>
+        <li><a href="hire.html">Book</a></li>
+        <li><a href="newsletter.html">Newsletter</a></li>
+        <li><a href="blog/index.html">Blog</a></li>
+        <li><a href="faq.html" class="active">FAQ</a></li>
+      </ul>
+      <div class="nav-actions">
+        <button class="theme-toggle" aria-label="Toggle theme">🌙</button>
+        <a href="https://frankgrant.pages.dev" class="btn btn-ghost btn-sm" target="_blank" rel="noopener">App</a>
+        <a href="hire.html" class="btn btn-primary btn-sm">Hire Us</a>
+      </div>
+      <button class="nav-hamburger" id="nav-hamburger" aria-label="Open menu" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </div>
+</nav>
+
+<div class="nav-overlay" id="nav-overlay" aria-modal="true" role="dialog">
+  <div class="nav-overlay-header">
+    <a href="index.html" class="nav-logo">
+      <svg width="36" height="36" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+        <circle cx="18" cy="18" r="17" fill="#0d9488"/>
+        <text x="18" y="24" font-family="Georgia,serif" font-size="18" font-weight="700" fill="white" text-anchor="middle">F</text>
+      </svg>
+      <span class="nav-logo-text">FrankGrant</span>
+    </a>
+    <button class="nav-overlay-close" id="nav-overlay-close" aria-label="Close menu">×</button>
+  </div>
+  <ul class="nav-overlay-links" role="list">
+    <li><a href="index.html#how-it-works">How It Works</a></li>
+    <li><a href="pricing.html">Pricing</a></li>
+    <li><a href="hire.html">Book a Call</a></li>
+    <li><a href="newsletter.html">Newsletter</a></li>
+    <li><a href="blog/index.html">Blog</a></li>
+    <li><a href="faq.html">FAQ</a></li>
+  </ul>
+  <div class="nav-overlay-actions">
+    <a href="https://frankgrant.pages.dev" class="btn btn-ghost" target="_blank" rel="noopener">Try FrankGrant App</a>
+    <a href="hire.html" class="btn btn-primary">Hire Us to Write Your Grant</a>
+  </div>
+</div>
+
+<!-- ── FAQ HERO ───────────────────────────────────────────────────── -->
+<section class="faq-hero">
+  <div class="container">
+    <span class="badge badge-teal" style="margin-bottom:20px">Questions &amp; Answers</span>
+    <h1>Frequently Asked Questions</h1>
+    <p>Everything you need to know about working with FrankGrant. If you have a question not answered here, <a href="hire.html">book a call</a> or email us.</p>
+  </div>
+</section>
+
+<!-- ── FAQ MAIN ───────────────────────────────────────────────────── -->
+<div class="container">
+  <div class="faq-layout">
+
+    <!-- Sidebar -->
+    <aside class="faq-sidebar" aria-label="FAQ navigation">
+      <div class="faq-sidebar-title">Categories</div>
+      <ul class="faq-nav" role="list">
+        <li><a href="#about" class="active">About the Service</a></li>
+        <li><a href="#process">The Process</a></li>
+        <li><a href="#pricing">Pricing &amp; Payment</a></li>
+        <li><a href="#science">The Science</a></li>
+        <li><a href="#saas">Self-Service SaaS</a></li>
+      </ul>
+    </aside>
+
+    <!-- Main content -->
+    <main class="faq-content">
+
+      <!-- About the Service -->
+      <div class="faq-group" id="about">
+        <h2 class="faq-group-title">About the Service</h2>
+        <div class="faq-items">
+          <div class="faq-item">
+            <button class="faq-question">
+              What exactly does FrankGrant do?
+              <span class="faq-icon" aria-hidden="true">+</span>
+            </button>
+            <div class="faq-answer">
+              <div class="faq-answer-inner">FrankGrant is a done-for-you NIH grant writing service. We write your complete grant application — every section required by NIH — based on your science, your data, and your research direction. We then run your application through our proprietary Study Section simulation, which scores the grant the way real NIH peer reviewers do. The grant is only certified and delivered once it scores competitively. You get a submission-ready package and 90 days of revision support.</div>
+            </div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-question">
+              Do I own my grant application completely?
+              <span class="faq-icon" aria-hidden="true">+</span>
+            </button>
+            <div class="faq-answer">
+              <div class="faq-answer-inner">Yes — 100% and without reservation. FrankGrant is a writing service, not a research collaborator. We write based on the science <em>you</em> provide. Your intellectual property, your research data, your experimental ideas, and the final grant application are entirely yours. We make no claim on your research, your IP, or any funding that results from our work. This is stated explicitly in our service agreement.</div>
+            </div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-question">
+              Is using a grant writing service like FrankGrant allowed by NIH?
+              <span class="faq-icon" aria-hidden="true">+</span>
+            </button>
+            <div class="faq-answer">
+              <div class="faq-answer-inner">Yes. NIH does not prohibit applicants from using professional grant writing services. Many academic institutions have in-house grant writing staff, and many investigators hire external consultants. What matters to NIH is that the <em>science</em> is yours — your research design, your data, your intellectual contributions. FrankGrant writes the application based on your science; we do not generate the scientific ideas. This is identical to hiring any professional grant writer or consultant.</div>
+            </div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-question">
+              Who is behind FrankGrant?
+              <span class="faq-icon" aria-hidden="true">+</span>
+            </button>
+            <div class="faq-answer">
+              <div class="faq-answer-inner">FrankGrant was founded by Eddie Bannerman-Menson, who brings 25 years of NIH grant writing experience and has been directly involved in more than $7M in funded NIH applications across SBIR, STTR, R01, and R21 mechanisms. The FrankGrant system combines his expertise with a purpose-built AI system trained on funded NIH grants, reviewer psychology, and institute-specific funding priorities.</div>
+            </div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-question">
+              What NIH mechanisms do you support?
+              <span class="faq-icon" aria-hidden="true">+</span>
+            </button>
+            <div class="faq-answer">
+              <div class="faq-answer-inner">We support all major NIH mechanisms: <strong>SBIR Phase I (R43)</strong>, <strong>SBIR Phase II (R44)</strong>, <strong>STTR Phase I (R41)</strong>, <strong>STTR Phase II (R42)</strong>, <strong>Fast Track</strong> (combined Phase I/II), <strong>R01</strong> (research project grants), and <strong>R21</strong> (exploratory/developmental). We have institute-specific expertise across NCI, NIDDK, NHLBI, NIMH, and others. For mechanisms not listed, contact us to discuss feasibility.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- The Process -->
+      <div class="faq-group" id="process">
+        <h2 class="faq-group-title">The Process</h2>
+        <div class="faq-items">
+          <div class="faq-item">
+            <button class="faq-question">
+              How does the process start?
+              <span class="faq-icon" aria-hidden="true">+</span>
+            </button>
+            <div class="faq-answer">
+              <div class="faq-answer-inner">The process starts with our <a href="hire.html">client intake form</a>. You provide your research description (minimum 150 words), the FOA number you are targeting, your mechanism, the NIH institute, your preliminary data summary, and your timeline. Once we receive your intake form and payment, a team member reviews your brief within 24 hours and reaches out if we have clarifying questions. Writing begins within 48 hours of intake confirmation.</div>
+            </div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-question">
+              How long does it take to complete my grant?
+              <span class="faq-icon" aria-hidden="true">+</span>
+            </button>
+            <div class="faq-answer">
+              <div class="faq-answer-inner">Phase I grants (SBIR/STTR) are typically completed in <strong>5 to 7 business days</strong> from intake confirmation with complete information. Phase II and Fast Track take <strong>7 to 10 business days</strong>. R01 applications take <strong>8 to 12 business days</strong>. These timelines include the Study Section simulation and the three-pass quality review. We strongly recommend engaging us at least 2 weeks before your submission deadline to allow time for your own review and any institutional approval processes.</div>
+            </div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-question">
+              What is the three-pass quality review?
+              <span class="faq-icon" aria-hidden="true">+</span>
+            </button>
+            <div class="faq-answer">
+              <div class="faq-answer-inner">The three-pass review is our internal quality certification that every grant must pass before delivery. <strong>Pass 1: Scientific accuracy</strong> — all factual claims are cross-referenced against current literature and your provided data. <strong>Pass 2: NIH compliance</strong> — every section is checked against the specific FOA requirements, page limits, font requirements, and formatting rules. <strong>Pass 3: Reviewer simulation</strong> — the grant is scored by our Study Section simulation and must achieve a competitive impact score before certification. If a grant fails any pass, it is revised before delivery.</div>
+            </div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-question">
+              How many revisions are included?
+              <span class="faq-icon" aria-hidden="true">+</span>
+            </button>
+            <div class="faq-answer">
+              <div class="faq-answer-inner">Unlimited revisions during the delivery window (the 5–7 days for Phase I). After delivery, you have 90 days of revision support included in your upfront fee — for changes based on your own review, your institution's feedback, or your co-investigators' input. Revisions based on an actual NIH Summary Statement (after your submission) are covered at 40% discount on a new engagement fee, as these are treated as resubmissions.</div>
+            </div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-question">
+              What information do you need from me to start?
+              <span class="faq-icon" aria-hidden="true">+</span>
+            </button>
+            <div class="faq-answer">
+              <div class="faq-answer-inner">To write a competitive grant, we need: (1) A description of your research and hypothesis (150+ words — the more detail the better), (2) A summary of your preliminary data and what it shows, (3) The FOA number you are targeting, (4) Your mechanism and target NIH institute, (5) The PI's name, institution, and role, and (6) Any specific constraints or requirements from your institution. The more context you provide upfront, the fewer clarifying questions we will have and the faster we can deliver.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pricing and Payment -->
+      <div class="faq-group" id="pricing">
+        <h2 class="faq-group-title">Pricing &amp; Payment</h2>
+        <div class="faq-items">
+          <div class="faq-item">
+            <button class="faq-question">
+              What is the success fee and how does it work?
+              <span class="faq-icon" aria-hidden="true">+</span>
+            </button>
+            <div class="faq-answer">
+              <div class="faq-answer-inner">If your grant is funded, you pay 3% of the total award amount within 30 days of receiving your Notice of Award from NIH. For example, a $300,000 SBIR Phase I award results in a $9,000 success fee, bringing your total investment to $11,500 against a $300,000 award — a 3.8% total investment for professional grant writing services. This fee comes from your company or institution's operating budget, not from the grant itself, as NIH policy prohibits contingency fees from federal grant funds. If you are not funded, you pay nothing beyond the upfront fee.</div>
+            </div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-question">
+              Can I pay in installments?
+              <span class="faq-icon" aria-hidden="true">+</span>
+            </button>
+            <div class="faq-answer">
+              <div class="faq-answer-inner">Yes. We offer a 50/50 split: 50% at kickoff and 50% upon delivery. This is available at no additional charge. Simply mention it when booking your intake call. For institutional clients, we can also issue a formal invoice through your procurement system with net-30 terms. Please note that work begins once the initial payment is confirmed.</div>
+            </div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-question">
+              What if my grant is resubmitted — do I pay the full fee again?
+              <span class="faq-icon" aria-hidden="true">+</span>
+            </button>
+            <div class="faq-answer">
+              <div class="faq-answer-inner">No. Resubmissions (A1 applications) are charged at 40% of the original upfront fee. We fully address each reviewer concern from the Summary Statement, update the Introduction to Resubmission section (required by NIH for A1 applications), and re-run the Study Section simulation to confirm the revisions successfully address the original weaknesses. The success fee structure remains the same for resubmissions.</div>
+            </div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-question">
+              Do you offer discounts for academic institutions or nonprofits?
+              <span class="faq-icon" aria-hidden="true">+</span>
+            </button>
+            <div class="faq-answer">
+              <div class="faq-answer-inner">We offer a 15% discount for academic institutions and 501(c)(3) nonprofit research organizations. We also offer a 10% discount for researchers who have previously worked with us on a funded grant (loyalty pricing). These discounts apply to the upfront fee only, not the success fee. To request institutional pricing, contact us with your institutional affiliation before booking.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- The Science -->
+      <div class="faq-group" id="science">
+        <h2 class="faq-group-title">The Science</h2>
+        <div class="faq-items">
+          <div class="faq-item">
+            <button class="faq-question">
+              How accurate is your Study Section simulation?
+              <span class="faq-icon" aria-hidden="true">+</span>
+            </button>
+            <div class="faq-answer">
+              <div class="faq-answer-inner">Our Study Section simulation is built on analysis of thousands of NIH Summary Statements across multiple study sections and institutes, combined with 25 years of hands-on reviewer psychology expertise. It is specifically calibrated to identify the weaknesses that consistently cause low scores in the five NIH scoring criteria: Significance, Investigator, Innovation, Approach, and Environment. While no simulation can guarantee a specific outcome in the actual review — reviewer composition and study section culture vary — applications that score competitively in our simulation have consistently performed well in real review.</div>
+            </div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-question">
+              How do you handle citations and references?
+              <span class="faq-icon" aria-hidden="true">+</span>
+            </button>
+            <div class="faq-answer">
+              <div class="faq-answer-inner">Every citation in your grant is verified against five databases: PubMed, Google Scholar, NIH Reporter, Semantic Scholar, and CrossRef. We check that (1) the cited paper actually exists and is accessible, (2) the cited paper actually supports the claim being made, and (3) the citation is formatted correctly for the NIH reference format. This verification is part of the three-pass quality review. Hallucinated citations — a serious problem with generic AI writing tools — are eliminated before delivery.</div>
+            </div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-question">
+              Can you write grants for highly specialized or niche research areas?
+              <span class="faq-icon" aria-hidden="true">+</span>
+            </button>
+            <div class="faq-answer">
+              <div class="faq-answer-inner">Yes. Our system is designed to work across all biomedical research domains. For highly specialized areas, we rely more heavily on the scientific detail you provide in your intake brief — which is why we ask for thorough descriptions of your research, hypothesis, and preliminary data. The more context you provide, the more accurately we can represent your science. For truly cutting-edge or interdisciplinary work, we may schedule a brief call to clarify key scientific points before writing begins.</div>
+            </div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-question">
+              Does the AI generate the scientific ideas, or do I provide those?
+              <span class="faq-icon" aria-hidden="true">+</span>
+            </button>
+            <div class="faq-answer">
+              <div class="faq-answer-inner">You provide all the scientific ideas, hypotheses, experimental approaches, and research directions. FrankGrant translates your science into compelling grant language — the kind that reviewers respond to. We structure your ideas, sharpen your claims, identify and fill compliance gaps, and present your work in the most competitive possible framing. The AI generates language and structure; the science comes entirely from you.</div>
+            </div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-question">
+              What happens if the Study Section simulation shows a non-competitive score?
+              <span class="faq-icon" aria-hidden="true">+</span>
+            </button>
+            <div class="faq-answer">
+              <div class="faq-answer-inner">If the simulation identifies a non-competitive score (above 30 for most mechanisms), we do not certify and deliver the grant. Instead, we identify the specific weaknesses, revise those sections, and re-run the simulation. This cycle continues until the application is competitive. We will also communicate directly with you about any weaknesses that stem from the underlying science rather than the writing — for example, if your preliminary data does not yet sufficiently support your hypothesis, we will tell you clearly before recommending a path forward.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Self-Service SaaS -->
+      <div class="faq-group" id="saas">
+        <h2 class="faq-group-title">Self-Service SaaS</h2>
+        <div class="faq-items">
+          <div class="faq-item">
+            <button class="faq-question">
+              What is the difference between Done For You and the SaaS?
+              <span class="faq-icon" aria-hidden="true">+</span>
+            </button>
+            <div class="faq-answer">
+              <div class="faq-answer-inner">In Done For You, FrankGrant writes your entire grant application for you, runs it through the quality review and simulation, and delivers a certified submission-ready package. You provide the brief; we do the writing. In the SaaS product, you do the writing with AI assistance — the platform generates sections based on your inputs, but you are the primary author directing the content. The Study Section simulation and quality review tools are available in both options.</div>
+            </div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-question">
+              Can I use the SaaS and then upgrade to Done For You?
+              <span class="faq-icon" aria-hidden="true">+</span>
+            </button>
+            <div class="faq-answer">
+              <div class="faq-answer-inner">Yes. Many researchers start with the SaaS to get familiar with the platform and generate early drafts, then hand off to our Done For You service for final polish, quality certification, and simulation. If you have a draft started in the SaaS, we can import it and complete the work at a reduced upfront fee (typically 25% discount). Contact us to arrange a hand-off.</div>
+            </div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-question">
+              Is the SaaS subscription a commitment?
+              <span class="faq-icon" aria-hidden="true">+</span>
+            </button>
+            <div class="faq-answer">
+              <div class="faq-answer-inner">No. The SaaS is $149 per month with no commitment. You can cancel at any time from your account settings. Cancellation is effective at the end of the current billing period — you retain full access until your subscription expires. All grants you have created in the platform remain accessible for 90 days after cancellation so you can export them.</div>
+            </div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-question">
+              Does the SaaS support all NIH grant mechanisms?
+              <span class="faq-icon" aria-hidden="true">+</span>
+            </button>
+            <div class="faq-answer">
+              <div class="faq-answer-inner">Yes. The SaaS supports SBIR Phase I and II, STTR Phase I and II, Fast Track, R01, R21, and several additional small grant mechanisms. Each mechanism has its own section template, page limit enforcement, and FOA-specific compliance checker. The Study Section simulation is calibrated per mechanism and can be pointed at specific study sections (NCI SEP, NIDDK study sections, etc.) for more accurate scoring.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Still have questions -->
+      <div class="faq-contact-box animate-on-scroll">
+        <h3>Still have questions?</h3>
+        <p>We are happy to answer any question not covered here. Book a free 15-minute call and ask us directly — no sales pressure.</p>
+        <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+          <a href="hire.html" class="btn btn-primary">Book a Free Call →</a>
+          <a href="newsletter.html" class="btn btn-ghost">Subscribe to The Payline</a>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<!-- ── FOOTER ─────────────────────────────────────────────────────── -->
+<footer class="site-footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a href="index.html" class="footer-logo">
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+            <circle cx="16" cy="16" r="15" fill="#0d9488"/>
+            <text x="16" y="22" font-family="Georgia,serif" font-size="16" font-weight="700" fill="white" text-anchor="middle">F</text>
+          </svg>
+          <span class="footer-brand-name">FrankGrant</span>
+        </a>
+        <p class="footer-tagline">NIH grant writing powered by AI and 25 years of expertise. Your science, our expertise, your funding.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Product</h4>
+        <ul>
+          <li><a href="index.html#how-it-works">How It Works</a></li>
+          <li><a href="pricing.html">Pricing</a></li>
+          <li><a href="https://frankgrant.pages.dev" target="_blank" rel="noopener">App Login</a></li>
+          <li><a href="faq.html">FAQ</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Services</h4>
+        <ul>
+          <li><a href="hire.html">Done For You</a></li>
+          <li><a href="hire.html">Book a Call</a></li>
+          <li><a href="pricing.html">Phase I / II</a></li>
+          <li><a href="pricing.html">R01 / R21</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Resources</h4>
+        <ul>
+          <li><a href="newsletter.html">Newsletter</a></li>
+          <li><a href="blog/index.html">Blog</a></li>
+          <li><a href="faq.html">FAQ</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Stay Updated</h4>
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">Get biweekly NIH grant writing insights from The Payline.</p>
+        <form class="footer-newsletter-form" onsubmit="event.preventDefault();this.innerHTML='<p style=\'color:var(--teal);font-size:14px;font-weight:600\'>Thanks! You\'re subscribed.</p>'">
+          <input type="email" placeholder="your@email.edu" required aria-label="Email address" />
+          <button type="submit">Subscribe</button>
+        </form>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p class="footer-copyright">© 2026 FrankGrant · COARE Holdings LLC · All rights reserved</p>
+      <div class="footer-social">
+        <a href="https://linkedin.com/company/frankgrant" target="_blank" rel="noopener">LinkedIn</a>
+        <a href="newsletter.html">Newsletter</a>
+        <a href="#">Terms</a>
+        <a href="#">Privacy</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

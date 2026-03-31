@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pricing — FrankGrant NIH Grant Writing</title>
+  <meta name="description" content="Transparent, success-aligned pricing for NIH grant writing. $2,500 upfront for SBIR/STTR Phase I + 3% success fee if funded. No retainers, no surprises." />
+  <link rel="icon" type="image/svg+xml" href="images/favicon.svg" />
+  <link rel="stylesheet" href="styles/global.css" />
+  <link rel="stylesheet" href="styles/nav.css" />
+  <link rel="stylesheet" href="styles/footer.css" />
+  <link rel="stylesheet" href="styles/pricing.css" />
+  <script src="scripts/theme.js" defer></script>
+  <script src="scripts/nav.js" defer></script>
+  <script src="scripts/animations.js" defer></script>
+  <script src="scripts/calculator.js" defer></script>
+</head>
+<body>
+
+<!-- ── NAVIGATION ─────────────────────────────────────────────────── -->
+<nav class="site-nav" role="navigation" aria-label="Main navigation">
+  <div class="container">
+    <div class="nav-inner">
+      <a href="index.html" class="nav-logo" aria-label="FrankGrant home">
+        <svg width="36" height="36" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+          <circle cx="18" cy="18" r="17" fill="#0d9488"/>
+          <text x="18" y="24" font-family="Georgia,serif" font-size="18" font-weight="700" fill="white" text-anchor="middle">F</text>
+        </svg>
+        <span class="nav-logo-text">FrankGrant</span>
+      </a>
+      <ul class="nav-links" role="list">
+        <li><a href="index.html#how-it-works">How It Works</a></li>
+        <li><a href="pricing.html" class="active">Pricing</a></li>
+        <li><a href="hire.html">Book</a></li>
+        <li><a href="newsletter.html">Newsletter</a></li>
+        <li><a href="blog/index.html">Blog</a></li>
+        <li><a href="faq.html">FAQ</a></li>
+      </ul>
+      <div class="nav-actions">
+        <button class="theme-toggle" aria-label="Toggle theme">🌙</button>
+        <a href="https://frankgrant.pages.dev" class="btn btn-ghost btn-sm" target="_blank" rel="noopener">App</a>
+        <a href="hire.html" class="btn btn-primary btn-sm">Hire Us</a>
+      </div>
+      <button class="nav-hamburger" id="nav-hamburger" aria-label="Open menu" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </div>
+</nav>
+
+<div class="nav-overlay" id="nav-overlay" aria-modal="true" role="dialog">
+  <div class="nav-overlay-header">
+    <a href="index.html" class="nav-logo">
+      <svg width="36" height="36" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+        <circle cx="18" cy="18" r="17" fill="#0d9488"/>
+        <text x="18" y="24" font-family="Georgia,serif" font-size="18" font-weight="700" fill="white" text-anchor="middle">F</text>
+      </svg>
+      <span class="nav-logo-text">FrankGrant</span>
+    </a>
+    <button class="nav-overlay-close" id="nav-overlay-close" aria-label="Close menu">×</button>
+  </div>
+  <ul class="nav-overlay-links" role="list">
+    <li><a href="index.html#how-it-works">How It Works</a></li>
+    <li><a href="pricing.html">Pricing</a></li>
+    <li><a href="hire.html">Book a Call</a></li>
+    <li><a href="newsletter.html">Newsletter</a></li>
+    <li><a href="blog/index.html">Blog</a></li>
+    <li><a href="faq.html">FAQ</a></li>
+  </ul>
+  <div class="nav-overlay-actions">
+    <a href="https://frankgrant.pages.dev" class="btn btn-ghost" target="_blank" rel="noopener">Try FrankGrant App</a>
+    <a href="hire.html" class="btn btn-primary">Hire Us to Write Your Grant</a>
+  </div>
+</div>
+
+<!-- ── PRICING HERO ───────────────────────────────────────────────── -->
+<section class="pricing-hero">
+  <div class="container">
+    <span class="badge badge-teal" style="margin-bottom:20px">Transparent Pricing</span>
+    <h1>Aligned With Your Success</h1>
+    <p>We only earn our full fee when you get funded. No retainers, no surprises, no fine print. Your upfront fee covers the work — the success fee covers our incentive alignment.</p>
+  </div>
+</section>
+
+<!-- ── THREE TIERS ────────────────────────────────────────────────── -->
+<section style="background:var(--bg)">
+  <div class="container">
+    <div class="pricing-tiers">
+
+      <!-- Phase I -->
+      <div class="tier-card animate-on-scroll">
+        <div class="tier-name">SBIR / STTR Phase I</div>
+        <div class="tier-mechanism">R43, R41 · Up to $300,000</div>
+        <div class="tier-price">$2,500</div>
+        <div class="tier-price-note">Upfront · 5–7 business days</div>
+        <div class="tier-success-fee">⭐ + 3% of award if funded</div>
+        <div class="tier-includes">What's included</div>
+        <ul class="tier-features">
+          <li>Specific Aims page (critical first impression)</li>
+          <li>Significance section (compelling unmet need)</li>
+          <li>Innovation section (differentiated claims)</li>
+          <li>Approach section (full experimental design)</li>
+          <li>Commercialization Potential narrative</li>
+          <li>Facilities &amp; Resources section</li>
+          <li>Three-pass quality review certification</li>
+          <li>Study Section simulation (3 reviewer personas)</li>
+          <li>Citation verification (PubMed + 4 databases)</li>
+          <li>FOA-specific NIH compliance audit</li>
+          <li>Submission-ready DOCX + PDF package</li>
+          <li>90 days post-delivery revision support</li>
+        </ul>
+        <a href="hire.html" class="btn btn-outline" style="width:100%;justify-content:center">Get Started →</a>
+      </div>
+
+      <!-- Phase II — Featured -->
+      <div class="tier-card featured animate-on-scroll" style="transition-delay:0.1s">
+        <div class="tier-badge">Most Impactful</div>
+        <div class="tier-name">SBIR / STTR Phase II</div>
+        <div class="tier-mechanism">R44, R42 · Up to $2,000,000</div>
+        <div class="tier-price">$4,500</div>
+        <div class="tier-price-note">Upfront · 7–10 business days</div>
+        <div class="tier-success-fee">⭐ + 3% of award if funded</div>
+        <div class="tier-includes">Everything in Phase I, plus</div>
+        <ul class="tier-features">
+          <li>Full Phase I→II transition narrative</li>
+          <li>Expanded Approach (full trial/product development)</li>
+          <li>Regulatory pathway section (FDA strategy)</li>
+          <li>Detailed commercialization plan</li>
+          <li>Letters of support strategy guidance</li>
+          <li>Budget justification narrative</li>
+          <li>Fast Track pathway option (additional $500)</li>
+          <li>Priority access — dedicated account review</li>
+          <li>Unlimited revisions during delivery window</li>
+          <li>Extended revision support (120 days)</li>
+        </ul>
+        <a href="hire.html" class="btn btn-primary" style="width:100%;justify-content:center">Get Started →</a>
+      </div>
+
+      <!-- R01 / R21 -->
+      <div class="tier-card animate-on-scroll" style="transition-delay:0.2s">
+        <div class="tier-name">R01 / R21 Academic</div>
+        <div class="tier-mechanism">R01 · Up to $2.5M · R21 · Up to $275K</div>
+        <div class="tier-price">$3,500 <span style="font-size:18px;font-family:system-ui">/ $2,000</span></div>
+        <div class="tier-price-note">R01 upfront / R21 upfront · 7–10 days</div>
+        <div class="tier-success-fee">⭐ + 3% of award if funded</div>
+        <div class="tier-includes">What's included</div>
+        <ul class="tier-features">
+          <li>Complete Research Strategy (Significance, Innovation, Approach)</li>
+          <li>Specific Aims page — critical for score</li>
+          <li>Human Subjects &amp; Protections section</li>
+          <li>Environment &amp; Resources narrative</li>
+          <li>Rigor and Reproducibility plan</li>
+          <li>Study Section simulation (full 3-reviewer panel)</li>
+          <li>Three-pass quality review certification</li>
+          <li>Citation verification across 5 databases</li>
+          <li>Biosketch narrative guidance (PI + co-investigators)</li>
+          <li>90 days revision support post-delivery</li>
+        </ul>
+        <a href="hire.html" class="btn btn-outline" style="width:100%;justify-content:center">Get Started →</a>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ── SUCCESS FEE EXPLANATION ────────────────────────────────────── -->
+<section class="section" style="background:var(--bg-surface)">
+  <div class="container">
+    <div class="success-fee-section animate-on-scroll">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+        <span style="font-size:32px">⭐</span>
+        <h2>Understanding the Success Fee</h2>
+      </div>
+      <p style="margin-bottom:16px">The 3% success fee is how we align our incentives with yours. We do not want to collect a large flat fee and hand you something that does not get funded. The success fee means we have as much reason to write a winning grant as you do.</p>
+      <p style="margin-bottom:16px"><strong>When do you pay it?</strong> Within 30 days of receiving your Notice of Award (NoA) from NIH. You pay from your company or institution's operating funds.</p>
+      <p style="margin-bottom:16px"><strong>Why not from the grant?</strong> NIH policy prohibits contingency fees from being paid directly from federal grant funds. The success fee comes from your operating budget, not the award.</p>
+      <p><strong>What if I don't get funded?</strong> You pay nothing beyond the upfront fee. We lose the time investment — which is exactly why we run the Study Section simulation before certifying and delivering your grant. We want to deliver winning applications.</p>
+    </div>
+
+    <!-- ROI Calculator -->
+    <div class="calculator animate-on-scroll">
+      <h3>Calculate Your Investment</h3>
+      <p class="calculator-subtitle">Enter your expected award amount and mechanism to see your full cost breakdown vs. a traditional consultant.</p>
+      <div class="calculator-input-group">
+        <div class="calc-field">
+          <label for="calc-mechanism">Grant Mechanism</label>
+          <select id="calc-mechanism">
+            <option value="sbir-i">SBIR Phase I (up to $300K)</option>
+            <option value="sbir-ii">SBIR Phase II (up to $2M)</option>
+            <option value="sttr-i">STTR Phase I (up to $300K)</option>
+            <option value="sttr-ii">STTR Phase II (up to $2M)</option>
+            <option value="fast-track">Fast Track (Phase I + II)</option>
+            <option value="r01">R01 (up to $2.5M)</option>
+            <option value="r21">R21 (up to $275K)</option>
+          </select>
+        </div>
+        <div class="calc-field">
+          <label for="calc-award">Expected Award Amount ($)</label>
+          <input type="number" id="calc-award" placeholder="300000" min="0" step="10000" aria-describedby="calc-award-hint" />
+          <div style="font-size:12px;color:var(--text-muted);margin-top:4px" id="calc-award-hint">Enter 0 to see upfront cost only</div>
+        </div>
+      </div>
+      <div class="calculator-results">
+        <div class="calc-result">
+          <div class="calc-result-label">Upfront Fee</div>
+          <div class="calc-result-value" id="calc-upfront">$2,500</div>
+        </div>
+        <div class="calc-result">
+          <div class="calc-result-label">Success Fee (if funded)</div>
+          <div class="calc-result-value gold" id="calc-success">—</div>
+        </div>
+        <div class="calc-result">
+          <div class="calc-result-label">Total if Funded</div>
+          <div class="calc-result-value teal" id="calc-total">$2,500+</div>
+        </div>
+        <div class="calc-result">
+          <div class="calc-result-label">Saved vs. Consultant</div>
+          <div class="calc-result-value" style="color:var(--gold)" id="calc-savings">$5,000</div>
+        </div>
+      </div>
+      <div class="calc-savings" id="calc-savings-msg" style="margin-top:16px">
+        Enter an expected award amount above to see your full ROI calculation.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── SAAS TIER ──────────────────────────────────────────────────── -->
+<section class="section">
+  <div class="container">
+    <div class="saas-tier animate-on-scroll">
+      <div class="saas-tier-content">
+        <span class="badge badge-teal" style="margin-bottom:16px">Self-Service Option</span>
+        <h2>Write It Yourself with FrankGrant</h2>
+        <p>If you want to write your own grant with AI assistance, our SaaS platform gives you access to the same Study Section simulation engine, three-pass quality review, and FOA compliance checker — at a fraction of the cost.</p>
+        <ul style="list-style:none;margin-bottom:0">
+          <li style="display:flex;gap:10px;align-items:center;font-size:14px;color:var(--text-muted);padding:6px 0"><span style="color:var(--teal);font-weight:700">✓</span> AI-powered section generation for all NIH mechanisms</li>
+          <li style="display:flex;gap:10px;align-items:center;font-size:14px;color:var(--text-muted);padding:6px 0"><span style="color:var(--teal);font-weight:700">✓</span> Full Study Section simulation — same engine as Done For You</li>
+          <li style="display:flex;gap:10px;align-items:center;font-size:14px;color:var(--text-muted);padding:6px 0"><span style="color:var(--teal);font-weight:700">✓</span> Three-pass quality review with actionable feedback</li>
+          <li style="display:flex;gap:10px;align-items:center;font-size:14px;color:var(--text-muted);padding:6px 0"><span style="color:var(--teal);font-weight:700">✓</span> FOA-specific compliance and page limit enforcement</li>
+          <li style="display:flex;gap:10px;align-items:center;font-size:14px;color:var(--text-muted);padding:6px 0"><span style="color:var(--teal);font-weight:700">✓</span> Export to DOCX — ready for Grants.gov submission</li>
+        </ul>
+      </div>
+      <div class="saas-tier-cta">
+        <div class="saas-price">$149</div>
+        <div class="saas-price-note">per month · cancel anytime</div>
+        <a href="https://frankgrant.pages.dev" class="btn btn-primary btn-lg" target="_blank" rel="noopener">Start Free Trial →</a>
+        <p style="font-size:12px;color:var(--text-muted);margin-top:12px">No credit card required for trial</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── PRICING FAQ ────────────────────────────────────────────────── -->
+<section class="section" style="background:var(--bg-surface)">
+  <div class="container">
+    <div class="section-header centered animate-on-scroll">
+      <h2 class="section-title">Pricing Questions</h2>
+    </div>
+    <div class="pricing-faq animate-on-scroll">
+      <div class="pricing-faq-item">
+        <button class="pricing-faq-question">
+          Are there any hidden fees beyond the upfront and success fee?
+          <span class="pricing-faq-icon">+</span>
+        </button>
+        <div class="pricing-faq-answer">
+          <div class="pricing-faq-answer-inner">No. Your upfront fee covers everything listed in the tier — all sections, all revisions during the delivery window, the Study Section simulation, quality review certification, and the submission-ready package. The only additional cost is the 3% success fee, which only applies if your grant is funded.</div>
+        </div>
+      </div>
+      <div class="pricing-faq-item">
+        <button class="pricing-faq-question">
+          What if my grant requires resubmission — do I pay again?
+          <span class="pricing-faq-icon">+</span>
+        </button>
+        <div class="pricing-faq-answer">
+          <div class="pricing-faq-answer-inner">For resubmissions (A1 applications), we offer a 40% discount on the upfront fee because we are building on existing work. We fully address reviewer critiques, update the Introduction to Resubmission, and re-run the Study Section simulation to verify the revisions address the original concerns. Contact us with your Summary Statement to get a resubmission quote.</div>
+        </div>
+      </div>
+      <div class="pricing-faq-item">
+        <button class="pricing-faq-question">
+          Do you offer payment plans for the upfront fee?
+          <span class="pricing-faq-icon">+</span>
+        </button>
+        <div class="pricing-faq-answer">
+          <div class="pricing-faq-answer-inner">Yes. We offer a split-payment option: 50% ($1,250 for Phase I) due at kickoff and 50% due on delivery. This is available to all clients at no additional charge. Simply mention the payment plan preference when you book your intake call and we will set it up.</div>
+        </div>
+      </div>
+      <div class="pricing-faq-item">
+        <button class="pricing-faq-question">
+          What payment methods do you accept?
+          <span class="pricing-faq-icon">+</span>
+        </button>
+        <div class="pricing-faq-answer">
+          <div class="pricing-faq-answer-inner">We accept all major credit cards (Visa, Mastercard, Amex), ACH bank transfer, and wire transfer. For institutional clients, we can invoice through your procurement system with net-30 terms. Please note that work does not begin until payment is received or an institutional purchase order is confirmed.</div>
+        </div>
+      </div>
+      <div class="pricing-faq-item">
+        <button class="pricing-faq-question">
+          What is your refund policy?
+          <span class="pricing-faq-icon">+</span>
+        </button>
+        <div class="pricing-faq-answer">
+          <div class="pricing-faq-answer-inner">If we are unable to complete your grant due to our constraints — for example, we determine the science is not yet ready for submission — we refund 100% of the upfront fee. Once delivery begins, we do not offer refunds but we do provide unlimited revisions until you are satisfied with the quality. Our Study Section simulation ensures we do not certify and deliver a grant that we believe is not competitive.</div>
+        </div>
+      </div>
+    </div>
+    <p class="text-center" style="margin-top:32px"><a href="faq.html" class="btn btn-ghost">View all FAQ →</a></p>
+  </div>
+</section>
+
+<!-- ── FINAL CTA ──────────────────────────────────────────────────── -->
+<section class="final-cta" style="background:linear-gradient(135deg,#0f766e,#0d9488);padding:80px 0;text-align:center">
+  <div class="container">
+    <h2 style="font-family:Georgia,serif;font-size:40px;color:white;margin-bottom:16px">Start with a 15-minute call</h2>
+    <p style="font-size:18px;color:rgba(255,255,255,0.8);margin-bottom:36px;max-width:560px;margin-left:auto;margin-right:auto">Tell us about your research and deadline. We will give you an honest assessment of fit and a clear timeline before you commit to anything.</p>
+    <a href="hire.html" class="btn btn-lg" style="background:white;color:#0f766e;border:2px solid white;font-weight:700">Book a Free 15-Minute Call →</a>
+  </div>
+</section>
+
+<!-- ── FOOTER ─────────────────────────────────────────────────────── -->
+<footer class="site-footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a href="index.html" class="footer-logo">
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+            <circle cx="16" cy="16" r="15" fill="#0d9488"/>
+            <text x="16" y="22" font-family="Georgia,serif" font-size="16" font-weight="700" fill="white" text-anchor="middle">F</text>
+          </svg>
+          <span class="footer-brand-name">FrankGrant</span>
+        </a>
+        <p class="footer-tagline">NIH grant writing powered by AI and 25 years of expertise. Your science, our expertise, your funding.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Product</h4>
+        <ul>
+          <li><a href="index.html#how-it-works">How It Works</a></li>
+          <li><a href="pricing.html">Pricing</a></li>
+          <li><a href="https://frankgrant.pages.dev" target="_blank" rel="noopener">App Login</a></li>
+          <li><a href="faq.html">FAQ</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Services</h4>
+        <ul>
+          <li><a href="hire.html">Done For You</a></li>
+          <li><a href="hire.html">Book a Call</a></li>
+          <li><a href="pricing.html">Phase I / II</a></li>
+          <li><a href="pricing.html">R01 / R21</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Resources</h4>
+        <ul>
+          <li><a href="newsletter.html">Newsletter</a></li>
+          <li><a href="blog/index.html">Blog</a></li>
+          <li><a href="faq.html">FAQ</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Stay Updated</h4>
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">Get biweekly NIH grant writing insights from The Payline.</p>
+        <form class="footer-newsletter-form" onsubmit="event.preventDefault();this.innerHTML='<p style=\'color:var(--teal);font-size:14px;font-weight:600\'>Thanks! You\'re subscribed.</p>'">
+          <input type="email" placeholder="your@email.edu" required aria-label="Email address" />
+          <button type="submit">Subscribe</button>
+        </form>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p class="footer-copyright">© 2026 FrankGrant · COARE Holdings LLC · All rights reserved</p>
+      <div class="footer-social">
+        <a href="https://linkedin.com/company/frankgrant" target="_blank" rel="noopener">LinkedIn</a>
+        <a href="newsletter.html">Newsletter</a>
+        <a href="#">Terms</a>
+        <a href="#">Privacy</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

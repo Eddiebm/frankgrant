@@ -221,41 +221,64 @@ export default function App() {
         <AnthropicStatusBanner onDismiss={() => { setBannerDismissed(true); setBannerDismissedAt(Date.now()) }} />
       )}
       <SignedOut>
-        {/* Always-visible top-right Sign In button */}
-        <div style={{ position: 'fixed', top: 16, right: 16, zIndex: 1000 }}>
+        {/* Nav bar */}
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, height: 56, background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', zIndex: 100 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 30, height: 30, borderRadius: 8, background: '#0e7490', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 13, letterSpacing: '-0.5px' }}>FG</div>
+            <span style={{ color: '#f1f5f9', fontWeight: 700, fontSize: 15, letterSpacing: '-0.3px' }}>FrankGrant</span>
+          </div>
           <SignInButton mode="modal">
-            <button style={{ padding: '8px 20px', background: '#0e7490', border: 'none', borderRadius: 8, color: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: 500, boxShadow: '0 2px 8px rgba(14,116,144,0.3)' }}>
+            <button style={{ padding: '7px 18px', background: '#0e7490', border: 'none', borderRadius: 8, color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600, letterSpacing: '0.01em' }}>
               Sign In
             </button>
           </SignInButton>
         </div>
 
-        {/* Centered landing page */}
-        <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1.25rem', padding: '2rem', marginTop: anthropicDegraded && !bannerDismissed ? 44 : 0 }}>
-          {/* Logo */}
-          <div style={{ width: 72, height: 72, borderRadius: '50%', background: '#0e7490', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 32, boxShadow: '0 4px 20px rgba(14,116,144,0.35)', marginBottom: 8 }}>
-            F
+        {/* Hero */}
+        <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 24px 48px', background: 'linear-gradient(160deg, #f8fafc 0%, #e0f2fe 100%)' }}>
+          <div style={{ maxWidth: 560, width: '100%', textAlign: 'center' }}>
+            {/* Badge */}
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 12px', background: 'rgba(14,116,144,0.1)', border: '1px solid rgba(14,116,144,0.2)', borderRadius: 20, marginBottom: 28 }}>
+              <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#0e7490' }} />
+              <span style={{ fontSize: 12, fontWeight: 500, color: '#0e7490', letterSpacing: '0.02em' }}>NIH Grant Studio</span>
+            </div>
+
+            <h1 style={{ fontSize: 'clamp(32px, 6vw, 52px)', fontWeight: 800, color: '#0f172a', lineHeight: 1.1, letterSpacing: '-1.5px', marginBottom: 20 }}>
+              Write NIH grants<br />
+              <span style={{ color: '#0e7490' }}>that get funded.</span>
+            </h1>
+
+            <p style={{ fontSize: 17, color: '#475569', lineHeight: 1.65, marginBottom: 36, maxWidth: 440, margin: '0 auto 36px' }}>
+              AI-powered grant writing, peer review simulation, and scoring — purpose-built for NIH mechanisms.
+            </p>
+
+            <SignInButton mode="modal">
+              <button style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '14px 32px', background: '#0f172a', border: 'none', borderRadius: 10, color: '#fff', cursor: 'pointer', fontSize: 15, fontWeight: 600, letterSpacing: '-0.2px', boxShadow: '0 4px 14px rgba(15,23,42,0.25)' }}
+                onMouseOver={e => e.currentTarget.style.background = '#1e293b'}
+                onMouseOut={e => e.currentTarget.style.background = '#0f172a'}
+              >
+                Get Started
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+              </button>
+            </SignInButton>
+
+            {/* Features row */}
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 24, marginTop: 40, flexWrap: 'wrap' }}>
+              {[
+                ['Section Writer', 'AI drafts each NIH section'],
+                ['Peer Review Sim', 'Study section + PD critique'],
+                ['Grant Scorer', 'Criterion-level 1–9 scoring'],
+              ].map(([label, desc]) => (
+                <div key={label} style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a', marginBottom: 2 }}>{label}</div>
+                  <div style={{ fontSize: 12, color: '#94a3b8' }}>{desc}</div>
+                </div>
+              ))}
+            </div>
           </div>
 
-          <h1 style={{ fontSize: 32, fontWeight: 700, margin: 0, color: '#111827', letterSpacing: '-0.5px' }}>
-            Welcome to FrankGrant
-          </h1>
-
-          <p style={{ fontSize: 16, color: '#6b7280', margin: 0 }}>
-            AI-powered NIH grant writing
-          </p>
-
-          <SignInButton mode="modal">
-            <button style={{ marginTop: 12, padding: '14px 40px', background: '#0e7490', border: 'none', borderRadius: 10, color: '#fff', cursor: 'pointer', fontSize: 17, fontWeight: 600, boxShadow: '0 4px 16px rgba(14,116,144,0.4)', transition: 'opacity 0.15s' }}
-              onMouseOver={e => e.currentTarget.style.opacity = '0.9'}
-              onMouseOut={e => e.currentTarget.style.opacity = '1'}
-            >
-              Sign In
-            </button>
-          </SignInButton>
-
-          <p style={{ fontSize: 12, color: '#9ca3af', margin: 0 }}>
-            NIH grant writing &amp; scoring · COARE Holdings
+          <p style={{ fontSize: 11, color: '#cbd5e1', marginTop: 48 }}>
+            COARE Holdings · <a href="/#/terms" style={{ color: '#94a3b8', textDecoration: 'underline' }}>Terms</a> · <a href="/#/privacy" style={{ color: '#94a3b8', textDecoration: 'underline' }}>Privacy</a>
           </p>
         </div>
       </SignedOut>

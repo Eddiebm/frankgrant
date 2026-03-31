@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FrankGrant — NIH Grant Writing by Experts, Peer-Reviewed Before You Submit</title>
+  <meta name="description" content="FrankGrant combines AI with 25 years of NIH grant writing expertise and $7M+ in awarded grants. We write your application, simulate peer review, and certify it before delivery." />
+  <meta property="og:title" content="FrankGrant — NIH Grant Writing by Experts" />
+  <meta property="og:description" content="We write your NIH application, simulate peer review, and certify it before delivery. $2,500 upfront + 3% if funded." />
+  <meta property="og:type" content="website" />
+  <link rel="icon" type="image/svg+xml" href="images/favicon.svg" />
+  <link rel="stylesheet" href="styles/global.css" />
+  <link rel="stylesheet" href="styles/nav.css" />
+  <link rel="stylesheet" href="styles/footer.css" />
+  <link rel="stylesheet" href="styles/home.css" />
+  <script src="scripts/theme.js" defer></script>
+  <script src="scripts/nav.js" defer></script>
+  <script src="scripts/animations.js" defer></script>
+</head>
+<body>
+
+<!-- ── NAVIGATION ─────────────────────────────────────────────────── -->
+<nav class="site-nav" role="navigation" aria-label="Main navigation">
+  <div class="container">
+    <div class="nav-inner">
+      <a href="index.html" class="nav-logo" aria-label="FrankGrant home">
+        <svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <circle cx="18" cy="18" r="17" fill="#0d9488"/>
+          <text x="18" y="24" font-family="Georgia,serif" font-size="18" font-weight="700" fill="white" text-anchor="middle">F</text>
+        </svg>
+        <span class="nav-logo-text">FrankGrant</span>
+      </a>
+      <ul class="nav-links" role="list">
+        <li><a href="index.html#how-it-works">How It Works</a></li>
+        <li><a href="pricing.html">Pricing</a></li>
+        <li><a href="hire.html">Book</a></li>
+        <li><a href="newsletter.html">Newsletter</a></li>
+        <li><a href="blog/index.html">Blog</a></li>
+        <li><a href="faq.html">FAQ</a></li>
+      </ul>
+      <div class="nav-actions">
+        <button class="theme-toggle" aria-label="Toggle theme">🌙</button>
+        <a href="https://frankgrant.pages.dev" class="btn btn-ghost btn-sm" target="_blank" rel="noopener">App</a>
+        <a href="hire.html" class="btn btn-primary btn-sm">Hire Us</a>
+      </div>
+      <button class="nav-hamburger" id="nav-hamburger" aria-label="Open menu" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile overlay -->
+<div class="nav-overlay" id="nav-overlay" aria-modal="true" role="dialog" aria-label="Mobile navigation">
+  <div class="nav-overlay-header">
+    <a href="index.html" class="nav-logo">
+      <svg width="36" height="36" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+        <circle cx="18" cy="18" r="17" fill="#0d9488"/>
+        <text x="18" y="24" font-family="Georgia,serif" font-size="18" font-weight="700" fill="white" text-anchor="middle">F</text>
+      </svg>
+      <span class="nav-logo-text">FrankGrant</span>
+    </a>
+    <button class="nav-overlay-close" id="nav-overlay-close" aria-label="Close menu">×</button>
+  </div>
+  <ul class="nav-overlay-links" role="list">
+    <li><a href="index.html#how-it-works">How It Works</a></li>
+    <li><a href="pricing.html">Pricing</a></li>
+    <li><a href="hire.html">Book a Call</a></li>
+    <li><a href="newsletter.html">Newsletter</a></li>
+    <li><a href="blog/index.html">Blog</a></li>
+    <li><a href="faq.html">FAQ</a></li>
+  </ul>
+  <div class="nav-overlay-actions">
+    <a href="https://frankgrant.pages.dev" class="btn btn-ghost" target="_blank" rel="noopener">Try FrankGrant App</a>
+    <a href="hire.html" class="btn btn-primary">Hire Us to Write Your Grant</a>
+  </div>
+</div>
+
+<!-- ── HERO ───────────────────────────────────────────────────────── -->
+<section class="hero" aria-label="Hero">
+  <div class="hero-orbs" aria-hidden="true">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+  </div>
+  <div class="hero-content">
+    <div class="hero-badge">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+        <circle cx="7" cy="7" r="6" stroke="#0d9488" stroke-width="1.5"/>
+        <path d="M4 7l2 2 4-4" stroke="#0d9488" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Trusted by NIH-funded researchers
+    </div>
+    <h1 class="hero-headline">
+      Your NIH grant, written<br>by <em>experts.</em><br>Peer-reviewed before<br>you submit.
+    </h1>
+    <p class="hero-subheadline">
+      FrankGrant combines AI with 25 years of NIH grant writing expertise and $7M+ in awarded grants. We write your application, simulate peer review, and certify it before delivery.
+    </p>
+    <div class="hero-ctas">
+      <a href="hire.html" class="btn btn-primary btn-lg">Hire Us to Write Your Grant — $2,500</a>
+      <a href="https://frankgrant.pages.dev" class="btn btn-lg" style="border:2px solid rgba(255,255,255,0.4);color:#e2e8f0;background:transparent;" target="_blank" rel="noopener">Try FrankGrant Yourself →</a>
+    </div>
+    <div class="hero-trust">
+      <div class="hero-trust-item">🏆 $7M+ in NIH awards</div>
+      <div class="hero-trust-item">🔬 Study Section simulation</div>
+      <div class="hero-trust-item">✅ Three-pass quality review</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── PROOF BAR ──────────────────────────────────────────────────── -->
+<div class="proof-bar" aria-label="Researchers we work with">
+  <div class="proof-bar-track" aria-hidden="true">
+    <span class="proof-item"><strong>University of Oklahoma</strong> · Researchers</span>
+    <span class="proof-item"><strong>NCI-funded Companies</strong> · Phase II</span>
+    <span class="proof-item"><strong>STTR Phase II</strong> · Recipients</span>
+    <span class="proof-item"><strong>SBIR Phase I</strong> · Winners</span>
+    <span class="proof-item"><strong>Academic Medical Centers</strong> · Faculty</span>
+    <span class="proof-item"><strong>Biotech Startups</strong> · Founders</span>
+    <span class="proof-item"><strong>NIDDK-funded Labs</strong> · Investigators</span>
+    <span class="proof-item"><strong>Clinical Researchers</strong> · Phase IIB Bridge</span>
+    <span class="proof-item"><strong>University of Oklahoma</strong> · Researchers</span>
+    <span class="proof-item"><strong>NCI-funded Companies</strong> · Phase II</span>
+    <span class="proof-item"><strong>STTR Phase II</strong> · Recipients</span>
+    <span class="proof-item"><strong>SBIR Phase I</strong> · Winners</span>
+    <span class="proof-item"><strong>Academic Medical Centers</strong> · Faculty</span>
+    <span class="proof-item"><strong>Biotech Startups</strong> · Founders</span>
+    <span class="proof-item"><strong>NIDDK-funded Labs</strong> · Investigators</span>
+    <span class="proof-item"><strong>Clinical Researchers</strong> · Phase IIB Bridge</span>
+  </div>
+</div>
+
+<!-- ── HOW IT WORKS ───────────────────────────────────────────────── -->
+<section class="section" id="how-it-works">
+  <div class="container">
+    <div class="section-header centered animate-on-scroll">
+      <span class="badge badge-teal" style="margin-bottom:16px">The Process</span>
+      <h2 class="section-title">How FrankGrant Works</h2>
+      <p class="section-subtitle">From your research idea to a submission-ready NIH application — in 5 to 7 business days.</p>
+    </div>
+    <div class="steps-grid">
+      <div class="step-card animate-on-scroll">
+        <div class="step-number">1</div>
+        <h3 class="step-title">Describe Your Research</h3>
+        <p class="step-desc">Tell us about your science in plain language using our intake form. Our system extracts your aims, mechanism, targeted NIH institute, and commercial potential. You provide the science — we provide the structure, compliance knowledge, and reviewer psychology.</p>
+      </div>
+      <div class="step-card animate-on-scroll" style="transition-delay:0.1s">
+        <div class="step-number">2</div>
+        <h3 class="step-title">We Write and Simulate Review</h3>
+        <p class="step-desc">FrankGrant generates every section of your NIH application — from Specific Aims to Significance, Innovation, Approach, and Commercialization Potential. Then we simulate the peer review process: three independent reviewer personas score your grant before you ever submit.</p>
+      </div>
+      <div class="step-card animate-on-scroll" style="transition-delay:0.2s">
+        <div class="step-number">3</div>
+        <h3 class="step-title">Certified and Delivered</h3>
+        <p class="step-desc">Every grant passes our mandatory three-pass quality review: scientific accuracy, NIH compliance, and reviewer simulation scoring. If the impact score is not competitive, we rewrite before delivery. You receive a complete, submission-ready package with all sections and citations verified.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── STUDY SECTION SIMULATION ───────────────────────────────────── -->
+<section class="simulation-section" aria-label="Study Section simulation demo">
+  <div class="container">
+    <div class="section-header centered" style="margin-bottom:48px">
+      <span class="badge badge-teal" style="margin-bottom:16px;background:rgba(13,148,136,0.15);border:1px solid rgba(13,148,136,0.4);color:#5eead4;">Featured Capability</span>
+      <h2 class="section-title" style="color:#f8fafc">Peer Review Before You Submit</h2>
+      <p class="section-subtitle" style="color:#94a3b8;margin:0 auto;max-width:580px">Our Study Section simulation identifies weaknesses before real reviewers do — so you fix them before they count.</p>
+    </div>
+    <div class="sim-card animate-on-scroll">
+      <div class="sim-header">
+        <div>
+          <div class="sim-title">Study Section Simulation Results</div>
+          <div style="font-size:13px;color:#64748b;margin-top:4px">Mechanism: SBIR Phase I · Simulated: NCI SEP · FOA: PA-24-059</div>
+        </div>
+        <div class="sim-score-box">
+          <div class="sim-score-label">Impact Score</div>
+          <div class="sim-score-value" data-target="24">99</div>
+          <div class="sim-score-desc">Competitive (Excellent)</div>
+        </div>
+      </div>
+      <div class="reviewers-grid">
+        <div class="reviewer-card">
+          <div class="reviewer-name">Dr. Sarah Chen</div>
+          <div class="reviewer-role">Basic Scientist · Molecular Biology</div>
+          <div class="reviewer-score">2</div>
+          <ul class="reviewer-strengths">
+            <li>Strong scientific rationale and clearly stated hypothesis</li>
+            <li>Excellent preliminary data supporting feasibility</li>
+            <li>Well-qualified PI with relevant track record</li>
+          </ul>
+          <div class="reviewer-concern">Innovation claim could be more precisely articulated in the context of existing literature</div>
+        </div>
+        <div class="reviewer-card">
+          <div class="reviewer-name">Dr. Marcus Williams</div>
+          <div class="reviewer-role">Translational Researcher · Oncology</div>
+          <div class="reviewer-score">3</div>
+          <ul class="reviewer-strengths">
+            <li>Compelling clinical significance and clearly defined unmet need</li>
+            <li>Realistic timeline with measurable Phase I milestones</li>
+          </ul>
+          <div class="reviewer-concern">Sample size justification should include explicit statistical power calculation for primary endpoint</div>
+        </div>
+        <div class="reviewer-card">
+          <div class="reviewer-name">Dr. Patricia Rodriguez</div>
+          <div class="reviewer-role">Biostatistician · Clinical Trials Design</div>
+          <div class="reviewer-score">2</div>
+          <ul class="reviewer-strengths">
+            <li>Well-designed experimental approach with appropriate controls</li>
+            <li>Alternative strategies clearly identified and justified</li>
+          </ul>
+          <div class="reviewer-concern">Missing data handling plan for primary endpoint needs to be specified</div>
+        </div>
+      </div>
+      <div class="sim-certified" style="opacity:0">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+          <circle cx="10" cy="10" r="9" fill="rgba(52,211,153,0.2)" stroke="#34d399" stroke-width="1.5"/>
+          <path d="M6 10l3 3 5-6" stroke="#34d399" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Certified for delivery — Impact score 24 is competitive. Weaknesses addressed before submission. Ready to submit to NCI.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── COMPARISON TABLE ───────────────────────────────────────────── -->
+<section class="section" style="background:var(--bg-surface)">
+  <div class="container">
+    <div class="section-header centered animate-on-scroll">
+      <h2 class="section-title">How We Compare</h2>
+      <p class="section-subtitle">Compared to human consultants and generic AI writing tools — across every dimension that matters.</p>
+    </div>
+    <div class="comparison-table-wrap animate-on-scroll">
+      <table class="comparison-table" role="table" aria-label="Feature comparison">
+        <thead>
+          <tr>
+            <th scope="col">Feature</th>
+            <th scope="col">Human Consultant</th>
+            <th scope="col">Generic AI</th>
+            <th scope="col" class="highlight">FrankGrant</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Cost</td>
+            <td>$5,000–$15,000</td>
+            <td>$20–$50/mo</td>
+            <td class="highlight">$2,500 + 3% if funded</td>
+          </tr>
+          <tr>
+            <td>Timeline</td>
+            <td>4–8 weeks</td>
+            <td>Instant (unreviewed)</td>
+            <td class="highlight">5–7 business days</td>
+          </tr>
+          <tr>
+            <td>NIH grant expertise</td>
+            <td>Varies widely</td>
+            <td>None — generic</td>
+            <td class="highlight">25 years · $7M+ awarded</td>
+          </tr>
+          <tr>
+            <td>Peer review simulation</td>
+            <td><span class="cross">✗</span> Not offered</td>
+            <td><span class="cross">✗</span> Not offered</td>
+            <td class="highlight"><span class="check">✓</span> Always included</td>
+          </tr>
+          <tr>
+            <td>Citation verification</td>
+            <td>Manual — inconsistent</td>
+            <td>None — hallucinations common</td>
+            <td class="highlight"><span class="check">✓</span> 5 databases verified</td>
+          </tr>
+          <tr>
+            <td>NIH compliance check</td>
+            <td>Manual</td>
+            <td><span class="cross">✗</span> None</td>
+            <td class="highlight"><span class="check">✓</span> FOA-specific automated</td>
+          </tr>
+          <tr>
+            <td>Quality certification</td>
+            <td><span class="cross">✗</span> None</td>
+            <td><span class="cross">✗</span> None</td>
+            <td class="highlight"><span class="check">✓</span> Three-pass mandatory</td>
+          </tr>
+          <tr>
+            <td>You own the IP and science</td>
+            <td><span class="check">✓</span> Yes</td>
+            <td>Terms unclear</td>
+            <td class="highlight"><span class="check">✓</span> 100% — always</td>
+          </tr>
+          <tr>
+            <td>Success-aligned pricing</td>
+            <td><span class="cross">✗</span> Full fee regardless</td>
+            <td><span class="cross">✗</span> Subscription regardless</td>
+            <td class="highlight"><span class="check">✓</span> Success fee if funded</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ── TESTIMONIALS ───────────────────────────────────────────────── -->
+<section class="section">
+  <div class="container">
+    <div class="section-header centered animate-on-scroll">
+      <span class="badge badge-teal" style="margin-bottom:16px">Early Access</span>
+      <h2 class="section-title">What Researchers Say</h2>
+      <p class="section-subtitle">From our first cohort of researchers who used FrankGrant for their NIH applications.</p>
+    </div>
+    <div class="grid-3">
+      <div class="testimonial-card animate-on-scroll">
+        <p class="testimonial-quote">"The Study Section simulation caught three specific weaknesses in my approach section that I had completely missed. The final grant scored a 24 — we are waiting on Notice of Award right now."</p>
+        <div class="testimonial-author">
+          <div class="testimonial-avatar">S</div>
+          <div>
+            <div class="testimonial-name">Sarah K.</div>
+            <div class="testimonial-institution">Assistant Professor · Biomedical Engineering</div>
+          </div>
+        </div>
+      </div>
+      <div class="testimonial-card animate-on-scroll" style="transition-delay:0.1s">
+        <p class="testimonial-quote">"I was skeptical that AI could handle the commercialization section for our STTR, but the commercial reviewer panel gave us feedback that was sharper than any grant consultant I have worked with previously."</p>
+        <div class="testimonial-author">
+          <div class="testimonial-avatar">M</div>
+          <div>
+            <div class="testimonial-name">Marcus T.</div>
+            <div class="testimonial-institution">Co-founder · Oncology Therapeutics Startup</div>
+          </div>
+        </div>
+      </div>
+      <div class="testimonial-card animate-on-scroll" style="transition-delay:0.2s">
+        <p class="testimonial-quote">"The three-pass quality review is not a gimmick — it caught a citation that did not actually support the claim we were making. That kind of detail is what saves submissions from getting triaged."</p>
+        <div class="testimonial-author">
+          <div class="testimonial-avatar">P</div>
+          <div>
+            <div class="testimonial-name">Patricia R.</div>
+            <div class="testimonial-institution">Research Director · Academic Medical Center</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── PRICING PREVIEW ────────────────────────────────────────────── -->
+<section class="section" style="background:var(--bg-surface)">
+  <div class="container">
+    <div class="section-header centered animate-on-scroll">
+      <h2 class="section-title">Simple, Aligned Pricing</h2>
+      <p class="section-subtitle">We succeed when you get funded. That is why we charge a success fee — not a flat retainer regardless of outcome.</p>
+    </div>
+    <div class="pricing-cards">
+      <div class="card card-featured animate-on-scroll" style="position:relative">
+        <div style="position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:var(--teal);color:white;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;padding:4px 14px;border-radius:100px;white-space:nowrap">Most Popular</div>
+        <div class="pricing-card-header">
+          <div class="pricing-label">Done For You</div>
+          <div class="pricing-price">$2,500 <span class="pricing-price-sub">upfront</span></div>
+          <div style="font-size:13px;color:var(--gold);margin-top:6px;font-weight:600">+ 3% success fee if funded</div>
+        </div>
+        <ul class="pricing-features">
+          <li>Complete NIH application (all required sections)</li>
+          <li>Commercialization Potential narrative</li>
+          <li>Three-pass quality review certification</li>
+          <li>Study Section simulation with impact score</li>
+          <li>Citation verification across 5 databases</li>
+          <li>FOA-specific NIH compliance check</li>
+          <li>Submission-ready package (Word + PDF)</li>
+          <li>90 days revision support post-delivery</li>
+        </ul>
+        <a href="hire.html" class="btn btn-primary" style="width:100%;justify-content:center">Book a Call →</a>
+      </div>
+      <div class="card animate-on-scroll" style="transition-delay:0.1s">
+        <div class="pricing-card-header">
+          <div class="pricing-label">Self Service — SaaS</div>
+          <div class="pricing-price">$149 <span class="pricing-price-sub">/month</span></div>
+        </div>
+        <ul class="pricing-features">
+          <li>AI-powered grant writing tools</li>
+          <li>Study Section simulation engine</li>
+          <li>Three-pass quality review</li>
+          <li>FOA-specific compliance checking</li>
+          <li>Citation suggestions and verification</li>
+          <li>Export to DOCX format</li>
+          <li>Unlimited revisions</li>
+          <li>All NIH mechanisms supported</li>
+        </ul>
+        <a href="https://frankgrant.pages.dev" class="btn btn-outline" style="width:100%;justify-content:center" target="_blank" rel="noopener">Try FrankGrant →</a>
+      </div>
+    </div>
+    <p class="text-center text-muted text-sm" style="margin-top:20px">Phase II and Fast Track from $4,500. R01/R21 from $3,500. <a href="pricing.html">See full pricing →</a></p>
+  </div>
+</section>
+
+<!-- ── FAQ PREVIEW ────────────────────────────────────────────────── -->
+<section class="section">
+  <div class="container container-narrow">
+    <div class="section-header centered animate-on-scroll">
+      <h2 class="section-title">Common Questions</h2>
+    </div>
+    <div class="faq-list animate-on-scroll">
+      <div class="faq-item">
+        <button class="faq-question">
+          Do I own my grant application completely?
+          <span class="faq-icon" aria-hidden="true">+</span>
+        </button>
+        <div class="faq-answer" role="region">
+          <div class="faq-answer-inner">Yes — completely and without reservation. FrankGrant prepares the writing based on your science, your data, and your research direction. Your intellectual property, your research, your data, and your grant application are 100% yours. We are a writing and review service, not a co-author, and we make no claim on any funded research that results from our work.</div>
+        </div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-question">
+          What is the success fee and when do I pay it?
+          <span class="faq-icon" aria-hidden="true">+</span>
+        </button>
+        <div class="faq-answer" role="region">
+          <div class="faq-answer-inner">If your grant is funded, you pay 3% of the total award amount within 30 days of receiving your Notice of Award. This fee comes from your company or institution's operating funds — not from the grant itself. NIH policy prohibits contingency fees being paid from grant funds directly. We only earn the success fee if you get funded, which aligns our incentives entirely with yours. If you do not get funded, your total cost is only the upfront fee.</div>
+        </div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-question">
+          How long does the writing process take?
+          <span class="faq-icon" aria-hidden="true">+</span>
+        </button>
+        <div class="faq-answer" role="region">
+          <div class="faq-answer-inner">Most Phase I grants are completed in 5 to 7 business days from the time you submit your intake form with complete information. Complex mechanisms (Phase II, Fast Track, R01) may take up to 10 business days. We include a minimum of three rounds of revision within the quoted timeline. We strongly recommend engaging us at least 2 weeks before your target submission date to allow adequate review time.</div>
+        </div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-question">
+          Does the Study Section simulation actually predict outcomes?
+          <span class="faq-icon" aria-hidden="true">+</span>
+        </button>
+        <div class="faq-answer" role="region">
+          <div class="faq-answer-inner">Our Study Section simulation is built on 25 years of reviewer psychology, NIH scoring rubrics, and analysis of funded grants across multiple institutes. It is designed to identify the same weaknesses that real reviewers consistently flag — vague innovation claims, underpowered experiments, missing alternative strategies, and compliance issues. While no simulation can guarantee a specific outcome, applications that score competitively in our simulation consistently perform better in real review.</div>
+        </div>
+      </div>
+    </div>
+    <p class="text-center" style="margin-top:32px"><a href="faq.html" class="btn btn-ghost">View all questions →</a></p>
+  </div>
+</section>
+
+<!-- ── FINAL CTA ──────────────────────────────────────────────────── -->
+<section class="final-cta">
+  <div class="container">
+    <h2>Ready to write a grant<br>that gets funded?</h2>
+    <p>Join researchers who trust FrankGrant with their NIH applications.<br>Your science deserves expert writing.</p>
+    <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap">
+      <a href="hire.html" class="btn btn-primary btn-lg">Book a Call</a>
+      <a href="https://frankgrant.pages.dev" class="btn btn-outline btn-lg" target="_blank" rel="noopener">Try FrankGrant App →</a>
+    </div>
+  </div>
+</section>
+
+<!-- ── FOOTER ─────────────────────────────────────────────────────── -->
+<footer class="site-footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a href="index.html" class="footer-logo">
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+            <circle cx="16" cy="16" r="15" fill="#0d9488"/>
+            <text x="16" y="22" font-family="Georgia,serif" font-size="16" font-weight="700" fill="white" text-anchor="middle">F</text>
+          </svg>
+          <span class="footer-brand-name">FrankGrant</span>
+        </a>
+        <p class="footer-tagline">NIH grant writing powered by AI and 25 years of expertise. Your science, our expertise, your funding.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Product</h4>
+        <ul>
+          <li><a href="index.html#how-it-works">How It Works</a></li>
+          <li><a href="pricing.html">Pricing</a></li>
+          <li><a href="https://frankgrant.pages.dev" target="_blank" rel="noopener">App Login</a></li>
+          <li><a href="faq.html">FAQ</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Services</h4>
+        <ul>
+          <li><a href="hire.html">Done For You</a></li>
+          <li><a href="hire.html">Book a Call</a></li>
+          <li><a href="pricing.html">Phase I / II</a></li>
+          <li><a href="pricing.html">R01 / R21</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Resources</h4>
+        <ul>
+          <li><a href="newsletter.html">Newsletter</a></li>
+          <li><a href="blog/index.html">Blog</a></li>
+          <li><a href="faq.html">FAQ</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Stay Updated</h4>
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">Get biweekly NIH grant writing insights from The Payline.</p>
+        <form class="footer-newsletter-form" id="footer-newsletter-form">
+          <input type="email" placeholder="your@email.edu" required aria-label="Email address" />
+          <button type="submit">Subscribe</button>
+        </form>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p class="footer-copyright">© 2026 FrankGrant · COARE Holdings LLC · All rights reserved</p>
+      <div class="footer-social">
+        <a href="https://linkedin.com/company/frankgrant" target="_blank" rel="noopener">LinkedIn</a>
+        <a href="newsletter.html">Newsletter</a>
+        <a href="#">Terms</a>
+        <a href="#">Privacy</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // Footer newsletter form
+  var footerForm = document.getElementById('footer-newsletter-form');
+  if (footerForm) {
+    footerForm.addEventListener('submit', function(e) {
+      e.preventDefault();
+      this.innerHTML = '<p style="color:var(--teal);font-size:14px;font-weight:600">Thanks! You\'re subscribed to The Payline.</p>';
+    });
+  }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,224 @@
+/* Newsletter Page */
+.newsletter-hero {
+  text-align: center;
+  padding: 80px 0;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.newsletter-hero h1 {
+  font-size: 52px;
+  font-weight: 400;
+  margin-bottom: 8px;
+}
+
+.newsletter-name {
+  color: var(--teal);
+}
+
+.newsletter-hero .tagline {
+  font-size: 20px;
+  color: var(--text-muted);
+  max-width: 600px;
+  margin: 0 auto 32px;
+  line-height: 1.6;
+}
+
+.newsletter-signup-hero {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.newsletter-signup-hero input {
+  flex: 1;
+  padding: 14px 18px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text);
+  font-size: 16px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.newsletter-signup-hero input:focus { border-color: var(--teal); }
+
+.newsletter-proof {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 12px;
+}
+
+/* What you get */
+.newsletter-benefits {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+  margin-top: 48px;
+}
+
+.benefit-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  transition: box-shadow 0.2s ease;
+}
+
+.benefit-card:hover { box-shadow: var(--shadow-lg); }
+
+.benefit-icon {
+  font-size: 28px;
+  margin-bottom: 12px;
+}
+
+.benefit-title {
+  font-family: Georgia, serif;
+  font-size: 20px;
+  margin-bottom: 8px;
+  color: var(--text-heading);
+}
+
+.benefit-desc {
+  font-size: 14px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+/* Sample issue */
+.sample-issue {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+  max-width: 680px;
+  margin: 0 auto;
+}
+
+.sample-issue-header {
+  background: var(--teal);
+  padding: 24px 32px;
+  color: white;
+}
+
+.sample-issue-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  opacity: 0.8;
+  margin-bottom: 4px;
+}
+
+.sample-issue-title {
+  font-family: Georgia, serif;
+  font-size: 22px;
+}
+
+.sample-issue-body { padding: 32px; }
+
+.sample-section { margin-bottom: 28px; }
+.sample-section-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--teal);
+  margin-bottom: 8px;
+}
+
+.sample-section-title {
+  font-family: Georgia, serif;
+  font-size: 18px;
+  margin-bottom: 8px;
+  color: var(--text-heading);
+}
+
+.sample-section-content {
+  font-size: 15px;
+  color: var(--text-muted);
+  line-height: 1.7;
+}
+
+/* Archive */
+.archive-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+.archive-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  text-decoration: none;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+  display: block;
+}
+
+.archive-card:hover { box-shadow: var(--shadow-lg); text-decoration: none; transform: translateY(-2px); }
+
+.archive-date { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
+.archive-title {
+  font-family: Georgia, serif;
+  font-size: 16px;
+  color: var(--text-heading);
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.archive-excerpt { font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+
+/* Inline signup CTA */
+.newsletter-inline-cta {
+  background: linear-gradient(135deg, rgba(13,148,136,0.1), rgba(3,105,161,0.05));
+  border: 1px solid rgba(13,148,136,0.3);
+  border-radius: 16px;
+  padding: 48px;
+  text-align: center;
+}
+
+.newsletter-inline-cta h2 {
+  font-size: 32px;
+  margin-bottom: 12px;
+}
+
+.newsletter-inline-cta p {
+  font-size: 16px;
+  color: var(--text-muted);
+  margin-bottom: 28px;
+}
+
+.newsletter-inline-form {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  max-width: 440px;
+  margin: 0 auto;
+}
+
+.newsletter-inline-form input {
+  flex: 1;
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text);
+  font-size: 15px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.newsletter-inline-form input:focus { border-color: var(--teal); }
+
+@media (max-width: 768px) {
+  .newsletter-hero h1 { font-size: 36px; }
+  .newsletter-signup-hero { flex-direction: column; }
+  .newsletter-benefits { grid-template-columns: 1fr; }
+  .archive-grid { grid-template-columns: 1fr; }
+  .newsletter-inline-form { flex-direction: column; }
+  .newsletter-inline-cta { padding: 28px; }
+}
