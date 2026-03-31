@@ -22,7 +22,7 @@ export default class ErrorBoundary extends Component {
           <div style={{ fontSize: 40, marginBottom: 16 }}>⚠️</div>
           <h2>Something went wrong.</h2>
           <p style={{ color: '#6b7280', marginBottom: 16 }}>Please refresh the page to continue.</p>
-          {!isProd && (
+          {!import.meta.env.PROD && (
             <pre style={{ color: '#dc2626', fontSize: 12, textAlign: 'left', maxWidth: 600, margin: '0 auto 16px', background: '#fef2f2', padding: 12, borderRadius: 6, overflowX: 'auto' }}>
               {this.state.error?.toString()}
             </pre>
