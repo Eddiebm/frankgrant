@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useUser, SignOutButton } from '@clerk/clerk-react'
+import { useUser, SignOutButton, SignInButton } from '@clerk/clerk-react'
 
 const ADMIN_EMAILS = ['eddieb@coareholdings.com', 'eddie@bannermanmenson.com']
 const TEAL = '#0e7490'
@@ -184,12 +184,22 @@ export default function AppShell({ activeView, setActiveView, activeProject, chi
                 </button>
               ))}
               <div style={{ borderTop: '0.5px solid #e5e7eb', margin: '8px 0' }} />
-              <SignOutButton>
-                <button style={{ display: 'flex', alignItems: 'center', gap: 16, width: '100%', padding: '14px 24px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 16, color: '#dc2626', textAlign: 'left', minHeight: 44 }}>
-                  <span style={{ fontSize: 20 }}>🚪</span>
-                  Sign Out
-                </button>
-              </SignOutButton>
+              {!user && (
+                <SignInButton mode="modal">
+                  <button style={{ display: 'flex', alignItems: 'center', gap: 16, width: '100%', padding: '14px 24px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 16, color: '#0e7490', textAlign: 'left', minHeight: 44, fontWeight: 600 }}>
+                    <span style={{ fontSize: 20 }}>🔑</span>
+                    Sign In
+                  </button>
+                </SignInButton>
+              )}
+              {user && (
+                <SignOutButton>
+                  <button style={{ display: 'flex', alignItems: 'center', gap: 16, width: '100%', padding: '14px 24px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 16, color: '#dc2626', textAlign: 'left', minHeight: 44 }}>
+                    <span style={{ fontSize: 20 }}>🚪</span>
+                    Sign Out
+                  </button>
+                </SignOutButton>
+              )}
             </div>
           </div>
         )}
@@ -224,6 +234,18 @@ export default function AppShell({ activeView, setActiveView, activeProject, chi
         {/* Bottom: settings, command, user */}
         <div style={{ flexShrink: 0, borderTop: '0.5px solid #f1f5f9', paddingBottom: 4 }}>
           {NAV_BOTTOM(isAdmin).map(item => <NavBtn key={item.id} item={item} />)}
+
+          {/* Sign In — shown when not authenticated */}
+          {!user && (
+            <div style={{ padding: '8px 8px 0' }}>
+              <SignInButton mode="modal">
+                <button style={{ display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'center', gap: 8, width: '100%', padding: '10px 12px', border: 'none', borderRadius: 8, background: '#0e7490', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+                  <span style={{ fontSize: 15, flexShrink: 0 }}>🔑</span>
+                  {!collapsed && <span>Sign In</span>}
+                </button>
+              </SignInButton>
+            </div>
+          )}
 
           {/* User row */}
           <div style={{ position: 'relative', padding: '4px 8px 0' }}>
@@ -274,7 +296,20 @@ export default function AppShell({ activeView, setActiveView, activeProject, chi
 
       {/* Main content */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
-        {activeView !== 'editor' && <Breadcrumb />}
+        {/* Top bar: breadcrumb + sign-in button when unauthenticated */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          {activeView !== 'editor' && <Breadcrumb />}
+          {activeView === 'editor' && <div />}
+          {!user && (
+            <div style={{ padding: '4px 16px', flexShrink: 0 }}>
+              <SignInButton mode="modal">
+                <button style={{ padding: '6px 18px', background: '#0e7490', border: 'none', borderRadius: 8, color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600, boxShadow: '0 2px 6px rgba(14,116,144,0.3)' }}>
+                  Sign In
+                </button>
+              </SignInButton>
+            </div>
+          )}
+        </div>
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {children}
         </div>

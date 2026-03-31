@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { SignedIn, SignedOut, SignIn, useUser } from '@clerk/clerk-react'
+import { SignedIn, SignedOut, SignInButton, useUser } from '@clerk/clerk-react'
 import AppShell from './components/AppShell'
 import Dashboard from './components/Dashboard'
 import GrantEditor from './components/GrantEditor'
@@ -219,12 +219,42 @@ export default function App() {
         <AnthropicStatusBanner onDismiss={() => { setBannerDismissed(true); setBannerDismissedAt(Date.now()) }} />
       )}
       <SignedOut>
-        <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1.5rem', padding: '2rem', marginTop: anthropicDegraded && !bannerDismissed ? 44 : 0 }}>
-          <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
-            <h1 style={{ fontSize: '28px', fontWeight: '500', marginBottom: '6px' }}>FrankGrant</h1>
-            <p style={{ fontSize: '14px', color: '#666' }}>NIH grant writing & scoring · COARE Holdings</p>
+        {/* Always-visible top-right Sign In button */}
+        <div style={{ position: 'fixed', top: 16, right: 16, zIndex: 1000 }}>
+          <SignInButton mode="modal">
+            <button style={{ padding: '8px 20px', background: '#0e7490', border: 'none', borderRadius: 8, color: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: 500, boxShadow: '0 2px 8px rgba(14,116,144,0.3)' }}>
+              Sign In
+            </button>
+          </SignInButton>
+        </div>
+
+        {/* Centered landing page */}
+        <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1.25rem', padding: '2rem', marginTop: anthropicDegraded && !bannerDismissed ? 44 : 0 }}>
+          {/* Logo */}
+          <div style={{ width: 72, height: 72, borderRadius: '50%', background: '#0e7490', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 32, boxShadow: '0 4px 20px rgba(14,116,144,0.35)', marginBottom: 8 }}>
+            F
           </div>
-          <SignIn routing="hash" />
+
+          <h1 style={{ fontSize: 32, fontWeight: 700, margin: 0, color: '#111827', letterSpacing: '-0.5px' }}>
+            Welcome to FrankGrant
+          </h1>
+
+          <p style={{ fontSize: 16, color: '#6b7280', margin: 0 }}>
+            AI-powered NIH grant writing
+          </p>
+
+          <SignInButton mode="modal">
+            <button style={{ marginTop: 12, padding: '14px 40px', background: '#0e7490', border: 'none', borderRadius: 10, color: '#fff', cursor: 'pointer', fontSize: 17, fontWeight: 600, boxShadow: '0 4px 16px rgba(14,116,144,0.4)', transition: 'opacity 0.15s' }}
+              onMouseOver={e => e.currentTarget.style.opacity = '0.9'}
+              onMouseOut={e => e.currentTarget.style.opacity = '1'}
+            >
+              Sign In
+            </button>
+          </SignInButton>
+
+          <p style={{ fontSize: 12, color: '#9ca3af', margin: 0 }}>
+            NIH grant writing &amp; scoring · COARE Holdings
+          </p>
         </div>
       </SignedOut>
       <SignedIn>
