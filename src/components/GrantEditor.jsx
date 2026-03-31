@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useUser } from '@clerk/clerk-react'
 import { useApi, AIUnavailableError } from '../hooks/useApi'
+import mammoth from 'mammoth'
 import PreliminaryData from './PreliminaryData'
 import VoiceMode from './VoiceMode'
 import CollaborationPanel from './CollaborationPanel'
@@ -155,6 +156,8 @@ export default function GrantEditor({ project, onSave, onBack }) {
   // Document upload
   const fileInputRef = useRef(null)
   const [uploadTargetSec, setUploadTargetSec] = useState(null)
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [importingFile, setImportingFile] = useState(false)
 
   // AI unavailable / retry state
   const [aiUnavailable, setAiUnavailable] = useState(null) // { sectionId, retryAfter, countdown }
@@ -1027,20 +1030,40 @@ export default function GrantEditor({ project, onSave, onBack }) {
 
   // Document upload handlers
   function handleFileUpload(secId) {
-    setUploadTargetSec(secId)
+    setUploadTargetSec(secId || activeSec)
     fileInputRef.current?.click()
   }
 
-  function handleFileChange(e) {
+  function handleTopBarImport() {
+    setShowImportModal(true)
+  }
+
+  async function handleFileChange(e) {
     const file = e.target.files?.[0]
-    if (!file || !uploadTargetSec) return
-    const reader = new FileReader()
-    reader.onload = ev => {
-      const text = ev.target.result || ''
-      const updated = updateSection(uploadTargetSec, text)
-      save(updated, scores)
+    if (!file || !uploadTargetSec) { e.target.value = ''; return }
+    setImportingFile(true)
+    try {
+      let text = ''
+      if (file.name.endsWith('.docx')) {
+        const buf = await file.arrayBuffer()
+        const result = await mammoth.extractRawText({ arrayBuffer: buf })
+        text = result.value || ''
+      } else {
+        text = await new Promise((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = ev => resolve(ev.target.result || '')
+          reader.onerror = reject
+          reader.readAsText(file)
+        })
+      }
+      const updated = updateSection(uploadTargetSec, text.trim())
+      await save(updated, scores)
+      setActiveTab('writer')
+      setActiveSec(uploadTargetSec)
+    } catch (err) {
+      alert('Could not read file: ' + err.message)
     }
-    reader.readAsText(file)
+    setImportingFile(false)
     e.target.value = ''
   }
 
@@ -1083,6 +1106,20 @@ export default function GrantEditor({ project, onSave, onBack }) {
 
         {/* Right: Voice Mode, Export, Share */}
         <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+          <button
+            onClick={handleTopBarImport}
+            disabled={importingFile}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: '#fff', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 500 }}
+            title="Import a document into a section"
+          >
+            {importingFile ? (
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ animation: 'spin 0.7s linear infinite' }}><path d="M21 12a9 9 0 1 1-6.22-8.56"/></svg>
+            ) : (
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            )}
+            Import
+          </button>
+
           <button
             onClick={() => setShowVoiceMode(true)}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: '#f0f9ff', color: '#0e7490', border: '1px solid #bae6fd', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
@@ -2112,10 +2149,40 @@ export default function GrantEditor({ project, onSave, onBack }) {
       <input
         ref={fileInputRef}
         type="file"
-        accept=".txt,.md,.text"
+        accept=".txt,.md,.text,.docx"
         style={{ display: 'none' }}
         onChange={handleFileChange}
       />
+
+      {/* Import modal — choose which section to fill */}
+      {showImportModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
+          <div style={{ background: '#fff', borderRadius: 12, padding: 24, width: '100%', maxWidth: 420, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>Import document</div>
+              <button onClick={() => setShowImportModal(false)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#94a3b8', lineHeight: 1 }}>×</button>
+            </div>
+            <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 16 }}>Choose which section to import the file into. Supports .txt, .md, and .docx.</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 280, overflowY: 'auto', marginBottom: 16 }}>
+              {visibleSecs.map(sec => (
+                <button
+                  key={sec.id}
+                  onClick={() => {
+                    setShowImportModal(false)
+                    setUploadTargetSec(sec.id)
+                    setTimeout(() => fileInputRef.current?.click(), 50)
+                  }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', cursor: 'pointer', fontSize: 13, color: '#0f172a', textAlign: 'left', fontWeight: sections[sec.id] ? 500 : 400 }}
+                >
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: sections[sec.id] ? '#22c55e' : '#d1d5db' }} />
+                  <span style={{ flex: 1 }}>{sec.label}</span>
+                  {sections[sec.id] && <span style={{ fontSize: 11, color: '#94a3b8' }}>has content</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Collaboration Panel */}
       {showCollabPanel && (
