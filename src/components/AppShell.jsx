@@ -10,6 +10,7 @@ const NAV_MAIN = [
   { id: 'wizard',   label: 'New Grant', icon: '✍️' },
   { id: 'letters',  label: 'Letters',   icon: '📝' },
   { id: 'biosketch',label: 'Biosketch', icon: '👤' },
+  { id: 'scorer',   label: 'Scorer',    icon: '🎯' },
 ]
 const NAV_PIPELINE = { id: 'pipeline', label: 'Pipeline', icon: '📊' }
 const NAV_BOTTOM = (isAdmin) => [
@@ -171,6 +172,7 @@ export default function AppShell({ activeView, setActiveView, activeProject, chi
               <div style={{ width: 40, height: 4, background: '#e5e7eb', borderRadius: 2, margin: '0 auto 16px' }} />
               {[
                 { id: 'biosketch', label: 'Biosketch', icon: '👤' },
+                { id: 'scorer',   label: 'Scorer',    icon: '🎯' },
                 { id: 'settings', label: 'Settings', icon: '⚙️' },
                 ...(isAdmin ? [{ id: 'command', label: 'Command Station', icon: '⚡' }] : []),
               ].map(item => (

@@ -275,6 +275,8 @@ const MAX_TOKENS_BY_FEATURE = {
   'prelim_narrative': 1500,
   'prelim_analyze': 800,
   'citations': 200,
+  'score_research': 2000,
+  'score_commercial': 2000,
   'default': 1000,
 }
 
