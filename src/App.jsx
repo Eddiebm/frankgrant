@@ -12,6 +12,7 @@ import FeedbackButton from './components/FeedbackButton'
 import CommandStation from './components/CommandStation'
 import GrantWizard from './components/GrantWizard'
 import Scorer from './components/Scorer'
+import Settings from './components/Settings'
 import IntakePage from './components/IntakePage'
 import TermsPage from './components/TermsPage'
 import PrivacyPage from './components/PrivacyPage'
@@ -73,7 +74,6 @@ function AppRouter() {
   const userEmail = user?.emailAddresses?.[0]?.emailAddress || ''
 
   function handleNavigate(view) {
-    if (view === 'settings') { alert('Settings — coming soon!'); return }
     setCurrentView(view)
   }
 
@@ -129,6 +129,8 @@ function AppRouter() {
         <LettersGenerator />
       ) : currentView === 'scorer' ? (
         <Scorer onBack={() => setCurrentView('dashboard')} />
+      ) : currentView === 'settings' ? (
+        <Settings onBack={() => setCurrentView('dashboard')} />
       ) : currentView === 'pipeline' ? (
         <Dashboard
           onOpenProject={handleOpenProject}
