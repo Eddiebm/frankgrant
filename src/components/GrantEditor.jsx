@@ -152,6 +152,10 @@ export default function GrantEditor({ project, onSave, onBack }) {
   const [shareInfo, setShareInfo] = useState(null) // null | { enabled, share_url, expires_at }
   const [shareLoading, setShareLoading] = useState(false)
 
+  // Document upload
+  const fileInputRef = useRef(null)
+  const [uploadTargetSec, setUploadTargetSec] = useState(null)
+
   // AI unavailable / retry state
   const [aiUnavailable, setAiUnavailable] = useState(null) // { sectionId, retryAfter, countdown }
   const retryTimerRef = useRef(null)
@@ -1021,6 +1025,25 @@ export default function GrantEditor({ project, onSave, onBack }) {
     setResubRevising(r => ({ ...r, [secId]: false }))
   }
 
+  // Document upload handlers
+  function handleFileUpload(secId) {
+    setUploadTargetSec(secId)
+    fileInputRef.current?.click()
+  }
+
+  function handleFileChange(e) {
+    const file = e.target.files?.[0]
+    if (!file || !uploadTargetSec) return
+    const reader = new FileReader()
+    reader.onload = ev => {
+      const text = ev.target.result || ''
+      const updated = updateSection(uploadTargetSec, text)
+      save(updated, scores)
+    }
+    reader.readAsText(file)
+    e.target.value = ''
+  }
+
   // Left panel sections list (simplified to core sections)
   const LEFT_PANEL_SECTIONS = [
     { id: 'aims', label: 'Specific Aims', icon: '📝' },
@@ -1062,41 +1085,44 @@ export default function GrantEditor({ project, onSave, onBack }) {
         <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
           <button
             onClick={() => setShowVoiceMode(true)}
-            style={{ ...ghostBtn, fontSize: 12, background: '#0e7490', color: '#fff', borderColor: '#0e7490' }}
-            title="Talk to your grant with AI voice assistant"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: '#f0f9ff', color: '#0e7490', border: '1px solid #bae6fd', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+            title="Voice assistant for your grant"
           >
-            🎤 Voice Mode
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+            Voice
           </button>
 
           <div style={{ position: 'relative' }}>
             <button
               onClick={() => setShowExportDropdown(d => !d)}
               disabled={exportingDocx || exportingPackage}
-              style={{ ...ghostBtn, fontSize: 12 }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', background: '#fff', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 7, cursor: 'pointer', fontSize: 12 }}
               title="Export options"
             >
-              {exportingDocx ? '⟳ Exporting…' : exportingPackage ? '⟳ Packaging…' : '📄 Export ▾'}
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              {exportingDocx ? 'Exporting…' : exportingPackage ? 'Packaging…' : 'Export'}
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m6 9 6 6 6-6"/></svg>
             </button>
             {showExportDropdown && (
-              <div style={{ position: 'absolute', top: '100%', right: 0, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 100, minWidth: 220, padding: '4px 0' }}>
-                <button onClick={handleExportDOCX} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#111' }}>
-                  📄 Combined Document (.docx)
+              <div style={{ position: 'absolute', top: 'calc(100% + 4px)', right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.10)', zIndex: 100, minWidth: 220, padding: '4px 0' }}>
+                <button onClick={handleExportDOCX} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#0f172a' }}>
+                  Combined Document (.docx)
                 </button>
-                <button onClick={handleExportPackage} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#111' }}>
-                  📦 NIH Submission Package (.zip)
+                <button onClick={handleExportPackage} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#0f172a' }}>
+                  NIH Submission Package (.zip)
                 </button>
-                <button onClick={handlePrint} title="Opens print dialog — select Save as PDF as destination" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#111' }}>
-                  🖨️ Save as PDF
+                <button onClick={handlePrint} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#0f172a' }}>
+                  Save as PDF
                 </button>
-                <div style={{ borderTop: '1px solid #f3f4f6', margin: '4px 0' }} />
-                <button onClick={handleEmailSelf} disabled={emailGrant_loading} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 14px', background: 'none', border: 'none', cursor: emailGrant_loading ? 'not-allowed' : 'pointer', fontSize: 13, color: '#111' }}>
-                  {emailGrant_loading ? '⟳ Sending…' : '📧 Email to myself'}
+                <div style={{ borderTop: '1px solid #f1f5f9', margin: '4px 0' }} />
+                <button onClick={handleEmailSelf} disabled={emailGrant_loading} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 14px', background: 'none', border: 'none', cursor: emailGrant_loading ? 'not-allowed' : 'pointer', fontSize: 13, color: '#0f172a' }}>
+                  {emailGrant_loading ? 'Sending…' : 'Email to myself'}
                 </button>
-                <button onClick={() => { setShowExportDropdown(false); setShowEmailColleagueModal(true) }} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#111' }}>
-                  📧 Email to colleague
+                <button onClick={() => { setShowExportDropdown(false); setShowEmailColleagueModal(true) }} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#0f172a' }}>
+                  Email to colleague
                 </button>
-                <button onClick={handleOpenShareModal} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#111' }}>
-                  🔗 Get shareable link
+                <button onClick={handleOpenShareModal} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#0f172a' }}>
+                  Get shareable link
                 </button>
                 {emailGrant_selfStatus && (
                   <div style={{ padding: '6px 14px', fontSize: 12, color: emailGrant_selfStatus === 'ok' ? '#15803d' : '#dc2626' }}>{emailGrant_selfMsg}</div>
@@ -1107,12 +1133,13 @@ export default function GrantEditor({ project, onSave, onBack }) {
 
           <button
             onClick={() => setShowCollabPanel(p => !p)}
-            style={{ ...ghostBtn, fontSize: 12, background: '#7c3aed', color: '#fff', borderColor: '#7c3aed', position: 'relative' }}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: '#fff', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 7, cursor: 'pointer', fontSize: 12, position: 'relative' }}
             title="Collaborate with your team"
           >
-            👥 Share
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            Team
             {commentCount > 0 && (
-              <span style={{ position: 'absolute', top: -6, right: -6, background: '#ef4444', color: '#fff', borderRadius: '50%', width: 16, height: 16, fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>{commentCount > 9 ? '9+' : commentCount}</span>
+              <span style={{ position: 'absolute', top: -5, right: -5, background: '#ef4444', color: '#fff', borderRadius: '50%', width: 15, height: 15, fontSize: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>{commentCount > 9 ? '9+' : commentCount}</span>
             )}
           </button>
         </div>
@@ -1122,19 +1149,19 @@ export default function GrantEditor({ project, onSave, onBack }) {
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 
         {/* ── LEFT PANEL ────────────────────────────────────────────────────── */}
-        <div style={{ width: 220, flexShrink: 0, borderRight: '0.5px solid #e5e7eb', overflowY: 'auto', background: '#fafafa', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ width: 220, flexShrink: 0, borderRight: '1px solid #e5e7eb', overflowY: 'auto', background: '#fafafa', display: 'flex', flexDirection: 'column' }}>
 
           {/* Setup row */}
           <div
             onClick={() => setActiveTab('setup')}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', cursor: 'pointer', background: activeTab === 'setup' ? '#e0f2fe' : 'transparent', borderLeft: `3px solid ${activeTab === 'setup' ? '#0e7490' : 'transparent'}`, color: activeTab === 'setup' ? '#0e7490' : '#374151', fontSize: 13, fontWeight: activeTab === 'setup' ? 600 : 400 }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', cursor: 'pointer', background: activeTab === 'setup' ? '#f0f9ff' : 'transparent', borderLeft: `2px solid ${activeTab === 'setup' ? '#0e7490' : 'transparent'}`, color: activeTab === 'setup' ? '#0e7490' : '#374151', fontSize: 13, fontWeight: activeTab === 'setup' ? 600 : 400 }}
           >
-            <span>⚙️</span>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
             <span>Setup</span>
           </div>
 
           {/* SECTIONS header */}
-          <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.08em', padding: '8px 12px 4px', marginTop: 4 }}>Sections</div>
+          <div style={{ fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', padding: '10px 14px 4px', marginTop: 4 }}>Sections</div>
 
           {LEFT_PANEL_SECTIONS.filter(s => {
             if (s.needsCommercial && !m.needsCommercial) return false
@@ -1145,51 +1172,49 @@ export default function GrantEditor({ project, onSave, onBack }) {
             const hasContent = wordCount > 100
             const hasAny = content.length > 0
             const isActive = activeTab === 'writer' && activeSec === sec.id
-            const statusIcon = hasContent ? '✅' : hasAny ? '⏳' : '●'
             return (
               <div
                 key={sec.id}
                 onClick={() => { setActiveTab('writer'); setActiveSec(sec.id) }}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', cursor: 'pointer', background: isActive ? '#e0f2fe' : 'transparent', borderLeft: `3px solid ${isActive ? '#0e7490' : 'transparent'}`, color: isActive ? '#0e7490' : '#374151', fontSize: 12 }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 14px', cursor: 'pointer', background: isActive ? '#f0f9ff' : 'transparent', borderLeft: `2px solid ${isActive ? '#0e7490' : 'transparent'}`, color: isActive ? '#0e7490' : '#374151', fontSize: 13 }}
               >
-                <span style={{ fontSize: 11, flexShrink: 0 }}>{statusIcon}</span>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: hasContent ? '#22c55e' : hasAny ? '#f59e0b' : '#d1d5db' }} />
                 <span style={{ flex: 1, fontWeight: isActive ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sec.label}</span>
-                {hasAny && <span style={{ fontSize: 10, color: '#9ca3af', flexShrink: 0 }}>{wordCount}w</span>}
+                {hasAny && <span style={{ fontSize: 10, color: '#94a3b8', flexShrink: 0 }}>{wordCount}w</span>}
               </div>
             )
           })}
 
           {/* REVIEWS header */}
-          <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.08em', padding: '8px 12px 4px', marginTop: 8 }}>Reviews</div>
+          <div style={{ fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', padding: '10px 14px 4px', marginTop: 4 }}>Reviews</div>
 
           {[
-            { icon: '🔬', label: 'Study Section', onClick: () => studySectionResults ? setStudySectionModal('results') : handleRunStudySectionClick(), badge: studySectionResults ? `${studySectionResults.overall_score || ''}` : null },
-            { icon: '📋', label: 'PD Review', onClick: () => pdReviewResults ? setPdReviewModal('results') : handleRunPDReviewClick(), badge: pdReviewResults ? 'Done' : null },
-            { icon: '🏛️', label: 'Advisory Council', onClick: () => councilResults ? setCouncilModal('results') : handleRunAdvisoryCouncilClick(), badge: councilResults ? 'Done' : null },
-            ...(m.needsCommercial ? [{ icon: '💼', label: 'Commercial Review', onClick: () => commercialReviewResults ? setCommercialReviewModal('results') : handleRunCommercialReviewClick(), badge: commercialReviewResults ? 'Done' : null }] : []),
+            { label: 'Study Section', onClick: () => studySectionResults ? setStudySectionModal('results') : handleRunStudySectionClick(), badge: studySectionResults ? `${studySectionResults.overall_score || ''}` : null },
+            { label: 'PD Review', onClick: () => pdReviewResults ? setPdReviewModal('results') : handleRunPDReviewClick(), badge: pdReviewResults ? 'Done' : null },
+            { label: 'Advisory Council', onClick: () => councilResults ? setCouncilModal('results') : handleRunAdvisoryCouncilClick(), badge: councilResults ? 'Done' : null },
+            ...(m.needsCommercial ? [{ label: 'Commercial Review', onClick: () => commercialReviewResults ? setCommercialReviewModal('results') : handleRunCommercialReviewClick(), badge: commercialReviewResults ? 'Done' : null }] : []),
           ].map((item, i) => (
             <div
               key={i}
               onClick={item.onClick}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', cursor: 'pointer', color: '#374151', fontSize: 12 }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 14px', cursor: 'pointer', color: '#374151', fontSize: 13 }}
             >
-              <span>{item.icon}</span>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: item.badge ? '#0e7490' : '#d1d5db' }} />
               <span style={{ flex: 1 }}>{item.label}</span>
-              {item.badge && <span style={{ fontSize: 10, background: '#e0f2fe', color: '#0369a1', padding: '1px 6px', borderRadius: 8, fontWeight: 600 }}>{item.badge}</span>}
+              {item.badge && <span style={{ fontSize: 10, background: '#e0f2fe', color: '#0369a1', padding: '1px 7px', borderRadius: 10, fontWeight: 600 }}>{item.badge}</span>}
             </div>
           ))}
 
           {/* TOOLS header */}
-          <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.08em', padding: '8px 12px 4px', marginTop: 8 }}>Tools</div>
+          <div style={{ fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', padding: '10px 14px 4px', marginTop: 4 }}>Tools</div>
 
           {[
-            { icon: '🎯', label: 'Aims Optimizer', onClick: () => aimsOptData && !aimsOptLoading ? setAimsOptModal('results') : handleOptimizeAims(), badge: aimsOptData ? `${aimsOptData.overall_score || ''}` : null },
-            { icon: '📎', label: 'Prelim Data', onClick: () => { setShowPrelimDrawer(d => !d); setShowGrantDrawer(false) }, badge: prelimScore > 0 ? `${prelimScore}` : null },
-            { icon: '🔍', label: 'Grant Search', onClick: () => { setShowGrantDrawer(d => !d); setShowPrelimDrawer(false) }, badge: referenceGrants.length > 0 ? `${referenceGrants.length}/5` : null },
-            { icon: '📚', label: 'Bibliography', onClick: () => setShowBibliography(d => !d) },
-            { icon: '✍️', label: 'Rewrite', onClick: () => {}, badge: pkgCyclesRemaining > 0 ? `${pkgCyclesRemaining} cycles` : null },
-            { icon: '✅', label: 'Quality Review', onClick: () => {}, badge: project.quality_certified ? '✓ Certified' : null },
-            { icon: '📋', label: 'Checklist', onClick: async () => {
+            { label: 'Aims Optimizer', onClick: () => aimsOptData && !aimsOptLoading ? setAimsOptModal('results') : handleOptimizeAims(), badge: aimsOptData ? `${aimsOptData.overall_score || ''}` : null },
+            { label: 'Prelim Data', onClick: () => { setShowPrelimDrawer(d => !d); setShowGrantDrawer(false) }, badge: prelimScore > 0 ? `${prelimScore}` : null },
+            { label: 'Grant Search', onClick: () => { setShowGrantDrawer(d => !d); setShowPrelimDrawer(false) }, badge: referenceGrants.length > 0 ? `${referenceGrants.length}/5` : null },
+            { label: 'Bibliography', onClick: () => setShowBibliography(d => !d) },
+            { label: 'Quality Review', onClick: () => {}, badge: project.quality_certified ? 'Certified' : null },
+            { label: 'Checklist', onClick: async () => {
               if (checklistData) { setShowChecklist(true); return }
               setChecklistLoading(true)
               try {
@@ -1203,22 +1228,22 @@ export default function GrantEditor({ project, onSave, onBack }) {
             <div
               key={i}
               onClick={item.onClick}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', cursor: 'pointer', color: '#374151', fontSize: 12 }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 14px', cursor: 'pointer', color: '#374151', fontSize: 13 }}
             >
-              <span>{item.icon}</span>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: item.badge ? '#0e7490' : '#d1d5db' }} />
               <span style={{ flex: 1 }}>{item.label}</span>
-              {item.badge && <span style={{ fontSize: 10, background: '#f3f4f6', color: '#374151', padding: '1px 6px', borderRadius: 8, fontWeight: 600 }}>{item.badge}</span>}
+              {item.badge && <span style={{ fontSize: 10, background: '#f1f5f9', color: '#475569', padding: '1px 7px', borderRadius: 10, fontWeight: 600 }}>{item.badge}</span>}
             </div>
           ))}
 
           {/* Full Grant & Resubmission links */}
-          <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.08em', padding: '8px 12px 4px', marginTop: 8 }}>Views</div>
-          <div onClick={() => setActiveTab('full')} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', cursor: 'pointer', background: activeTab === 'full' ? '#e0f2fe' : 'transparent', borderLeft: `3px solid ${activeTab === 'full' ? '#0e7490' : 'transparent'}`, color: activeTab === 'full' ? '#0e7490' : '#374151', fontSize: 12, fontWeight: activeTab === 'full' ? 600 : 400 }}>
-            <span>📄</span><span>Full Grant</span>
+          <div style={{ fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', padding: '10px 14px 4px', marginTop: 4 }}>Views</div>
+          <div onClick={() => setActiveTab('full')} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 14px', cursor: 'pointer', background: activeTab === 'full' ? '#f0f9ff' : 'transparent', borderLeft: `2px solid ${activeTab === 'full' ? '#0e7490' : 'transparent'}`, color: activeTab === 'full' ? '#0e7490' : '#374151', fontSize: 13, fontWeight: activeTab === 'full' ? 600 : 400 }}>
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#94a3b8', flexShrink: 0 }} />Full Grant
           </div>
           {setup.is_resubmission && (
-            <div onClick={() => setActiveTab('resubmission')} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', cursor: 'pointer', background: activeTab === 'resubmission' ? '#e0f2fe' : 'transparent', borderLeft: `3px solid ${activeTab === 'resubmission' ? '#0e7490' : 'transparent'}`, color: activeTab === 'resubmission' ? '#0e7490' : '#374151', fontSize: 12, fontWeight: activeTab === 'resubmission' ? 600 : 400 }}>
-              <span>🔄</span><span>Resubmission</span>
+            <div onClick={() => setActiveTab('resubmission')} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 14px', cursor: 'pointer', background: activeTab === 'resubmission' ? '#f0f9ff' : 'transparent', borderLeft: `2px solid ${activeTab === 'resubmission' ? '#0e7490' : 'transparent'}`, color: activeTab === 'resubmission' ? '#0e7490' : '#374151', fontSize: 13, fontWeight: activeTab === 'resubmission' ? 600 : 400 }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#94a3b8', flexShrink: 0 }} />Resubmission
             </div>
           )}
         </div>
@@ -1490,13 +1515,43 @@ export default function GrantEditor({ project, onSave, onBack }) {
             {visibleSecs.map(sec => activeSec !== sec.id ? null : (
               <div key={sec.id}>
                 <ComplianceBar compliance={getComplianceStatus(sec.id)} />
-                <button
-                  disabled={generating[sec.id]}
-                  onClick={() => generateSection(sec.id)}
-                  style={{ ...ghostBtn, marginBottom: 8, fontWeight: 500 }}
-                >
-                  {generating[sec.id] ? 'Writing...' : sections[sec.id] ? 'Regenerate ↗' : `Generate ${sec.label} ↗`}
-                </button>
+
+                {/* Writer toolbar */}
+                <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button
+                    disabled={generating[sec.id]}
+                    onClick={() => generateSection(sec.id)}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 18px', background: generating[sec.id] ? '#e5e7eb' : '#0e7490', color: generating[sec.id] ? '#9ca3af' : '#fff', border: 'none', borderRadius: 8, cursor: generating[sec.id] ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600 }}
+                  >
+                    {generating[sec.id] ? (
+                      <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ animation: 'spin 0.7s linear infinite' }}><path d="M21 12a9 9 0 1 1-6.22-8.56"/></svg>Writing…</>
+                    ) : (
+                      <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>{sections[sec.id] ? 'Regenerate' : `Generate ${sec.label}`}</>
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => setShowVoiceMode(true)}
+                    title="Dictate this section by voice"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, cursor: 'pointer', color: '#374151', fontSize: 13, fontWeight: 500 }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
+                    </svg>
+                    Dictate
+                  </button>
+
+                  <button
+                    onClick={() => handleFileUpload(sec.id)}
+                    title="Import a .txt or .md file into this section"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, cursor: 'pointer', color: '#374151', fontSize: 13, fontWeight: 500 }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                    </svg>
+                    Import
+                  </button>
+                </div>
 
                 {scores[sec.id] && (
                   <ScoreBar score={scores[sec.id]} label={sec.label} loading={scoring[sec.id]} onRescore={() => scoreSection(sec.id)} />
@@ -1506,15 +1561,15 @@ export default function GrantEditor({ project, onSave, onBack }) {
                   value={sections[sec.id] || ''}
                   onChange={e => { updateSection(sec.id, e.target.value) }}
                   onBlur={() => save()}
-                  style={{ ...inputStyle, minHeight: 280, resize: 'vertical', width: '100%', lineHeight: 1.8, fontFamily: 'Georgia, serif', fontSize: 13 }}
-                  placeholder={`Your ${sec.label} text will appear here. Click Generate or paste your own.`}
+                  style={{ ...inputStyle, minHeight: 320, resize: 'vertical', width: '100%', lineHeight: 1.85, fontFamily: 'Georgia, serif', fontSize: 13.5, padding: '14px 16px', borderColor: '#e2e8f0', borderRadius: 10, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}
+                  placeholder={`${sec.label} — click Generate, Dictate, or paste your own text.`}
                 />
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-                  <span style={{ fontSize: 11, color: '#999' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, alignItems: 'center' }}>
+                  <span style={{ fontSize: 11, color: '#94a3b8' }}>
                     {countWords(sections[sec.id] || '')} words · ~{estimatePages(countWords(sections[sec.id] || '')).toFixed(1)} pages
                   </span>
                   {sections[sec.id] && !scores[sec.id] && (
-                    <button onClick={() => scoreSection(sec.id)} disabled={scoring[sec.id]} style={{ ...ghostBtn, fontSize: 11 }}>
+                    <button onClick={() => scoreSection(sec.id)} disabled={scoring[sec.id]} style={{ fontSize: 11, padding: '4px 10px', border: '1px solid #e2e8f0', borderRadius: 6, background: '#fff', cursor: 'pointer', color: '#374151' }}>
                       {scoring[sec.id] ? 'Scoring...' : 'Score this section'}
                     </button>
                   )}
@@ -2052,6 +2107,15 @@ export default function GrantEditor({ project, onSave, onBack }) {
           <button onClick={() => { if (retryTimerRef.current) clearInterval(retryTimerRef.current); setAiUnavailable(null) }} style={{ background: 'none', border: 'none', color: '#d97706', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>×</button>
         </div>
       )}
+
+      {/* Hidden file input for document import */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".txt,.md,.text"
+        style={{ display: 'none' }}
+        onChange={handleFileChange}
+      />
 
       {/* Collaboration Panel */}
       {showCollabPanel && (

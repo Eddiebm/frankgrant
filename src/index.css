@@ -31,6 +31,10 @@ button { font-family: inherit; cursor: pointer; }
 input, textarea, select { font-family: inherit; }
 a { color: inherit; text-decoration: none; }
 
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 @media print {
   /* Hide all UI chrome — only show grant content */
   header, nav, footer,

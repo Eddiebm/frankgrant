@@ -341,46 +341,51 @@ export default function Dashboard({ onOpenProject, onNewGrant, initialView = 'pr
 
           {/* Stats bar */}
           {!loading && projects.length > 0 && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 20 }}>
               {[
-                { label: 'Total Grants', value: stats.total, color: '#1e293b' },
-                { label: 'In Progress', value: stats.in_progress, color: '#2563eb' },
-                { label: 'Submitted', value: stats.submitted, color: '#d97706' },
-                { label: 'Awarded', value: `${stats.awarded_count}${stats.awarded_dollars > 0 ? ' · $' + (stats.awarded_dollars / 1000000).toFixed(1) + 'M' : ''}`, color: '#16a34a' },
+                { label: 'Total Grants', value: stats.total, color: '#0e7490', accent: '#cffafe' },
+                { label: 'In Progress', value: stats.in_progress, color: '#2563eb', accent: '#dbeafe' },
+                { label: 'Submitted', value: stats.submitted, color: '#d97706', accent: '#fef3c7' },
+                { label: 'Awarded', value: `${stats.awarded_count}${stats.awarded_dollars > 0 ? ' · $' + (stats.awarded_dollars / 1000000).toFixed(1) + 'M' : ''}`, color: '#16a34a', accent: '#dcfce7' },
               ].map(s => (
-                <div key={s.label} style={{ padding: '10px 14px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, textAlign: 'center' }}>
-                  <div style={{ fontSize: 20, fontWeight: 700, color: s.color }}>{s.value}</div>
-                  <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{s.label}</div>
+                <div key={s.label} style={{ padding: '14px 16px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, borderTop: `3px solid ${s.color}`, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: s.color, lineHeight: 1 }}>{s.value}</div>
+                  <div style={{ fontSize: 11, color: '#6b7280', marginTop: 4, fontWeight: 500 }}>{s.label}</div>
                 </div>
               ))}
             </div>
           )}
 
           {/* Toolbar */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: 8 }}>
-            <div style={{ fontSize: 15, fontWeight: 600, color: '#111' }}>
-              {projects.length > 0 ? `${projects.length} grant${projects.length !== 1 ? 's' : ''}` : ''}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>
+              {projects.length > 0 ? `${projects.length} grant${projects.length !== 1 ? 's' : ''}` : 'My Grants'}
             </div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 8 }}>
               {onNewGrant && (
-                <button onClick={onNewGrant} style={{ ...btnStyle, background: '#0e7490', color: '#fff', border: 'none' }}>✨ New Grant</button>
+                <button onClick={onNewGrant} style={{ padding: '7px 16px', background: '#0e7490', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>New Grant</button>
               )}
-              <button onClick={newProject} disabled={creating} style={btnStyle}>{creating ? 'Creating…' : '+ Blank Grant'}</button>
+              <button onClick={newProject} disabled={creating} style={{ padding: '7px 14px', background: '#fff', color: '#374151', border: '1px solid #e5e7eb', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>{creating ? 'Creating…' : 'Blank Grant'}</button>
             </div>
           </div>
 
           {loading ? (
-            <p style={{ fontSize: 13, color: '#666' }}>Loading…</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {[1, 2, 3].map(i => <div key={i} style={{ height: 64, background: '#f1f5f9', borderRadius: 8, animation: 'pulse 1.5s infinite' }} />)}
+            </div>
           ) : projects.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '4rem 2rem', border: '1px dashed #d1d5db', borderRadius: 12 }}>
-              <div style={{ fontSize: 36, marginBottom: 12 }}>📋</div>
-              <div style={{ fontSize: 18, fontWeight: 600, color: '#111', marginBottom: 8 }}>No grants yet</div>
-              <div style={{ fontSize: 14, color: '#6b7280', marginBottom: 20 }}>Start writing your first NIH grant application.</div>
-              {onNewGrant && (
-                <button onClick={onNewGrant} style={{ ...btnStyle, background: '#0e7490', color: '#fff', border: 'none', padding: '10px 20px', fontSize: 14 }}>✨ Start with Wizard</button>
-              )}
-              <span style={{ display: 'inline-block', margin: '0 12px', color: '#d1d5db' }}>or</span>
-              <button onClick={newProject} disabled={creating} style={{ ...btnStyle, padding: '10px 20px', fontSize: 14 }}>{creating ? 'Creating…' : 'Blank Grant'}</button>
+            <div style={{ textAlign: 'center', padding: '5rem 2rem', background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12 }}>
+              <div style={{ width: 48, height: 48, borderRadius: 12, background: '#f0f9ff', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0e7490" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+              </div>
+              <div style={{ fontSize: 17, fontWeight: 700, color: '#0f172a', marginBottom: 8 }}>No grants yet</div>
+              <div style={{ fontSize: 14, color: '#6b7280', marginBottom: 24, maxWidth: 320, margin: '0 auto 24px' }}>Start with the wizard for a guided setup, or create a blank grant to dive right in.</div>
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+                {onNewGrant && (
+                  <button onClick={onNewGrant} style={{ padding: '10px 22px', background: '#0e7490', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}>Start with Wizard</button>
+                )}
+                <button onClick={newProject} disabled={creating} style={{ padding: '10px 20px', background: '#fff', color: '#374151', border: '1px solid #e5e7eb', borderRadius: 8, cursor: 'pointer', fontSize: 14 }}>{creating ? 'Creating…' : 'Blank Grant'}</button>
+              </div>
             </div>
           ) : (
             <ListView
@@ -399,8 +404,8 @@ export default function Dashboard({ onOpenProject, onNewGrant, initialView = 'pr
           {/* Shared With Me */}
           {sharedProjects.length > 0 && (
             <div style={{ marginTop: 32 }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: '#7c3aed', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                👥 Shared With Me <span style={{ fontSize: 12, fontWeight: 400, color: '#9ca3af' }}>({sharedProjects.length})</span>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                Shared With Me <span style={{ fontSize: 12, fontWeight: 400, color: '#94a3b8' }}>({sharedProjects.length})</span>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {sharedProjects.map(p => (
@@ -498,35 +503,37 @@ function ListView({ projects, allMechs, statusFilter, setStatusFilter, mechFilte
         <span style={{ fontSize: 12, color: '#888', marginLeft: 4 }}>{projects.length} grant{projects.length !== 1 ? 's' : ''}</span>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {projects.map(p => {
           const sc = STATUS_CONFIG[p.status] || STATUS_CONFIG.draft
           const pc = PRIORITY_CONFIG[p.priority] || PRIORITY_CONFIG.medium
           const completion = p.completion_pct || 0
           return (
-            <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', border: `1px solid ${sc.border}`, borderRadius: 10, background: '#fff', transition: 'box-shadow 0.15s' }}>
-              <div style={{ flex: 1, cursor: 'pointer', minWidth: 0 }} onClick={() => onOpen(p.id)}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 14, fontWeight: 600 }}>{p.title}</span>
-                  <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#e5e7eb', color: '#374151', fontWeight: 500 }}>{p.mechanism}</span>
-                  <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: sc.bg, color: sc.color, border: `1px solid ${sc.border}`, fontWeight: 600 }}>{sc.label}</span>
-                  <span style={{ fontSize: 11, fontWeight: 600, color: pc.color }}>● {pc.label}</span>
+            <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 0, border: '1px solid #e5e7eb', borderLeft: `4px solid ${sc.color}`, borderRadius: 8, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
+              <div style={{ flex: 1, cursor: 'pointer', minWidth: 0, padding: '12px 16px' }} onClick={() => onOpen(p.id)}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: '#0f172a' }}>{p.title}</span>
+                  <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: '#f1f5f9', color: '#475569', fontWeight: 500 }}>{p.mechanism}</span>
+                  <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: sc.bg, color: sc.color, fontWeight: 600 }}>{sc.label}</span>
+                  {p.priority === 'high' && <span style={{ fontSize: 11, fontWeight: 600, color: '#dc2626' }}>High Priority</span>}
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                   <DeadlineBadge dateStr={p.next_deadline} />
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#888' }}>
-                    <div style={{ width: 60, height: 4, background: '#e5e7eb', borderRadius: 2, overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${completion}%`, background: completion >= 80 ? '#16a34a' : completion >= 40 ? '#d97706' : '#93c5fd', borderRadius: 2 }} />
+                  {completion > 0 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#6b7280' }}>
+                      <div style={{ width: 64, height: 3, background: '#e5e7eb', borderRadius: 99, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${completion}%`, background: completion >= 80 ? '#16a34a' : completion >= 40 ? '#d97706' : '#0e7490', borderRadius: 99 }} />
+                      </div>
+                      {completion}%
                     </div>
-                    {completion}% written
-                  </div>
-                  <span style={{ fontSize: 11, color: '#aaa' }}>Updated {new Date(p.updated_at * 1000).toLocaleDateString()}</span>
+                  )}
+                  <span style={{ fontSize: 11, color: '#94a3b8' }}>Updated {new Date(p.updated_at * 1000).toLocaleDateString()}</span>
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                <button onClick={() => onOpen(p.id)} style={actionBtn}>Open</button>
-                <button onClick={() => onStatus(p)} style={actionBtn}>Status</button>
-                <button onClick={() => onDelete(p.id)} style={{ ...actionBtn, color: '#dc2626' }}>Delete</button>
+              <div style={{ display: 'flex', gap: 0, flexShrink: 0, borderLeft: '1px solid #f1f5f9' }}>
+                <button onClick={() => onOpen(p.id)} style={{ padding: '12px 16px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#0e7490', borderRight: '1px solid #f1f5f9' }}>Open</button>
+                <button onClick={() => onStatus(p)} style={{ padding: '12px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#475569', borderRight: '1px solid #f1f5f9' }}>Status</button>
+                <button onClick={() => onDelete(p.id)} style={{ padding: '12px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#ef4444' }}>Delete</button>
               </div>
             </div>
           )
